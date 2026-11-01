@@ -45,6 +45,7 @@ async function desdeDolarApi() {
   }
   if (!r) { console.error('No se pudo obtener la tasa de ninguna fuente'); process.exit(0); }
   if (prev && prev.usd && Math.abs(r.usd - prev.usd) / prev.usd > 0.15) { console.error('Cambio mayor al 15 %, no se guarda', prev.usd, '→', r.usd); process.exit(0); }
+  if (prev && prev.dateISO && r.dateISO && r.dateISO < prev.dateISO) { console.log('La fuente tiene una fecha más antigua (' + r.dateISO + ') que la guardada (' + prev.dateISO + '); no se cambia'); process.exit(0); }
   if (!r.eur && prev && prev.eur) r.eur = prev.eur;
   const out = { usd: r.usd, eur: r.eur, dateISO: r.dateISO, dateText: r.dateISO ? textoFecha(r.dateISO) : '', src: r.src };
   if (prev && prev.usd === out.usd && prev.eur === out.eur && prev.dateISO === out.dateISO) { console.log('Sin cambios'); process.exit(0); }

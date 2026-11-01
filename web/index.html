@@ -400,6 +400,8 @@ async function autoRates(manual){
     if (!r){ if (manual) toast('No se pudo consultar la tasa del BCV'); return; }
     if (cfg.bcv && Math.abs(r.usd - cfg.bcv) / cfg.bcv > 0.15){ toast('La tasa recibida es muy distinta a la actual; no se aplicó'); return; }
     const now = Date.now();
+    const latestISO = Object.keys(S.rates).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().pop();
+    if (r.dateISO && latestISO && r.dateISO < latestISO){ if (now - num(cfg.checkedAt) > 3600e3) await putCfg({checkedAt:now}); if (manual) toast('La tasa ya está al día'); return; }
     const changed = Math.abs(r.usd - num(cfg.bcv)) > 1e-6 || (r.eur && Math.abs(r.eur - num(cfg.eur)) > 1e-6) || (r.dateText && r.dateText !== cfg.ratesDate);
     if (changed){
       await putCfg({bcv:r.usd, eur:r.eur || cfg.eur || 0, ratesAt:now, checkedAt:now, ratesSrc:'auto', ratesDate:r.dateText || cfg.ratesDate || ''});
