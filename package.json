@@ -26,7 +26,7 @@
   "build": {
     "appId": "com.sistemaventas.app",
     "productName": "Sistema de Ventas",
-    "artifactName": "Sistema-de-Ventas-Setup-${version}.${ext}",
+    "artifactName": "Sistema-de-Ventas-Setup.${ext}",
     "directories": {
       "output": "dist"
     },
