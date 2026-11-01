@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "site": "stocksoft",
+    "public": "public",
+    "cleanUrls": true,
+    "headers": [
+      { "source": "**/*.@(html|js|json|webmanifest)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+    ]
+  }
+}

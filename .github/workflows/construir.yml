@@ -56,3 +56,29 @@ jobs:
         with:
           name: instalador-windows
           path: dist/*.exe
+
+  firebase:
+    name: Sitio stocksoft.web.app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ¿Está configurada la clave de Firebase?
+        id: key
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: if [ -n "$SA" ]; then echo "ok=true" >> $GITHUB_OUTPUT; else echo "ok=false" >> $GITHUB_OUTPUT; echo "Falta el secreto FIREBASE_SERVICE_ACCOUNT: no se publica en stocksoft.web.app"; fi
+      - if: steps.key.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - if: steps.key.outputs.ok == 'true'
+        run: npm install --no-audit --no-fund --ignore-scripts
+      - if: steps.key.outputs.ok == 'true'
+        run: npm run vendor && bash scripts/build-site.sh
+      - if: steps.key.outputs.ok == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: sistema-ventas-e085f
+          channelId: live

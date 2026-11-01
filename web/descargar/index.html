@@ -291,7 +291,7 @@ footer a{color:var(--ink);font-weight:600}
   const total = 10.40;
   const nf = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
   try {
-    const r = await fetch('../tasas.json?t=' + Date.now(), {cache:'no-store'});
+    const r = await fetch('https://webvzla.github.io/sistema-ventas/tasas.json?t=' + Date.now(), {cache:'no-store'});
     const j = await r.json();
     if (!(j.usd > 0)) return;
     document.getElementById('tBs').textContent = nf.format(total * j.usd);
