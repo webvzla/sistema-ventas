@@ -1,0 +1,55 @@
+rules_version = '2';
+// Reglas de seguridad del Sistema de Ventas.
+// Cada negocio está en biz/{id}. Solo sus miembros pueden ver sus datos.
+// Los vendedores pueden vender y cobrar, pero no modificar inventario, precios, proveedores, gastos ni usuarios.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function memberDoc(b) { return /databases/$(database)/documents/biz/$(b)/members/$(request.auth.uid); }
+    function member(b) { return signed() && exists(memberDoc(b)); }
+    function admin(b) { return member(b) && get(memberDoc(b)).data.role == 'admin'; }
+    function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // Perfil de cada cuenta: a qué negocio pertenece y con qué rol.
+    match /users/{uid} {
+      allow read: if signed() && (request.auth.uid == uid || admin(resource.data.biz));
+      allow create: if signed() && (
+        (request.auth.uid == uid && request.resource.data.biz == uid && request.resource.data.role == 'admin') ||
+        admin(request.resource.data.biz));
+      allow update: if signed() && admin(resource.data.biz) && request.resource.data.biz == resource.data.biz;
+      allow delete: if signed() && admin(resource.data.biz);
+    }
+
+    match /biz/{b} {
+      allow read: if member(b);
+      allow create: if signed() && b == request.auth.uid;
+      allow update: if admin(b);
+
+      match /members/{uid} {
+        allow read: if member(b);
+        allow create: if (signed() && b == request.auth.uid && uid == request.auth.uid && request.resource.data.role == 'admin') || admin(b);
+        allow update, delete: if admin(b);
+      }
+      match /config/{d} {
+        allow read: if member(b);
+        allow create: if admin(b);
+        allow update: if admin(b) || (member(b) && onlyKeys(['noteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']));
+      }
+      match /rates/{d} { allow read, write: if member(b); }
+      match /products/{d} {
+        allow read: if member(b);
+        allow create, delete: if admin(b);
+        allow update: if admin(b) || (member(b) && onlyKeys(['stock']));
+      }
+      match /sales/{d} {
+        allow read, create: if member(b);
+        allow update: if admin(b) || (member(b) && onlyKeys(['fiscalNo']));
+        allow delete: if admin(b);
+      }
+      match /clients/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
+      match /movs/{d} { allow read, create: if member(b); allow update, delete: if admin(b); }
+      // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
+      match /{col}/{d} { allow read, write: if admin(b); }
+    }
+  }
+}

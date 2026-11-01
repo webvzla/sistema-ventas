@@ -1,0 +1,40 @@
+{
+  "name": "sistema-ventas",
+  "productName": "Sistema de Ventas",
+  "version": "1.0.0",
+  "description": "Inventario, ventas, clientes, proveedores, gastos y tasas BCV",
+  "main": "electron/main.js",
+  "author": "Sistema de Ventas",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "vendor": "node scripts/vendor.js",
+    "start": "npm run vendor && electron .",
+    "dist": "npm run vendor && electron-builder --win --x64 --publish never"
+  },
+  "devDependencies": {
+    "@zxing/library": "^0.21.3",
+    "chart.js": "^4.4.6",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "firebase": "^10.14.1",
+    "jsbarcode": "^3.11.6",
+    "jspdf": "^2.5.2"
+  },
+  "build": {
+    "appId": "com.sistemaventas.app",
+    "productName": "Sistema de Ventas",
+    "artifactName": "Sistema-de-Ventas-Setup-${version}.${ext}",
+    "directories": { "output": "dist" },
+    "files": ["electron/**", "web/**", "build/icon.png", "package.json"],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.png" },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sistema de Ventas"
+    }
+  }
+}
