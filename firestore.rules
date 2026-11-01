@@ -50,6 +50,8 @@ service cloud.firestore {
       match /movs/{d} { allow read, create: if member(b); allow update, delete: if admin(b); }
       match /cash/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
       match /quotes/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
+      // Registro de actividad: todos escriben, solo el administrador lo lee.
+      match /log/{d} { allow create: if member(b) && request.resource.data.uid == request.auth.uid; allow read, delete: if admin(b); }
       // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
       match /{col}/{d} { allow read, write: if admin(b); }
     }

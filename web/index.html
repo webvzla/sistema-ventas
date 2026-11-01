@@ -214,8 +214,10 @@ async function del(col, id){
 }
 async function putCfg(data){
   if (readOnly){ toast('Modo solo lectura'); return false; }
+  if (backend === 'cloud' && !cfgLoaded){ console.warn('putCfg antes de cargar la configuración', data); return false; }
   cfg = {...cfg, ...data}; render();
-  if (backend === 'db' || backend === 'cloud'){ try { await DB.doc('config/main').set({...cfg}); } catch(e){ dbErr(e); return false; } }
+  if (backend === 'cloud'){ try { await DB.doc('config/main').set(data, {merge:true}); } catch(e){ dbErr(e); return false; } }
+  else if (backend === 'db'){ try { await DB.doc('config/main').set({...cfg}); } catch(e){ dbErr(e); return false; } }
   else saveLocal();
   return true;
 }
@@ -237,7 +239,7 @@ async function initData(){
     if (col === 'rates') q = q.orderBy('ts', 'desc').limit(60);
     if (col === 'purchases' || col === 'expenses' || col === 'quotes') q = q.orderBy('ts', 'desc').limit(1000);
     if (col === 'cash') q = q.orderBy('openedAt', 'desc').limit(200);
-    if (col === 'log') q = q.orderBy('ts', 'desc').limit(200);
+    if (col === 'log') q = q.orderBy('ts', 'desc').limit(1500);
     q.onSnapshot(snap => {
       const o = {}; snap.docs.forEach(d => { o[d.id] = d.data(); }); S[col] = o;
       done(col, snap); render();
@@ -308,7 +310,7 @@ function ask(title, msg, okLbl, fn, danger = true){
 }
 
 /* ============ Nube (Firebase): cuentas reales y datos sincronizados ============ */
-let FB = null, bizId = null, unsubs = [], pendingSetup = false;
+let FB = null, bizId = null, unsubs = [], pendingSetup = false, cfgLoaded = false;
 const CLOUD = () => backend === 'cloud';
 const LOCAL_TXT = () => window.desktop ? 'Modo sin nube: los datos se guardan solo en este ordenador (con copia diaria). Cuando se conecte la nube podrás verlos desde el móvil.' : 'Los datos se están guardando solo en este navegador.';
 function fbInit(){
@@ -334,10 +336,10 @@ function fbMsg(e){
   if (/requires-recent-login/.test(c)) return 'Por seguridad, cierra sesión y vuelve a entrar';
   return 'Error: ' + (e && e.message || c);
 }
-function clearData(){ unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; COLS.forEach(c => S[c] = {}); cfg = {...DEF_CFG}; }
+function clearData(){ cfgLoaded = false; unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; COLS.forEach(c => S[c] = {}); cfg = {...DEF_CFG}; }
 function subscribeAll(){
   unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = [];
-  loaded = false;
+  loaded = false; cfgLoaded = false;
   const pending = new Set([...COLS, 'cfg']);
   const done = (k, snap) => { if (!snap.metadata.fromCache || !navigator.onLine) pending.delete(k); if (!pending.size && !loaded){ loaded = true; clearTimeout(loadTimer); onLoaded(); render(); } };
   clearTimeout(loadTimer);
@@ -348,11 +350,11 @@ function subscribeAll(){
     if (col === 'rates') q = q.orderBy('ts', 'desc').limit(60);
     if (col === 'purchases' || col === 'expenses' || col === 'quotes') q = q.orderBy('ts', 'desc').limit(1000);
     if (col === 'cash') q = q.orderBy('openedAt', 'desc').limit(200);
-    if (col === 'log') q = q.orderBy('ts', 'desc').limit(200);
+    if (col === 'log') q = q.orderBy('ts', 'desc').limit(1500);
     unsubs.push(q.onSnapshot(snap => { const o = {}; snap.docs.forEach(d => { o[d.id] = d.data(); }); S[col] = o; done(col, snap); render(); },
       e => { pending.delete(col); console.warn(col, e); if (e.code === 'revoked') readOnly = true; render(); }));
   });
-  unsubs.push(DB.doc('config/main').onSnapshot(snap => { if (snap.exists) cfg = {...DEF_CFG, ...snap.data()}; done('cfg', snap); render(); }, e => { pending.delete('cfg'); render(); }));
+  unsubs.push(DB.doc('config/main').onSnapshot(snap => { if (snap.exists) cfg = {...DEF_CFG, ...snap.data()}; if (snap.exists || !snap.metadata.fromCache) cfgLoaded = true; done('cfg', snap); render(); }, e => { pending.delete('cfg'); render(); }));
 }
 async function onFbUser(u){
   if (pendingSetup) return;
@@ -398,7 +400,7 @@ async function fetchRates(){
 }
 let ratesBusy = false;
 async function autoRates(manual){
-  if (!me || ratesBusy || backend === 'db') return;
+  if (!me || ratesBusy || backend === 'db' || !loaded || (backend === 'cloud' && !cfgLoaded)) return;
   if (!navigator.onLine){ if (manual) toast('Sin conexión a internet'); return; }
   ratesBusy = true;
   try {
@@ -638,7 +640,7 @@ async function saveUser(){
     if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u)){ toast('Pon nombre y un correo válido'); return; }
     if (p.length < 6){ toast('La contraseña debe tener al menos 6 caracteres'); return; }
     $('#nuBtn').disabled = true;
-    try { await fbCreateMember(u, p, name, $('#nuR').value); closeSheet(); toast('Usuario creado. Ya puede entrar con ' + u); }
+    try { await fbCreateMember(u, p, name, $('#nuR').value); logA('admin', 'Usuario creado', name + ' · ' + u + ' · ' + $('#nuR').value); closeSheet(); toast('Usuario creado. Ya puede entrar con ' + u); }
     catch(e){ toast(fbMsg(e)); $('#nuBtn').disabled = false; }
     return;
   }
@@ -647,7 +649,7 @@ async function saveUser(){
   if (S.users[u]){ toast('Ese usuario ya existe'); return; }
   if (p.length < 4){ toast('La contraseña debe tener al menos 4 caracteres'); return; }
   const salt = uid();
-  if (await put('users', u, {name, role:$('#nuR').value, salt, hash:await sha(salt + ':' + p), created:Date.now()})){ closeSheet(); toast('Usuario creado'); }
+  if (await put('users', u, {name, role:$('#nuR').value, salt, hash:await sha(salt + ':' + p), created:Date.now()})){ logA('admin', 'Usuario creado', name + ' · ' + u + ' · ' + $('#nuR').value); closeSheet(); toast('Usuario creado'); }
 }
 function delUser(u){
   const admins = Object.entries(S.users).filter(([, x]) => x.role === 'admin');
@@ -656,6 +658,7 @@ function delUser(u){
   const label = (S.users[u] && (S.users[u].email || S.users[u].name)) || u;
   ask('¿Eliminar usuario?', '“' + label + '” ya no podrá entrar.', 'Eliminar', async () => {
     if (CLOUD()){ try { await FB.fs.doc('users/' + u).delete(); } catch(e){} }
+    logA('admin', 'Usuario eliminado', label);
     await del('users', u); toast('Usuario eliminado');
   });
 }
@@ -664,7 +667,7 @@ async function toggleRole(u){
   if (x.role === 'admin' && Object.values(S.users).filter(y => y.role === 'admin').length <= 1){ toast('Debe quedar al menos un administrador'); return; }
   const role = x.role === 'admin' ? 'vendedor' : 'admin';
   if (CLOUD()){ try { await FB.fs.doc('users/' + u).set({biz:bizId, role, name:x.name || '', email:x.email || ''}); } catch(e){ toast(fbMsg(e)); return; } }
-  await put('users', u, {...x, role});
+  await put('users', u, {...x, role}); logA('admin', 'Rol cambiado', (x.name || u) + ' → ' + (role === 'admin' ? 'administrador' : 'vendedor'));
 }
 
 /* ============ Vistas ============ */
@@ -716,7 +719,7 @@ function saleRow(s){
   const names = (s.items || []).map(i => i.name).join(', ');
   const cl = s.clientId && S.clients[s.clientId] ? ' · ' + esc(S.clients[s.clientId].name) : '';
   return `<div class="item tap row" onclick="showSale('${s.id}')"><div class="grow"><div class="name">${esc(names) || 'Venta'}</div>
-  <div class="sub">${s.doc === 'devolucion' ? '<span class="pill out">Devolución</span> ' : ''}${fmtDate(s.ts)} · ${payLabel(s)}${cl}</div></div>
+  <div class="sub">${s.doc === 'devolucion' ? '<span class="pill out">Devolución</span> ' : ''}${fmtDate(s.ts)} · ${payLabel(s)}${cl}${isAdmin() && s.userName ? ' · <b>' + esc(s.userName) + '</b>' : ''}</div></div>
   <div><div class="price">${usd(num(s.total))}</div>${s.rate ? `<div class="sub" style="text-align:right">${bs(num(s.total), s.rate)}</div>` : ''}</div></div>`;
 }
 
@@ -1076,6 +1079,7 @@ async function checkout(){
     if (st.fiado > 0) await put('movs', uid(), {clientId, type:'deuda', amount:st.fiado, rate:cfg.bcv || 0, ts:now, saleId:id, note:items.map(i => nfq.format(i.qty) + ' ' + i.name).join(', ')});
     if (ui.fromQuote && S.quotes[ui.fromQuote]) await put('quotes', ui.fromQuote, {...S.quotes[ui.fromQuote], status:'vendida', saleId:id});
     cart = []; lastScan = null; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal'; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
+    logA('venta', 'Venta', (sale.doc === 'fiscal' ? 'Factura' : 'Nota ' + (sale.noteNo || '')) + ' · ' + usd(sale.total) + ' · ' + payLabel(sale) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (sale.customer ? ' · ' + sale.customer.name : ''), 'sale:' + id);
     shellFor = ''; render(); showSale(id, true);
   }
   busy = false;
@@ -1185,7 +1189,14 @@ async function notaPDF(id){
   await saveFile('nota-' + (s.noteNo || id) + '.pdf', doc.output('blob'));
 }
 /* ---- Correcciones (solo administrador) y registro de cambios ---- */
-async function logAction(action, detail){ try { await put('log', uid(), {ts:Date.now(), user:me ? me.name : '', action, detail:String(detail || '').slice(0, 300)}); } catch(e){} }
+const LOG_TYPES = {venta:'Ventas', cotizacion:'Cotizaciones', caja:'Caja', inventario:'Inventario', clientes:'Clientes y cobros', compras:'Proveedores y gastos', correccion:'Correcciones', admin:'Usuarios y ajustes'};
+function logA(type, action, detail, ref){
+  if (!me) return;
+  const id = uid(), d = {ts:Date.now(), user:me.name || '', uid:me.u || '', type, action, detail:String(detail || '').slice(0, 300), ref:ref || ''};
+  S.log[id] = d;
+  if (backend === 'db' || backend === 'cloud'){ try { DB.collection('log').doc(id).set(d).catch(e => console.warn('log', e)); } catch(e){} } else saveLocal();
+}
+async function logAction(action, detail, ref){ logA('correccion', action, detail, ref); }
 async function undoSale(s, id){
   for (const i of (s.items || [])) if (i.pid && S.products[i.pid] && S.products[i.pid].track !== false)
     await put('products', i.pid, {...S.products[i.pid], stock: r3(num(S.products[i.pid].stock) + num(i.qty))});
@@ -1249,8 +1260,20 @@ function editQuote(id){
   closeSheet(); go('vender'); toast('Edita la cotización y pulsa "Cotización" para guardarla');
 }
 function fillLog(){
-  const xs = Object.values(S.log || {}).sort((a, b) => b.ts - a.ts).slice(0, 200);
-  $('#mx').innerHTML = `<p class="note" style="margin-top:-4px">Aquí queda anotada cada venta anulada o corregida, cada cambio de forma de pago y cada devolución, con quién lo hizo.</p><div class="list">${xs.length ? xs.map(x => `<div class="item"><div class="row between"><div class="name" style="font-size:14px">${esc(x.action)}</div><span class="sub" style="margin:0">${fmtDate(x.ts)}</span></div><div class="sub">${esc(x.detail)}</div><div class="sub">Por: <b>${esc(x.user || '—')}</b></div></div>`).join('') : '<div class="empty">Sin cambios registrados.</div>'}</div>`;
+  const all = Object.values(S.log || {}).sort((a, b) => b.ts - a.ts);
+  const users = [...new Set(all.map(x => x.user).filter(Boolean))].sort();
+  const F = ui.logF || (ui.logF = {u:'', t:'', r:'7'});
+  const now = new Date(), from = F.r === 'hoy' ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() : F.r === 'todo' ? 0 : Date.now() - (+F.r) * 864e5;
+  const xs = all.filter(x => x.ts >= from && (!F.u || x.user === F.u) && (!F.t || (x.type || 'correccion') === F.t)).slice(0, 300);
+  let lastDay = '';
+  $('#mx').innerHTML = `<p class="note" style="margin-top:-4px">Todo lo que hace cada persona: ventas, cotizaciones, caja, cambios en el inventario, cobros, compras, correcciones y ajustes.</p>
+  <div class="seg">${[['hoy', 'Hoy'], ['7', '7 días'], ['30', '30 días'], ['todo', 'Todo']].map(([k, l]) => `<button class="${F.r === k ? 'on' : ''}" onclick="ui.logF.r='${k}';fillLog()">${l}</button>`).join('')}</div>
+  <div class="grid2" style="margin-bottom:12px"><select onchange="ui.logF.u=this.value;fillLog()"><option value="">Todas las personas</option>${users.map(u => `<option ${F.u === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>
+  <select onchange="ui.logF.t=this.value;fillLog()"><option value="">Todo tipo de acciones</option>${Object.entries(LOG_TYPES).map(([k, v]) => `<option value="${k}" ${F.t === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+  <div class="list">${xs.length ? xs.map(x => { const day = fmtDay(x.ts); const hd = day !== lastDay ? `<h3 style="margin:10px 0 2px">${day}</h3>` : ''; lastDay = day;
+    const [rt, rid] = String(x.ref || '').split(':'); const click = rt === 'sale' && S.sales[rid] ? `onclick="showSale('${rid}')"` : rt === 'quote' && S.quotes[rid] ? `onclick="showQuote('${rid}')"` : '';
+    const col = {venta:'var(--acc)', correccion:'var(--warn)', caja:'#7fb4ff', cotizacion:'#c9a6ff'}[x.type] || 'var(--mut)';
+    return hd + `<div class="item ${click ? 'tap' : ''}" ${click}><div class="row between"><div class="name" style="font-size:14px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col};margin-right:8px"></span>${esc(x.action)}</div><span class="sub" style="margin:0">${new Date(x.ts).toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'})}</span></div><div class="sub">${esc(x.detail)}</div><div class="sub">Por: <b>${esc(x.user || '—')}</b></div></div>`; }).join('') : '<div class="empty">No hay actividad con estos filtros.</div>'}</div>`;
 }
 
 /* ---- Inventario ---- */
@@ -1357,11 +1380,13 @@ async function saveProduct(id, fromScan){
   const nid = id || uid();
   closeSheet();
   if (await put('products', nid, d)){
+    if (!id) logA('inventario', 'Producto creado', name + ' · ' + (d.cur === 'eur' ? '€' : '$') + nf2.format(d.price) + ' · stock ' + nfq.format(d.stock));
+    else { const ch = []; if (num(old.price) !== d.price) ch.push('precio ' + nf2.format(num(old.price)) + ' → ' + nf2.format(d.price)); if (num(old.cost) !== d.cost) ch.push('costo ' + nf2.format(num(old.cost)) + ' → ' + nf2.format(d.cost)); if (num(old.stock) !== d.stock) ch.push('stock ' + nfq.format(num(old.stock)) + ' → ' + nfq.format(d.stock)); if (old.name !== d.name) ch.push('nombre antes: ' + old.name); if (ch.length) logA('inventario', 'Producto modificado', name + ' · ' + ch.join(' · ')); }
     toast(id ? 'Producto actualizado' : 'Producto añadido');
     if (fromScan && view === 'vender'){ addToCart(nid, true); lastScan = nid; renderLastScan(); }
   }
 }
-function delProduct(id){ ask('¿Eliminar producto?', 'Se borrará “' + (S.products[id] || {}).name + '” del inventario. Las ventas pasadas se mantienen.', 'Eliminar', async () => { await del('products', id); toast('Producto eliminado'); }); }
+function delProduct(id){ ask('¿Eliminar producto?', 'Se borrará “' + (S.products[id] || {}).name + '” del inventario. Las ventas pasadas se mantienen.', 'Eliminar', async () => { logA('inventario', 'Producto eliminado', (S.products[id] || {}).name + ' · stock ' + nfq.format(num((S.products[id] || {}).stock))); await del('products', id); toast('Producto eliminado'); }); }
 function restock(id){
   const p = S.products[id];
   openSheet(`<h2>Reponer stock</h2><div class="sub">${esc(p.name)} · hay ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}</div>
@@ -1373,7 +1398,7 @@ async function doRestock(id){
   const q = num($('#rq').value); if (q <= 0){ toast('Pon la cantidad'); return; }
   const c = $('#rc').value.trim(); const p = {...S.products[id]};
   p.stock = r3(num(p.stock) + q); if (c) p.cost = r2(num(c)); p.updated = Date.now();
-  closeSheet(); if (await put('products', id, p)) toast('Stock actualizado: ' + nfq.format(p.stock));
+  closeSheet(); if (await put('products', id, p)){ logA('inventario', 'Stock repuesto', p.name + ' · +' + nfq.format(q) + ' (queda ' + nfq.format(p.stock) + ')'); toast('Stock actualizado: ' + nfq.format(p.stock)); }
 }
 
 /* ---- Etiquetas PDF con código de barras ---- */
@@ -1467,6 +1492,7 @@ async function saveClient(id, fromPos){
   const d = {...(id ? S.clients[id] : {created:Date.now()}), name, phone:$('#cP').value.trim(), rif:$('#cR').value.trim().toUpperCase().replace(/\s/g, ''), addr:$('#cA').value.trim(), note:$('#cO').value.trim()};
   closeSheet();
   if (await put('clients', nid, d)){
+    if (!id) logA('clientes', 'Cliente creado', name);
     toast(id ? 'Cliente actualizado' : 'Cliente añadido');
     if (fromPos){ renderCart(); const s = $('#payC'); if (s) s.value = nid; }
     else if (id) showClient(nid);
@@ -1507,13 +1533,14 @@ async function saveMov(cid, type){
   const cur = $('#mC').value, raw = num($('#mA').value);
   const d = {clientId:cid, type, amount:a, rate:cfg.bcv || 0, ts:Date.now(), note:$('#mN').value.trim()};
   if (type === 'abono'){ d.paidIn = $('#mP').value + (cur === 'bs' ? ' (Bs ' + nf2.format(raw) + ')' : cur === 'eur' ? ' (€' + nf2.format(raw) + ')' : ''); d.m = LABEL_TO_M()[$('#mP').value] || ''; d.raw = raw; d.cur = cur; }
-  if (await put('movs', uid(), d)){ toast(type === 'abono' ? 'Abono registrado' : 'Deuda registrada'); showClient(cid); }
+  if (await put('movs', uid(), d)){ logA('clientes', type === 'abono' ? 'Abono de cliente' : 'Deuda registrada a mano', (S.clients[cid] || {}).name + ' · ' + usd(a) + (d.paidIn ? ' · ' + d.paidIn : '')); toast(type === 'abono' ? 'Abono registrado' : 'Deuda registrada'); showClient(cid); }
 }
 function delMov(mid, cid){ ask('¿Borrar movimiento?', 'Se recalculará el saldo del cliente.', 'Borrar', async () => { await del('movs', mid); showClient(cid); }); }
 function delClient(id){
   const b = balance(id);
   ask('¿Eliminar cliente?', b ? 'Este cliente tiene saldo de ' + usd(b) + '. Se borrará junto con su historial.' : 'Se borrará el cliente y su historial.', 'Eliminar', async () => {
     for (const [mid, m] of Object.entries(S.movs)) if (m.clientId === id) await del('movs', mid);
+    logA('clientes', 'Cliente eliminado', (S.clients[id] || {}).name + (b ? ' · tenía saldo ' + usd(b) : ''));
     await del('clients', id); toast('Cliente eliminado');
   });
 }
@@ -1528,10 +1555,10 @@ VIEWS.mas = {
     if (sub === 'reportes') return back('Reportes') + `<div class="seg" id="repSeg"></div><div id="mx"></div>`;
     if (sub === 'respaldo') return back('Respaldo y exportar') + `<div id="mx"></div>`;
     if (sub === 'ajustes') return back('Ajustes del negocio') + `<div id="mx"></div>`;
-    if (sub === 'log') return back('Registro de cambios') + `<div id="mx"></div>`;
+    if (sub === 'log') return back('Registro de actividad') + `<div id="mx"></div>`;
     if (sub === 'gastos') return back('Gastos') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="expenseForm()">+ Registrar gasto</button><div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
     if (sub === 'usuarios') return back('Usuarios') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="userForm()">+ Nuevo usuario</button><div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
-    const opts = [['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['log', 'Registro de cambios', 'Ventas anuladas o corregidas, devoluciones y quién lo hizo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []);
+    const opts = [['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []);
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
       <div class="item tap row" onclick="passForm(me.u)"><div class="grow"><div class="name">Cambiar mi contraseña</div><div class="sub">${CLOUD() ? esc(me && me.email || '') : 'Usuario: ' + esc(me ? me.u : '')}</div></div><span style="color:var(--mut)">›</span></div>
@@ -1582,16 +1609,17 @@ VIEWS.mas = {
   }
 };
 async function saveSettings(){
-  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; toast('Ajustes guardados'); }
+  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
 }
 function fillReports(){
   const ranges = {hoy:'Hoy', '7':'7 días', '30':'30 días', mes:'Este mes'};
-  $('#repSeg').innerHTML = Object.entries(ranges).map(([k, v]) => `<button class="${ui.rep === k ? 'on' : ''}" onclick="ui.rep='${k}';fillReports()">${v}</button>`).join('');
+  $('#repSeg').innerHTML = Object.entries(ranges).map(([k, v]) => `<button class="${ui.rep === k ? 'on' : ''}" onclick="ui.rep='${k}';fillReports()">${v}</button>`).join('') + `<select style="width:auto;padding:6px 10px;border-radius:999px;font-size:13px" onchange="ui.repU=this.value;fillReports()"><option value="">Todos los vendedores</option>${[...new Set(salesArr().map(s => s.userName).filter(Boolean))].sort().map(u => `<option ${ui.repU === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select>`;
   const now = new Date(); let from;
   if (ui.rep === 'hoy') from = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   else if (ui.rep === 'mes') from = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   else from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (+ui.rep - 1)).getTime();
-  const ss = salesArr().filter(s => s.ts >= from);
+  const sellers = [...new Set(salesArr().map(s => s.userName).filter(Boolean))].sort();
+  const ss = salesArr().filter(s => s.ts >= from && (!ui.repU || s.userName === ui.repU));
   const tot = r2(ss.reduce((a, s) => a + num(s.total), 0));
   const cost = r2(ss.reduce((a, s) => a + (s.items || []).reduce((b, i) => b + num(i.cost) * num(i.qty), 0), 0));
   const byM = {}; ss.forEach(s => salePayments(s).forEach(p => byM[p.m] = (byM[p.m] || 0) + p.usd));
@@ -1602,7 +1630,7 @@ function fillReports(){
   const sumF = (arr, f) => r2(arr.reduce((a, x) => a + f(x), 0));
   const ivaT = sumF(fis, x => num((x.tax || {}).i16) + num((x.tax || {}).i8)), igtfT = sumF(ss, x => num(x.igtf));
   const pend = fis.filter(x => !x.fiscalNo).length;
-  const bySeller = {}; ss.forEach(x => { const k = x.userName || '—'; bySeller[k] = (bySeller[k] || 0) + num(x.total); });
+  const bySeller = {}; ss.forEach(x => { const k = x.userName || '—'; const b = bySeller[k] = bySeller[k] || {n:0, t:0}; if (x.doc !== 'devolucion') b.n++; b.t += num(x.total); });
   const abonos = r2(Object.values(S.movs).filter(m => m.type === 'abono' && m.ts >= from).reduce((a, m) => a + num(m.amount), 0));
   $('#mx').innerHTML = `<div class="grid2">
     <div class="card stat"><div class="k">Vendido</div><div class="v">${usd(tot)}</div><div class="s">${ss.length} ventas</div></div>
@@ -1615,7 +1643,7 @@ function fillReports(){
       <div class="mv"><span>IVA en facturas</span><b>${usd(ivaT)}</b></div>
       ${igtfT ? `<div class="mv"><span>IGTF cobrado</span><b>${usd(igtfT)}</b></div>` : ''}
       ${pend ? `<div class="mv"><span style="color:var(--warn)">Facturas sin nº registrado</span><b style="color:var(--warn)">${pend}</b></div>` : ''}</div>
-    ${Object.keys(bySeller).length > 1 ? `<h3>Por vendedor</h3><div class="card">${Object.entries(bySeller).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="mv"><span>${esc(k)}</span><b>${usd(r2(v))}</b></div>`).join('')}</div>` : ''}
+    ${Object.keys(bySeller).length ? `<h3>Por vendedor</h3><div class="card">${Object.entries(bySeller).sort((a, b) => b[1].t - a[1].t).map(([k, v]) => `<div class="mv"><span>${esc(k)} <span class="sub">· ${v.n} venta${v.n === 1 ? '' : 's'} · promedio ${usd(v.n ? r2(v.t / v.n) : 0)}</span></span><b>${usd(r2(v.t))}</b></div>`).join('')}</div>` : ''}
     <h3>Por forma de pago</h3><div class="card">${Object.keys(byM).length ? Object.entries(byM).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="mv"><span>${METHODS[k] || k}</span><b>${usd(r2(v))}</b></div>`).join('') : '<div class="empty">Sin ventas en este periodo.</div>'}</div>
     <h3>Lo más vendido</h3><div class="card">${top.length ? top.map(([n, v]) => `<div style="padding:7px 0"><div class="row between"><span>${esc(n)} <span class="sub">× ${nfq.format(v.q)}</span></span><b>${usd(r2(v.t))}</b></div><div class="bar"><i style="width:${Math.max(3, v.t / maxT * 100)}%"></i></div></div>`).join('') : '<div class="empty">Sin datos.</div>'}</div>
     <h3>Ventas</h3><div class="list">${ss.slice(0, 50).map(saleRow).join('') || '<div class="empty">Sin ventas.</div>'}</div>`;
@@ -1703,7 +1731,7 @@ async function saveSupPay(sid){
   const cur = $('#spC').value, raw = num($('#spA').value), a = r2(amtToUsd(raw, cur));
   if (!(a > 0)){ toast('Pon un monto'); return; }
   const paidIn = $('#spM').value + (cur === 'bs' ? ' (Bs ' + nf2.format(raw) + ')' : cur === 'eur' ? ' (€' + nf2.format(raw) + ')' : '');
-  if (await put('pmovs', uid(), {supplierId:sid, type:'pago', amount:a, ts:Date.now(), note:$('#spN').value.trim(), paidIn, m:LABEL_TO_M()[$('#spM').value] || '', raw, cur, rate:cfg.bcv || 0, user:me ? me.name : ''})){ toast('Pago registrado'); showSupplier(sid); }
+  if (await put('pmovs', uid(), {supplierId:sid, type:'pago', amount:a, ts:Date.now(), note:$('#spN').value.trim(), paidIn, m:LABEL_TO_M()[$('#spM').value] || '', raw, cur, rate:cfg.bcv || 0, user:me ? me.name : ''})){ logA('compras', 'Pago a proveedor', (S.suppliers[sid] || {}).name + ' · ' + usd(a) + ' · ' + paidIn); toast('Pago registrado'); showSupplier(sid); }
 }
 function delPmov(mid, sid){ ask('¿Borrar movimiento?', 'Se recalculará lo que le debes a este proveedor.', 'Borrar', async () => { await del('pmovs', mid); showSupplier(sid); }); }
 function delSupplier(id){
@@ -1770,6 +1798,7 @@ async function savePurchase(){
   const note = (ref ? 'Fact. ' + ref + ' · ' : '') + items.length + ' producto' + (items.length === 1 ? '' : 's');
   await put('pmovs', uid(), {supplierId:sid, type:'compra', amount:total, ts, note, purchaseId:id, rate:cfg.bcv || 0});
   if (pay === 'contado') await put('pmovs', uid(), {supplierId:sid, type:'pago', amount:total, ts:ts + 1, note:'Pago de contado', paidIn:$('#pcM').value, purchaseId:id, rate:cfg.bcv || 0});
+  logA('compras', 'Compra a proveedor', (S.suppliers[sid] || {}).name + ' · ' + usd(total) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (pay === 'contado' ? ' · de contado' : ' · a crédito'));
   toast('Compra registrada · stock actualizado'); showSupplier(sid);
 }
 function showPurchase(id){
@@ -1802,7 +1831,7 @@ async function saveExpense(id){
   const cur = $('#exCur').value, raw = num($('#exA').value), a = r2(amtToUsd(raw, cur));
   if (!(a > 0)){ toast('Pon el monto'); return; }
   const d = {cat:$('#exC').value, note:$('#exN').value.trim(), amount:a, raw, cur, ts:dateToTs($('#exD').value), paidIn:$('#exM').value, m:LABEL_TO_M()[$('#exM').value] || '', rate:cfg.bcv || 0, user:me ? me.name : ''};
-  closeSheet(); if (await put('expenses', id || uid(), d)) toast('Gasto guardado');
+  closeSheet(); if (await put('expenses', id || uid(), d)){ logA('compras', id ? 'Gasto modificado' : 'Gasto', d.cat + (d.note ? ' · ' + d.note : '') + ' · ' + usd(a)); toast('Gasto guardado'); }
 }
 function delExpense(id){ ask('¿Borrar gasto?', 'Se quitará de los reportes y del dashboard.', 'Borrar', async () => { await del('expenses', id); toast('Gasto borrado'); }); }
 function fillExpenses(){
@@ -1942,7 +1971,7 @@ function openCashForm(){
 async function saveOpenCash(){
   if (openCash()){ closeSheet(); return; }
   const id = uid();
-  if (await put('cash', id, {status:'open', openedAt:Date.now(), openedBy:me ? me.name : '', open:readCur('oc'), rate:cfg.bcv || 0})){ closeSheet(); toast('Caja abierta'); render(); }
+  if (await put('cash', id, {status:'open', openedAt:Date.now(), openedBy:me ? me.name : '', open:readCur('oc'), rate:cfg.bcv || 0})){ const o = readCur('oc'); logA('caja', 'Caja abierta', 'Fondo: ' + usd(o.usd) + ' · ' + bsF(o.bs) + (o.eur ? ' · ' + eurF(o.eur) : '')); closeSheet(); toast('Caja abierta'); render(); }
 }
 function closeCashForm(){
   const c = openCash(); if (!c){ toast('No hay caja abierta'); return; }
@@ -1967,7 +1996,7 @@ async function saveCloseCash(id){
   const c = S.cash[id]; if (!c) return;
   const sm = cashSummary({...c, closedAt:Date.now()}), counted = readCur('cc');
   const diff = {usd:r2(counted.usd - sm.exp.usd), bs:r2(counted.bs - sm.exp.bs), eur:r2(counted.eur - sm.exp.eur)};
-  if (await put('cash', id, {...c, status:'closed', closedAt:Date.now(), closedBy:me ? me.name : '', expected:sm.exp, counted, diff, other:sm.other, sales:sm.sales, note:$('#ccN').value.trim()})){ closeSheet(); toast('Caja cerrada'); render(); }
+  if (await put('cash', id, {...c, status:'closed', closedAt:Date.now(), closedBy:me ? me.name : '', expected:sm.exp, counted, diff, other:sm.other, sales:sm.sales, note:$('#ccN').value.trim()})){ const dd = ['usd', 'bs', 'eur'].filter(k => Math.abs(diff[k]) >= 0.01).map(k => (diff[k] > 0 ? 'sobran ' : 'faltan ') + fmtCur(Math.abs(diff[k]), k)); logA('caja', 'Caja cerrada', (sm.sales ? sm.sales.n + ' ventas · ' + usd(sm.sales.usd) + ' · ' : '') + (dd.length ? dd.join(', ') : 'cuadró')); closeSheet(); toast('Caja cerrada'); render(); }
 }
 function fillCashView(){
   const c = openCash();
@@ -2000,7 +2029,7 @@ async function saveQuote(){
   const id = editing || uid(); let no;
   if (editing) no = S.quotes[editing].no; else { const seq = num(cfg.quoteSeq) + 1; await putCfg({quoteSeq:seq}); no = 'COT-' + String(seq).padStart(5, '0'); }
   const q = {no, ts:editing ? S.quotes[editing].ts : Date.now(), edited:editing ? Date.now() : undefined, items, sub0:cartSub0(), disc:discUsd(), total:t.total, rate:cfg.bcv || 0, customer:{name, phone:$('#qP').value.trim(), rif:$('#qR').value.trim().toUpperCase()}, validDays:Math.max(1, parseInt($('#qV').value) || 7), note:$('#qO').value.trim(), status:'abierta', user:me ? me.name : ''};
-  if (await put('quotes', id, q)){ if (editing) await logAction('Cotización editada', q.no + ' · ' + name + ' · ' + usd(q.total)); ui.editQuote = null; cart = []; ui.disc = {type:'pct', v:''}; lastScan = null; shellFor = ''; render(); showQuote(id); toast('Cotización ' + q.no + (editing ? ' actualizada' : ' guardada')); }
+  if (await put('quotes', id, q)){ if (editing) await logAction('Cotización editada', q.no + ' · ' + name + ' · ' + usd(q.total), 'quote:' + id); else logA('cotizacion', 'Cotización creada', q.no + ' · ' + name + ' · ' + usd(q.total), 'quote:' + id); ui.editQuote = null; cart = []; ui.disc = {type:'pct', v:''}; lastScan = null; shellFor = ''; render(); showQuote(id); toast('Cotización ' + q.no + (editing ? ' actualizada' : ' guardada')); }
 }
 function quoteText(q){
   return `*${cfg.name}*\nCotización ${q.no} · ${fmtDay(q.ts)}\nPara: ${q.customer.name}\n\n${q.items.map(i => `${nfq.format(num(i.qty))} × ${i.name} — ${usd(r2(num(i.price) * num(i.qty)))}`).join('\n')}\n\n*Total: ${usd(num(q.total))}*${cfg.bcv ? '\n' + bs(num(q.total)) + ' a la tasa BCV de hoy (' + nf2.format(cfg.bcv) + ')' : ''}\nVálida hasta el ${fmtDay(q.ts + num(q.validDays) * 864e5)}${q.note ? '\n\n' + q.note : ''}`;
@@ -2052,7 +2081,7 @@ function fillQuotes(){
   const qs = quotes();
   const f = ui.qF || 'abierta';
   $('#mx').innerHTML = `<div class="seg">${[['abierta', 'Abiertas'], ['vendida', 'Vendidas'], ['vencida', 'Vencidas'], ['todas', 'Todas']].map(([k, l]) => `<button class="${f === k ? 'on' : ''}" onclick="ui.qF='${k}';fillQuotes()">${l} (${k === 'todas' ? qs.length : qs.filter(q => quoteStatus(q) === k).length})</button>`).join('')}</div>
-  <div class="list">${qs.filter(q => f === 'todas' || quoteStatus(q) === f).map(q => { const st = quoteStatus(q); return `<div class="item tap row" onclick="showQuote('${q.id}')"><div class="grow"><div class="name">${esc(q.customer.name)}</div><div class="sub">${esc(q.no)} · ${fmtDay(q.ts)} · ${q.items.length} producto${q.items.length === 1 ? '' : 's'}</div></div><div style="text-align:right"><div class="price">${usd(num(q.total))}</div><span class="pill ${st === 'vendida' ? 'ok' : st === 'vencida' ? 'out' : 'low'}">${st}</span></div></div>`; }).join('') || '<div class="empty">No hay cotizaciones aquí.<br>Para crear una: añade productos en Vender y pulsa "Cotización".</div>'}</div>`;
+  <div class="list">${qs.filter(q => f === 'todas' || quoteStatus(q) === f).map(q => { const st = quoteStatus(q); return `<div class="item tap row" onclick="showQuote('${q.id}')"><div class="grow"><div class="name">${esc(q.customer.name)}</div><div class="sub">${esc(q.no)} · ${fmtDay(q.ts)} · ${q.items.length} producto${q.items.length === 1 ? '' : 's'}${q.user ? ' · por <b>' + esc(q.user) + '</b>' : ''}</div></div><div style="text-align:right"><div class="price">${usd(num(q.total))}</div><span class="pill ${st === 'vendida' ? 'ok' : st === 'vencida' ? 'out' : 'low'}">${st}</span></div></div>`; }).join('') || '<div class="empty">No hay cotizaciones aquí.<br>Para crear una: añade productos en Vender y pulsa "Cotización".</div>'}</div>`;
 }
 
 /* ============ Importar productos desde Excel / CSV ============ */
@@ -2122,7 +2151,7 @@ async function doImport(){
     await put('products', exId || uid(), {...base, ...d, updated:Date.now()});
     if (++n % 10 === 0){ const p = $('#impProg'); if (p) p.textContent = 'Importando… ' + n + ' de ' + rows.length; }
   }
-  closeSheet(); toast(n + ' productos importados'); shellFor = ''; render();
+  logA('inventario', 'Productos importados', n + ' productos desde archivo'); closeSheet(); toast(n + ' productos importados'); shellFor = ''; render();
 }
 
 function moreInv(){
@@ -2150,7 +2179,7 @@ async function doPriceAdj(){
   const {ps, pct, f} = paCalc(); if (!pct){ toast('Pon el porcentaje'); return; }
   const k = $('#paK').checked; closeSheet(); toast('Actualizando ' + ps.length + ' precios…');
   for (const p of ps){ const {id, ...rest} = p; await put('products', id, {...rest, price:f(num(p.price)), ...(k && num(p.cost) ? {cost:r2(num(p.cost) * (1 + pct / 100))} : {}), updated:Date.now()}); }
-  toast(ps.length + ' precios actualizados');
+  logA('inventario', 'Precios ajustados', (pct > 0 ? '+' : '') + pct + '% a ' + ps.length + ' productos' + ($('#paC') && $('#paC').value ? '' : '')); toast(ps.length + ' precios actualizados');
 }
 /* ---- Tasas (visible para todos, se actualiza en vivo) ---- */
 function ago(ts){ if (!ts) return 'nunca'; const m = Math.round((Date.now() - ts) / 60000); if (m < 1) return 'hace un momento'; if (m < 60) return 'hace ' + m + ' min'; const h = Math.round(m / 60); if (h < 24) return 'hace ' + h + ' h'; const d = Math.round(h / 24); return 'hace ' + d + ' día' + (d > 1 ? 's' : ''); }
@@ -2196,7 +2225,7 @@ async function saveRates(){
   const data = {bcv:r2(b), eur:e > 0 ? r2(e) : (cfg.eur || 0), ratesAt:now, checkedAt:now, ratesSrc:'manual', ratesDate:d.toLocaleDateString('es-VE', {weekday:'long', day:'numeric', month:'long'})};
   if (await putCfg(data)){
     await put('rates', id, {bcv:data.bcv, eur:data.eur, ts:now, date:fmtDay(now), src:'manual'});
-    $('#tB').value = ''; $('#tE').value = ''; toast('Tasas guardadas');
+    logA('admin', 'Tasa cambiada a mano', '$ ' + nf2.format(data.bcv) + ' · € ' + nf2.format(data.eur)); $('#tB').value = ''; $('#tE').value = ''; toast('Tasas guardadas');
   }
 }
 
