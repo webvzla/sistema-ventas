@@ -45,20 +45,14 @@ jobs:
         with:
           node-version: 20
       - run: npm install --no-audit --no-fund
-      - run: npm run dist
+      - name: Versión
+        shell: bash
+        run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
+      - name: Construir y publicar (con actualización automática)
+        run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
           name: instalador-windows
           path: dist/*.exe
-      - name: Publicar descarga
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Sistema de Ventas v1.0.${{ github.run_number }}
-          body: |
-            Descarga **Sistema-de-Ventas-Setup-*.exe**, ábrelo e instálalo.
-            Si Windows muestra "Windows protegió su PC", pulsa "Más información" → "Ejecutar de todos modos".
-          files: dist/*.exe
-          make_latest: true

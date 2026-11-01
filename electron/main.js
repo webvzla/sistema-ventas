@@ -3,6 +3,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const REMOTE = 'https://webvzla.github.io/sistema-ventas/';
+let autoUpdater = null; try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) {}
 
 let win = null;
 const settingsFile = () => path.join(app.getPath('userData'), 'ajustes.json');
@@ -27,10 +29,14 @@ function createWindow() {
     { label: 'Ver', submenu: [{ role: 'reload', label: 'Recargar' }, { role: 'togglefullscreen', label: 'Pantalla completa' }, { role: 'zoomIn', label: 'Acercar' }, { role: 'zoomOut', label: 'Alejar' }, { role: 'resetZoom', label: 'Tamaño normal' }, { type: 'separator' }, { role: 'toggleDevTools', label: 'Herramientas de desarrollo' }] }
   ]));
   win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, '..', 'web', 'index.html'));
-  // Los enlaces (WhatsApp, bcv.org.ve…) se abren en el navegador.
+  // Se carga la versión publicada (siempre la más reciente); sin internet, la copia incluida en el programa.
+  const local = path.join(__dirname, '..', 'web', 'index.html');
+  win.loadURL(REMOTE).catch(() => win.loadFile(local));
+  win.webContents.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && String(url).startsWith(REMOTE)) win.loadFile(local); });
+  const ours = url => url.startsWith(REMOTE) || url.startsWith('file:');
+  // Los enlaces externos (WhatsApp, bcv.org.ve…) se abren en el navegador.
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^(https?|mailto|tel):/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  win.webContents.on('will-navigate', (e, url) => { if (/^(https?|mailto|tel):/.test(url)) { e.preventDefault(); shell.openExternal(url); } });
+  win.webContents.on('will-navigate', (e, url) => { if (!ours(url) && /^(https?|mailto|tel):/.test(url)) { e.preventDefault(); shell.openExternal(url); } });
 }
 
 /* ---- Tasa oficial del BCV leída directamente de bcv.org.ve ---- */
@@ -97,6 +103,19 @@ const single = app.requestSingleInstanceLock();
 if (!single) app.quit();
 else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    createWindow();
+    // Actualización automática del programa desde GitHub Releases.
+    if (autoUpdater && app.isPackaged) {
+      autoUpdater.autoDownload = true;
+      autoUpdater.on('update-downloaded', async info => {
+        const r = await dialog.showMessageBox(win, { type: 'info', buttons: ['Reiniciar ahora', 'Más tarde'], defaultId: 0, title: 'Actualización lista', message: 'Hay una nueva versión del Sistema de Ventas (' + info.version + ').', detail: 'Se instalará al reiniciar el programa.' });
+        if (r.response === 0) autoUpdater.quitAndInstall();
+      });
+      autoUpdater.on('error', e => console.warn('Actualización:', e && e.message));
+      autoUpdater.checkForUpdates().catch(() => {});
+      setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 6 * 3600e3);
+    }
+  });
   app.on('window-all-closed', () => app.quit());
 }

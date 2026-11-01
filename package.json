@@ -10,7 +10,8 @@
   "scripts": {
     "vendor": "node scripts/vendor.js",
     "start": "npm run vendor && electron .",
-    "dist": "npm run vendor && electron-builder --win --x64 --publish never"
+    "dist": "npm run vendor && electron-builder --win --x64 --publish never",
+    "release": "npm run vendor && electron-builder --win --x64 --publish always"
   },
   "devDependencies": {
     "@zxing/library": "^0.21.3",
@@ -26,9 +27,26 @@
     "appId": "com.sistemaventas.app",
     "productName": "Sistema de Ventas",
     "artifactName": "Sistema-de-Ventas-Setup-${version}.${ext}",
-    "directories": { "output": "dist" },
-    "files": ["electron/**", "web/**", "build/icon.png", "package.json"],
-    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.png" },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**",
+      "web/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -36,6 +54,15 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Sistema de Ventas"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "webvzla",
+      "repo": "sistema-ventas",
+      "releaseType": "release"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   }
 }
