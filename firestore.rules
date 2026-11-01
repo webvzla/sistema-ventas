@@ -33,7 +33,7 @@ service cloud.firestore {
       match /config/{d} {
         allow read: if member(b);
         allow create: if admin(b);
-        allow update: if admin(b) || (member(b) && onlyKeys(['noteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']));
+        allow update: if admin(b) || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']));
       }
       match /rates/{d} { allow read, write: if member(b); }
       match /products/{d} {
@@ -48,6 +48,8 @@ service cloud.firestore {
       }
       match /clients/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
       match /movs/{d} { allow read, create: if member(b); allow update, delete: if admin(b); }
+      match /cash/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
+      match /quotes/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
       // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
       match /{col}/{d} { allow read, write: if admin(b); }
     }

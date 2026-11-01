@@ -19,7 +19,8 @@
     "electron-builder": "^25.1.8",
     "firebase": "^10.14.1",
     "jsbarcode": "^3.11.6",
-    "jspdf": "^2.5.2"
+    "jspdf": "^2.5.2",
+    "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "com.sistemaventas.app",

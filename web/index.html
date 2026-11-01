@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mi Negocio · Inventario y Ventas</title>
+<title>Sistema de Ventas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0b1220">
 <link rel="icon" href="icon.png"><link rel="apple-touch-icon" href="icon.png">
-<script>window.LIBS = {chart:'vendor/chart.umd.js', zxing:'vendor/zxing.min.js'};</script>
+<script>window.LIBS = {chart:'vendor/chart.umd.js', zxing:'vendor/zxing.min.js', xlsx:'vendor/xlsx.full.min.js'};</script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/JsBarcode.all.min.js"></script>
 <script src="firebase-config.js"></script>
@@ -124,7 +124,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
 </form>
 <form class="lg-card" id="setupForm" style="display:none;max-height:92vh;overflow:auto" onsubmit="doSetup(event)" autocomplete="off">
   <div class="brand">Bienvenido</div><div class="sub" id="suNote">Configura tu negocio. Solo se hace una vez.</div>
-  <label>Nombre del negocio</label><input id="suB" placeholder="Ej: Equipos Hosteleros El Sol">
+  <label>Nombre del negocio</label><input id="suB" placeholder="Ej: Comercial La Esquina">
   <h3 style="margin-top:18px">Administrador (tú)</h3>
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
   <label>Tu nombre</label><input id="suN" placeholder="Ej: Carlos">
@@ -142,10 +142,10 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
 
 <script>
 /* ============ Estado ============ */
-const COLS = ['products','clients','movs','sales','rates','users','suppliers','purchases','pmovs','expenses'];
-const S = {products:{}, clients:{}, movs:{}, sales:{}, rates:{}, users:{}, suppliers:{}, purchases:{}, pmovs:{}, expenses:{}};
+const COLS = ['products','clients','movs','sales','rates','users','suppliers','purchases','pmovs','expenses','cash','quotes'];
+const S = {products:{}, clients:{}, movs:{}, sales:{}, rates:{}, users:{}, suppliers:{}, purchases:{}, pmovs:{}, expenses:{}, cash:{}, quotes:{}};
 const DEF_CFG = {name:'Mi Negocio', bcv:0, eur:0, ratesAt:0, cc:'58', lowDefault:2, cur:'usd', rif:'', addr:'', phone:'', igtf:false, docDefault:'fiscal', noteSeq:0};
-const DEFAULT_CATS = ['Máquinas de café', 'Rebanadoras', 'Equipos de hostelería', 'Herramientas', 'Repuestos', 'Café', 'Tortas', 'Chucherías', 'Bebidas'];
+
 let cfg = {...DEF_CFG};
 let backend = 'none', DB = null, DL = null, readOnly = false, loaded = false, loadTimer = null;
 let view = 'inicio', sub = '', shellFor = '';
@@ -233,7 +233,8 @@ async function initData(){
     let q = DB.collection(col);
     if (col === 'sales') q = q.orderBy('ts', 'desc').limit(1000);
     if (col === 'rates') q = q.orderBy('ts', 'desc').limit(60);
-    if (col === 'purchases' || col === 'expenses') q = q.orderBy('ts', 'desc').limit(1000);
+    if (col === 'purchases' || col === 'expenses' || col === 'quotes') q = q.orderBy('ts', 'desc').limit(1000);
+    if (col === 'cash') q = q.orderBy('openedAt', 'desc').limit(200);
     q.onSnapshot(snap => {
       const o = {}; snap.docs.forEach(d => { o[d.id] = d.data(); }); S[col] = o;
       done(col, snap); render();
@@ -342,7 +343,8 @@ function subscribeAll(){
     let q = DB.collection(col);
     if (col === 'sales') q = q.orderBy('ts', 'desc').limit(1000);
     if (col === 'rates') q = q.orderBy('ts', 'desc').limit(60);
-    if (col === 'purchases' || col === 'expenses') q = q.orderBy('ts', 'desc').limit(1000);
+    if (col === 'purchases' || col === 'expenses' || col === 'quotes') q = q.orderBy('ts', 'desc').limit(1000);
+    if (col === 'cash') q = q.orderBy('openedAt', 'desc').limit(200);
     unsubs.push(q.onSnapshot(snap => { const o = {}; snap.docs.forEach(d => { o[d.id] = d.data(); }); S[col] = o; done(col, snap); render(); },
       e => { pending.delete(col); console.warn(col, e); if (e.code === 'revoked') readOnly = true; render(); }));
   });
@@ -703,7 +705,7 @@ function saleRow(s){
   const names = (s.items || []).map(i => i.name).join(', ');
   const cl = s.clientId && S.clients[s.clientId] ? ' · ' + esc(S.clients[s.clientId].name) : '';
   return `<div class="item tap row" onclick="showSale('${s.id}')"><div class="grow"><div class="name">${esc(names) || 'Venta'}</div>
-  <div class="sub">${fmtDate(s.ts)} · ${METHODS[s.method] || s.method}${cl}</div></div>
+  <div class="sub">${s.doc === 'devolucion' ? '<span class="pill out">Devolución</span> ' : ''}${fmtDate(s.ts)} · ${payLabel(s)}${cl}</div></div>
   <div><div class="price">${usd(num(s.total))}</div>${s.rate ? `<div class="sub" style="text-align:right">${bs(num(s.total), s.rate)}</div>` : ''}</div></div>`;
 }
 
@@ -846,7 +848,7 @@ function priceSheet(id){
 const cartTotal = () => r2(cart.reduce((a, c) => a + c.price * c.qty, 0));
 VIEWS.vender = {
   shell: () => `<div class="row between"><h2>Vender</h2><button class="btn sm" onclick="openScanner()">${ICON_CAM} Escanear</button></div>
-    <div id="lastScan"></div>
+    <div id="cashBar"></div><div id="lastScan"></div>
     <div class="search"><input id="posQ" placeholder="Buscar por nombre o código…" value="${esc(ui.posQ)}" oninput="ui.posQ=this.value;VIEWS.vender.fill()" onkeydown="if(event.key==='Enter'){const p=findByCode(this.value);if(p){this.value='';ui.posQ='';handleScan(p.code)}}"></div>
     <div class="seg" id="posCats"></div>
     <div class="list" id="posList"></div>
@@ -888,25 +890,32 @@ function addToCart(pid, quiet){
 }
 function freeItem(){
   openSheet(`<h2>Artículo libre</h2><p class="note">Para vender algo que no está en el inventario (un servicio, una reparación…).</p>
-  <label>Descripción</label><input id="fiN" placeholder="Ej: Mantenimiento de máquina" autofocus>
+  <label>Descripción</label><input id="fiN" placeholder="Ej: Envío a domicilio" autofocus>
   <label>Precio en $</label><input id="fiP" inputmode="decimal" placeholder="0,00">
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="
     const n=$('#fiN').value.trim()||'Artículo',p=num($('#fiP').value);if(p<=0){toast('Pon un precio');return}
     cart.push({pid:'',name:n,price:r2(p),cost:0,unit:'unidad',qty:1,iva:16});closeSheet();renderCart()">Añadir</button></div>`);
 }
 function setQty(i, v){ v = r3(num(v)); if (v <= 0) cart.splice(i, 1); else cart[i].qty = v; renderCart(); }
-/* ---- Impuestos y documento ---- */
+/* ---- Impuestos, descuentos y pagos ---- */
 const DIVISAS = ['efectivo_usd', 'efectivo_eur', 'zelle'];
-function taxCalc(items, method){
+const METHOD_CUR = {efectivo_usd:'usd', zelle:'usd', efectivo_eur:'eur', efectivo_bs:'bs', pago_movil:'bs', punto:'bs', transferencia:'bs', fiado:'usd'};
+const CUR_SYM = {usd:'$', bs:'Bs', eur:'€'};
+const CASH = {efectivo_usd:'usd', efectivo_bs:'bs', efectivo_eur:'eur'};
+const fromCur = (v, cur, rate = cfg.bcv, rateEur = cfg.eur) => cur === 'bs' ? (rate ? v / rate : 0) : cur === 'eur' ? (rate && rateEur ? v * rateEur / rate : 0) : v;
+const toCur = (usdV, cur, rate = cfg.bcv, rateEur = cfg.eur) => cur === 'bs' ? usdV * (rate || 0) : cur === 'eur' ? (rateEur ? usdV * (rate || 0) / rateEur : 0) : usdV;
+const fmtCur = (v, cur) => cur === 'bs' ? bsF(v) : cur === 'eur' ? eurF(v) : usd(v);
+function taxCalc(items, divisasUsd){
   let ex = 0, b8 = 0, i8 = 0, b16 = 0, i16 = 0, sub = 0;
   for (const it of items){ const T = num(it.price) * num(it.qty); sub += T; const r = it.iva == null || it.iva === '' ? 16 : num(it.iva);
     if (r === 0) ex += T; else if (r === 8){ const b = T / 1.08; b8 += b; i8 += T - b; } else { const b = T / 1.16; b16 += b; i16 += T - b; } }
-  const igtf = cfg.igtf && DIVISAS.includes(method) ? sub * 0.03 : 0;
+  const igtf = cfg.igtf ? Math.max(0, num(divisasUsd)) * 0.03 : 0;
   return {ex:r2(ex), b8:r2(b8), i8:r2(i8), b16:r2(b16), i16:r2(i16), sub:r2(sub), igtf:r2(igtf), total:r2(sub + igtf)};
 }
 function taxHtml(t, rate, fiscal){
   const row = (l, v) => `<div class="mv"><span>${l}</span><span style="text-align:right"><b>${usd(v)}</b>${rate ? `<br><span class="sub">${bs(v, rate)}</span>` : ''}</span></div>`;
   let h = '';
+  if (t.disc) h += row('Descuento', -t.disc);
   if (fiscal){
     if (t.b16) h += row('Base imponible 16%', t.b16) + row('IVA 16%', t.i16);
     if (t.b8) h += row('Base imponible 8%', t.b8) + row('IVA 8%', t.i8);
@@ -916,6 +925,13 @@ function taxHtml(t, rate, fiscal){
   if (t.igtf) h += row('IGTF 3% (pago en divisas)', t.igtf);
   return h ? `<div class="card" style="margin-top:10px;padding:4px 14px">${h}${row('<b>Total</b>', t.total)}</div>` : '';
 }
+/* Pagos de una venta, normalizados: [{m, usd, raw, cur}] */
+function salePayments(s){
+  if (Array.isArray(s.payments) && s.payments.length) return s.payments.map(p => ({m:p.m, usd:num(p.usd), raw:num(p.raw), cur:METHOD_CUR[p.m] || 'usd'}));
+  const cur = METHOD_CUR[s.method] || 'usd';
+  return [{m:s.method, usd:num(s.total), raw:r2(toCur(num(s.total), cur, s.rate, s.rateEur)), cur}];
+}
+const payLabel = s => s.method === 'mixto' ? salePayments(s).map(p => METHODS[p.m] || p.m).join(' + ') : (METHODS[s.method] || s.method);
 const normRif = r => String(r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 function findClientByRif(r){ const n = normRif(r); if (!n) return null; return clients().find(c => normRif(c.rif) === n) || null; }
 function custInput(k, v){
@@ -924,22 +940,55 @@ function custInput(k, v){
 }
 
 /* ---- Carrito ---- */
-function curMethod(){ return ($('#payM') || {}).value || ui.method || 'efectivo_usd'; }
+if (!ui.pay) ui.pay = {mode:'simple', method:'efectivo_usd', lines:[], client:'', changeCur:'usd'};
+if (!ui.disc) ui.disc = {type:'pct', v:''};
+const cartSub0 = () => r2(cart.reduce((a, c) => a + c.price * c.qty, 0));
+function discUsd(){
+  const s0 = cartSub0(), v = num(ui.disc.v); if (!(v > 0) || !s0) return 0;
+  let d = ui.disc.type === 'pct' ? s0 * Math.min(v, 100) / 100 : Math.min(v, s0);
+  if (!isAdmin()){ const max = s0 * num(cfg.maxDisc ?? 10) / 100; if (d > max + 0.001) d = max; }
+  return r2(d);
+}
+function netItems(){ const s0 = cartSub0(), d = discUsd(), f = s0 ? 1 - d / s0 : 1; return cart.map(c => ({pid:c.pid, name:c.name, qty:c.qty, price:Math.round(c.price * f * 10000) / 10000, list:c.price, cost:c.cost || 0, unit:c.unit, iva:c.iva ?? 16})); }
+function payState(){
+  const P = ui.pay, items = netItems();
+  if (P.mode !== 'mixto'){ const t0 = taxCalc(items, 0); const t = taxCalc(items, DIVISAS.includes(P.method) ? t0.sub : 0); return {items, t, paid:t.total, rest:0, lines:[], fiado:P.method === 'fiado' ? t.total : 0}; }
+  const lines = P.lines.map(l => ({m:l.m, raw:num(l.v), cur:METHOD_CUR[l.m] || 'usd'})).map(l => ({...l, usd:r2(fromCur(l.raw, l.cur))}));
+  const div = lines.filter(l => DIVISAS.includes(l.m)).reduce((a, l) => a + l.usd, 0);
+  const t = taxCalc(items, div);
+  const paid = r2(lines.reduce((a, l) => a + l.usd, 0));
+  return {items, t, paid, rest:r2(t.total - paid), lines, fiado:r2(lines.filter(l => l.m === 'fiado').reduce((a, l) => a + l.usd, 0))};
+}
+function setPayLine(i, k, v){ ui.pay.lines[i][k] = v; if (k === 'm') renderCart(); else updatePayInfo(); }
+function addPayLine(){ const st = payState(); const m = ui.pay.lines.length ? 'pago_movil' : 'efectivo_usd'; const cur = METHOD_CUR[m]; ui.pay.lines.push({m, v:st.rest > 0 ? String(r2(toCur(st.rest, cur))).replace('.', ',') : ''}); renderCart(); }
+function fillRest(i){ const l = ui.pay.lines[i]; l.v = ''; const st = payState(); if (st.rest > 0) l.v = String(r2(toCur(st.rest, METHOD_CUR[l.m]))).replace('.', ','); renderCart(); }
+function updatePayInfo(){
+  const el = $('#payInfo'); if (!el) return;
+  const st = payState();
+  $('#totV').textContent = usd(st.t.total); $('#totB').textContent = cfg.bcv ? bs(st.t.total) : '';
+  const btn = $('#chkBtn'); if (btn) btn.textContent = 'Cobrar ' + usd(st.t.total);
+  if (ui.pay.mode !== 'mixto'){ el.innerHTML = ''; return; }
+  el.innerHTML = st.rest > 0.009 ? `Falta por pagar: <b style="color:var(--warn)">${usd(st.rest)}</b>${cfg.bcv ? ' · ' + bs(st.rest) : ''}`
+    : st.rest < -0.009 ? `Vuelto: <b style="color:var(--acc)">${usd(-st.rest)}</b> · en <select style="width:auto;padding:4px 8px;font-size:13px" onchange="ui.pay.changeCur=this.value">${['usd', 'bs', 'eur'].filter(c => c !== 'eur' || cfg.eur).map(c => `<option value="${c}" ${ui.pay.changeCur === c ? 'selected' : ''}>${CUR_SYM[c]} (${fmtCur(r2(toCur(-st.rest, c)), c)})</option>`).join('')}</select>`
+    : `<b style="color:var(--acc)">Pago completo ✓</b>`;
+}
 function renderCart(){
   const el = $('#cart'); if (!el) return;
-  if (!cart.length){ el.innerHTML = `<div class="empty">Escanea o toca un producto para añadirlo.</div>`; return; }
-  const prevM = curMethod(); ui.method = prevM;
-  const t = taxCalc(cart, prevM);
+  renderCashBar();
+  if (!cart.length){ el.innerHTML = `<div class="empty">Escanea o toca un producto para añadirlo.</div>${ui.fromQuote ? '' : ''}`; return; }
+  const P = ui.pay, st = payState(), t = {...st.t, disc:discUsd()};
   const fiscal = ui.doc === 'fiscal';
   const cl = clients().sort((a, b) => a.name.localeCompare(b.name, 'es'));
-  const prevC = ($('#payC') || {}).value || '';
-  const C = ui.cust;
-  el.innerHTML = `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
+  const C = ui.cust, needClient = st.fiado > 0;
+  const methodOpts = (sel, withF = true) => Object.entries(METHODS).filter(([k]) => withF || k !== 'fiado').map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
+  el.innerHTML = (ui.fromQuote && S.quotes[ui.fromQuote] ? `<div class="warnbox" style="background:#10283a;border-color:#1f4a6b;color:#bfe0ff">Vendiendo la cotización ${esc(S.quotes[ui.fromQuote].no || '')}. <a href="#" onclick="ui.fromQuote=null;renderCart();return false">quitar vínculo</a></div>` : '')
+    + `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
       <div class="grow"><div class="name">${esc(c.name)}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}${num(c.iva ?? 16) === 0 ? ' · exento' : num(c.iva) === 8 ? ' · IVA 8%' : ''}</div></div>
       <div class="qty"><button onclick="setQty(${i},${c.qty}-1)">−</button><input inputmode="decimal" value="${nfq.format(c.qty)}" onchange="setQty(${i},this.value)"><button onclick="setQty(${i},${c.qty}+1)">+</button></div>
     </div></div>`).join('') + `</div>
-    <div class="total" style="margin-top:12px"><div class="sub" style="color:#a9c7bb;font-size:12px;font-weight:600">TOTAL A PAGAR</div><div class="v">${usd(t.total)}</div>
-    <div class="bsline" style="font-size:22px">${cfg.bcv ? bs(t.total) : '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>'}</div>
+    <div class="row" style="margin-top:10px;gap:8px"><span class="sub" style="margin:0;white-space:nowrap">Descuento</span><input inputmode="decimal" value="${esc(ui.disc.v)}" placeholder="0" style="width:90px;padding:8px" onchange="ui.disc.v=this.value;renderCart()"><select style="width:80px;padding:8px" onchange="ui.disc.type=this.value;renderCart()"><option value="pct" ${ui.disc.type === 'pct' ? 'selected' : ''}>%</option><option value="usd" ${ui.disc.type === 'usd' ? 'selected' : ''}>$</option></select>${t.disc ? `<span class="sub" style="margin:0">−${usd(t.disc)}</span>` : ''}${!isAdmin() ? `<span class="sub" style="margin:0">máx. ${nf0.format(num(cfg.maxDisc ?? 10))}%</span>` : ''}</div>
+    <div class="total" style="margin-top:12px"><div class="sub" style="color:#a9c7bb;font-size:12px;font-weight:600">TOTAL A PAGAR</div><div class="v" id="totV">${usd(t.total)}</div>
+    <div class="bsline" style="font-size:22px" id="totB">${cfg.bcv ? bs(t.total) : '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>'}</div>
     <div class="s">${cfg.bcv ? 'Tasa dólar BCV ' + nf2.format(cfg.bcv) : ''}${cfg.eur && cfg.bcv ? ' · ≈ ' + eurF(usdToEur(t.total)) : ''}${t.igtf ? ' · incluye IGTF' : ''}</div></div>
     <label>Documento</label>
     <div class="seg" style="margin:0"><button class="${fiscal ? 'on' : ''}" onclick="ui.doc='fiscal';renderCart()">Factura fiscal</button><button class="${!fiscal ? 'on' : ''}" onclick="ui.doc='nota';renderCart()">Nota de entrega (sin factura)</button></div>
@@ -953,17 +1002,26 @@ function renderCart(){
     </div>` : ''}
     ${taxHtml(t, cfg.bcv, fiscal)}
     <label>Forma de pago</label>
-    <select id="payM" onchange="renderCart()">${Object.entries(METHODS).map(([k, v]) => `<option value="${k}" ${k === prevM ? 'selected' : ''}>${v}</option>`).join('')}</select>
-    ${prevM === 'fiado' ? `<label>Cliente del fiado</label><div class="row"><select id="payC" class="grow"><option value="">— Elegir cliente —</option>${cl.map(c => `<option value="${c.id}" ${c.id === prevC ? 'selected' : ''}>${esc(c.name)} (debe ${usd(balance(c.id))})</option>`).join('')}</select><button class="btn sec" onclick="editClient(null,true)">Nuevo</button></div>` : `
-    <label>Recibido (para calcular el vuelto)</label>
-    <div class="row"><input id="recv" inputmode="decimal" placeholder="0,00" oninput="calcChange()" class="grow"><select id="recvCur" onchange="calcChange()" style="width:110px"><option value="usd">$</option><option value="bs" ${prevM === 'efectivo_bs' || prevM === 'pago_movil' || prevM === 'punto' ? 'selected' : ''}>Bs</option>${cfg.eur ? `<option value="eur" ${prevM === 'efectivo_eur' ? 'selected' : ''}>€</option>` : ''}</select></div>
-    <div id="change" class="note"></div>`}
-    <div class="gap" style="margin-top:14px"><button class="btn sec" onclick="cart=[];lastScan=null;renderLastScan();renderCart()">Vaciar</button><button class="btn grow" onclick="checkout()">Cobrar ${usd(t.total)}</button></div>`;
+    <div class="seg" style="margin:0 0 8px"><button class="${P.mode !== 'mixto' ? 'on' : ''}" onclick="ui.pay.mode='simple';renderCart()">Un solo pago</button><button class="${P.mode === 'mixto' ? 'on' : ''}" onclick="ui.pay.mode='mixto';if(!ui.pay.lines.length){ui.pay.lines=[];addPayLine()}else renderCart()">Pago mixto</button></div>
+    ${P.mode !== 'mixto' ? `<select id="payM" onchange="ui.pay.method=this.value;renderCart()">${methodOpts(P.method)}</select>
+      ${P.method !== 'fiado' ? `<label>Recibido (para calcular el vuelto)</label>
+      <div class="row"><input id="recv" inputmode="decimal" placeholder="0,00" oninput="calcChange()" class="grow"><select id="recvCur" onchange="calcChange()" style="width:110px"><option value="usd">$</option><option value="bs" ${METHOD_CUR[P.method] === 'bs' ? 'selected' : ''}>Bs</option>${cfg.eur ? `<option value="eur" ${P.method === 'efectivo_eur' ? 'selected' : ''}>€</option>` : ''}</select></div>
+      <div id="change" class="note"></div>` : ''}`
+    : `<div class="card" style="padding:8px 12px">${P.lines.map((l, i) => { const cur = METHOD_CUR[l.m] || 'usd'; return `<div class="row" style="gap:6px;padding:5px 0">
+        <select style="flex:1.3;padding:8px" onchange="setPayLine(${i},'m',this.value)">${methodOpts(l.m)}</select>
+        <div class="row" style="flex:1;gap:4px"><input inputmode="decimal" value="${esc(l.v)}" placeholder="0,00" style="padding:8px" oninput="setPayLine(${i},'v',this.value)"><span class="sub" style="margin:0;width:22px">${CUR_SYM[cur]}</span></div>
+        <a href="#" class="sub" title="Completar con lo que falta" onclick="fillRest(${i});return false">resto</a><a href="#" class="sub" onclick="ui.pay.lines.splice(${i},1);renderCart();return false">✕</a></div>`; }).join('')}
+      <button class="btn sm sec" style="margin-top:6px" onclick="addPayLine()">+ Otro pago</button></div>`}
+    <div id="payInfo" class="note"></div>
+    ${needClient ? `<label>Cliente del fiado</label><div class="row"><select id="payC" class="grow" onchange="ui.pay.client=this.value"><option value="">— Elegir cliente —</option>${cl.map(c => `<option value="${c.id}" ${c.id === P.client ? 'selected' : ''}>${esc(c.name)} (debe ${usd(balance(c.id))})</option>`).join('')}</select><button class="btn sec" onclick="editClient(null,true)">Nuevo</button></div>` : ''}
+    <div class="gap" style="margin-top:14px"><button class="btn sec" onclick="clearCart()">Vaciar</button><button class="btn sec" onclick="quoteForm()">Cotización</button><button class="btn grow" id="chkBtn" onclick="checkout()">Cobrar ${usd(t.total)}</button></div>`;
+  updatePayInfo();
 }
+function clearCart(){ cart = []; lastScan = null; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.fromQuote = null; renderLastScan(); renderCart(); }
 function calcChange(){
-  const v = num($('#recv').value), cur = $('#recvCur').value, t = taxCalc(cart, curMethod()).total;
+  const v = num($('#recv').value), cur = $('#recvCur').value, t = payState().t.total;
   if (!v){ $('#change').textContent = ''; return; }
-  const paidUsd = cur === 'usd' ? v : cur === 'bs' ? (cfg.bcv ? v / cfg.bcv : 0) : toUsd(v, 'eur');
+  const paidUsd = fromCur(v, cur);
   if (!paidUsd || !isFinite(paidUsd)){ $('#change').textContent = 'Pon las tasas para calcular.'; return; }
   const d = r2(paidUsd - t);
   $('#change').innerHTML = d >= 0 ? `Vuelto: <b style="color:var(--acc)">${usd(d)}</b>${cfg.bcv ? ' · ' + bs(d) : ''}` : `Faltan: <b style="color:var(--warn)">${usd(-d)}</b>${cfg.bcv ? ' · ' + bs(-d) : ''}`;
@@ -971,15 +1029,19 @@ function calcChange(){
 let busy = false;
 async function checkout(){
   if (busy || !cart.length) return;
-  const method = $('#payM').value;
-  const fiscal = ui.doc === 'fiscal';
-  let clientId = method === 'fiado' ? ($('#payC') || {}).value : '';
-  if (method === 'fiado' && !clientId){ toast('Elige el cliente del fiado'); return; }
+  const P = ui.pay, st = payState(), fiscal = ui.doc === 'fiscal';
+  if (ui.disc.v && !isAdmin() && ui.disc.type === 'pct' && num(ui.disc.v) > num(cfg.maxDisc ?? 10)) toast('Descuento limitado al ' + nf0.format(num(cfg.maxDisc ?? 10)) + '%');
+  if (P.mode === 'mixto'){
+    if (!st.lines.length || st.lines.some(l => !(l.raw > 0))){ toast('Pon el monto de cada pago'); return; }
+    if (st.rest > 0.009){ toast('Falta por pagar ' + usd(st.rest)); return; }
+    if (st.lines.some(l => !isFinite(l.usd) || (l.cur !== 'usd' && !l.usd))){ toast('Faltan las tasas para convertir los pagos'); return; }
+  }
+  const clientId = st.fiado > 0 ? (($('#payC') || {}).value || P.client) : '';
+  if (st.fiado > 0 && !clientId){ toast('Elige el cliente del fiado'); return; }
   const C = {...ui.cust, rif:normRif(ui.cust.rif) ? String(ui.cust.rif).toUpperCase().replace(/\s/g, '') : '', name:(ui.cust.name || '').trim()};
   if (fiscal && (!C.rif || !C.name)){ toast('Para la factura pon cédula/RIF y nombre'); $('#f_rif') && $('#f_rif').focus(); return; }
   busy = true;
-  const items = cart.map(c => ({pid:c.pid, name:c.name, qty:c.qty, price:c.price, cost:c.cost || 0, unit:c.unit, iva:c.iva ?? 16}));
-  const t = taxCalc(items, method), id = uid(), now = Date.now();
+  const items = st.items, t = st.t, id = uid(), now = Date.now();
   let customer = null;
   if (fiscal && C.name !== 'Consumidor final'){
     let c = findClientByRif(C.rif);
@@ -987,36 +1049,83 @@ async function checkout(){
     else if (c.name !== C.name || (C.addr && c.addr !== C.addr) || (C.phone && c.phone !== C.phone)){ const {id:cid, ...rest} = c; await put('clients', cid, {...rest, name:C.name, addr:C.addr || rest.addr || '', phone:C.phone || rest.phone || ''}); }
     customer = {clientId:c.id, name:C.name, rif:C.rif, addr:C.addr || '', phone:C.phone || ''};
   } else if (fiscal) customer = {clientId:'', name:C.name, rif:C.rif, addr:'', phone:''};
-  const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, method, clientId:clientId || (customer && customer.clientId) || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:'', customer, user:me ? me.u : '', userName:me ? me.name : ''};
+  const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, disc:discUsd(), tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0,
+    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:'', customer, user:me ? me.u : '', userName:me ? me.name : ''};
+  if (P.mode === 'mixto'){
+    sale.payments = st.lines.map(l => ({m:l.m, usd:l.usd, raw:l.raw}));
+    if (st.rest < -0.009) sale.change = {usd:r2(-st.rest), cur:P.changeCur || 'usd', raw:r2(toCur(-st.rest, P.changeCur || 'usd'))};
+  }
+  if (ui.fromQuote) sale.quoteId = ui.fromQuote;
   if (!fiscal){ const seq = num(cfg.noteSeq) + 1; sale.noteNo = 'NE-' + String(seq).padStart(6, '0'); await putCfg({noteSeq:seq}); }
   const ok = await put('sales', id, sale);
   if (ok){
     for (const c of items) if (c.pid && S.products[c.pid] && S.products[c.pid].track !== false){
       await put('products', c.pid, {...S.products[c.pid], stock: r3(num(S.products[c.pid].stock) - c.qty)});
     }
-    if (method === 'fiado') await put('movs', uid(), {clientId, type:'deuda', amount:t.total, rate:cfg.bcv || 0, ts:now, saleId:id, note:items.map(i => nfq.format(i.qty) + ' ' + i.name).join(', ')});
-    cart = []; lastScan = null; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal';
+    if (st.fiado > 0) await put('movs', uid(), {clientId, type:'deuda', amount:st.fiado, rate:cfg.bcv || 0, ts:now, saleId:id, note:items.map(i => nfq.format(i.qty) + ' ' + i.name).join(', ')});
+    if (ui.fromQuote && S.quotes[ui.fromQuote]) await put('quotes', ui.fromQuote, {...S.quotes[ui.fromQuote], status:'vendida', saleId:id});
+    cart = []; lastScan = null; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal'; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
     shellFor = ''; render(); showSale(id, true);
   }
   busy = false;
 }
+function receiptText(s){
+  const lines = (s.items || []).map(i => `${nfq.format(num(i.qty))} × ${i.name} — ${usd(r2(num(i.price) * num(i.qty)))}`).join('\n');
+  const docTxt = s.doc === 'devolucion' ? 'Devolución' : s.doc === 'fiscal' ? 'Factura' + (s.fiscalNo ? ' Nº ' + s.fiscalNo : '') : 'Nota de entrega ' + (s.noteNo || '');
+  return `*${cfg.name}*\n${docTxt} · ${fmtDate(s.ts)}\n\n${lines}\n\n${s.disc ? 'Descuento: −' + usd(s.disc) + '\n' : ''}${s.igtf ? 'IGTF: ' + usd(s.igtf) + '\n' : ''}*Total: ${usd(num(s.total))}*${s.rate ? '\n' + bs(num(s.total), s.rate) + ' (tasa ' + nf2.format(s.rate) + ')' : ''}\nPago: ${payLabel(s)}\n\n¡Gracias por su compra!`;
+}
+function returnedQty(saleId, idx){ let q = 0; for (const s of Object.values(S.sales)) if (s.refOf === saleId) for (const it of (s.items || [])) if (it.ix === idx) q += -num(it.qty); return q; }
 function showSale(id, justDone){
   const s = S.sales[id]; if (!s) return;
   const cl = s.clientId && S.clients[s.clientId];
-  const fiscal = s.doc === 'fiscal';
-  const t = {...(s.tax || {}), sub:s.sub ?? s.total, igtf:s.igtf || 0, total:s.total};
+  const fiscal = s.doc === 'fiscal', isRet = s.doc === 'devolucion';
+  const t = {...(s.tax || {}), sub:s.sub ?? s.total, igtf:s.igtf || 0, total:s.total, disc:s.disc || 0};
+  const phone = (s.customer && s.customer.phone) || (cl && cl.phone) || '';
+  const pays = salePayments(s);
+  const rets = Object.entries(S.sales).filter(([, x]) => x.refOf === id);
   openSheet(`${justDone ? '<div class="pill ok" style="display:inline-block;margin-bottom:8px">Venta registrada</div>' : ''}
-  <h2>${fiscal ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega ' + esc(s.noteNo || '') : 'Venta'} · ${usd(num(s.total))}</h2>
-  <div class="sub">${fmtDate(s.ts)} · ${METHODS[s.method] || s.method}${s.userName ? ' · vendió ' + esc(s.userName) : ''}${s.rate ? ' · tasa $ ' + nf2.format(s.rate) : ''}</div>
+  <h2>${isRet ? 'Devolución' : fiscal ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega ' + esc(s.noteNo || '') : 'Venta'} · ${usd(num(s.total))}</h2>
+  <div class="sub">${fmtDate(s.ts)}${s.userName ? ' · ' + (isRet ? 'registró ' : 'vendió ') + esc(s.userName) : ''}${s.rate ? ' · tasa $ ' + nf2.format(s.rate) : ''}</div>
+  ${isRet && S.sales[s.refOf] ? `<div class="sub">De la venta del ${fmtDate(S.sales[s.refOf].ts)} · <a href="#" onclick="showSale('${s.refOf}');return false">ver venta</a></div>` : ''}
   ${s.customer ? `<div class="sub" style="margin-top:4px">Cliente: <b>${esc(s.customer.name)}</b> · ${esc(s.customer.rif)}${s.customer.addr ? ' · ' + esc(s.customer.addr) : ''}</div>` : cl ? `<div class="sub" style="margin-top:4px">Cliente: ${esc(cl.name)}</div>` : ''}
   <div class="card" style="margin-top:12px">${(s.items || []).map(i => `<div class="mv"><span>${nfq.format(num(i.qty))} × ${esc(i.name)}${fiscal && num(i.iva ?? 16) === 0 ? ' <span class="sub">(E)</span>' : ''}</span><b>${usd(r2(num(i.price) * num(i.qty)))}</b></div>`).join('')}</div>
-  ${s.tax ? taxHtml(t, s.rate, fiscal) : ''}
+  ${s.tax && !isRet ? taxHtml(t, s.rate, fiscal) : ''}
+  <div class="card" style="margin-top:10px;padding:6px 14px"><div class="sub" style="font-weight:600">${isRet ? 'Reembolso' : 'Pagos'}</div>${pays.map(p => `<div class="mv"><span>${METHODS[p.m] || p.m}</span><b>${fmtCur(p.raw, p.cur)}${p.cur !== 'usd' ? ` <span class="sub">(${usd(p.usd)})</span>` : ''}</b></div>`).join('')}${s.change ? `<div class="mv"><span>Vuelto entregado</span><b>${fmtCur(s.change.raw, s.change.cur)}</b></div>` : ''}</div>
   ${s.rate ? `<p class="note">Total en bolívares (tasa de ese día): <b>${bs(num(s.total), s.rate)}</b></p>` : ''}
+  ${rets.length ? `<p class="note" style="color:var(--warn)">Tiene ${rets.length} devolución(es): ${rets.map(([rid, r]) => `<a href="#" onclick="showSale('${rid}');return false">${usd(num(r.total))}</a>`).join(', ')}</p>` : ''}
   ${fiscal ? `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">${s.fiscalNo ? 'Factura Nº ' + esc(s.fiscalNo) : 'Emite la factura en tu máquina fiscal'}</div>
     <p class="note">${s.fiscalNo ? 'Puedes corregir el número si hace falta.' : 'Usa estos datos en la máquina fiscal y anota aquí el número de factura que imprime, para tenerlo registrado.'}</p>
     <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>`
   : s.doc === 'nota' ? `<button class="btn sec full" style="margin-top:10px" onclick="notaPDF('${id}')">Descargar nota de entrega (PDF)</button>` : ''}
-  <div class="sheet-actions">${isAdmin() ? `<button class="btn bad" onclick="voidSale('${id}')">Anular venta</button>` : ''}<button class="btn ${justDone ? '' : 'sec'}" onclick="closeSheet()">${justDone ? 'Listo' : 'Cerrar'}</button></div>`);
+  <a class="btn wa full" style="margin-top:8px" href="${waLink(phone, receiptText(s))}" target="_blank" rel="noopener">Enviar recibo por WhatsApp</a>
+  <div class="sheet-actions">${isAdmin() && !isRet ? `<button class="btn sec" onclick="returnForm('${id}')">Devolver productos</button>` : ''}${isAdmin() ? `<button class="btn bad" onclick="voidSale('${id}')">Anular</button>` : ''}<button class="btn ${justDone ? '' : 'sec'}" onclick="closeSheet()">${justDone ? 'Listo' : 'Cerrar'}</button></div>`);
+}
+function returnForm(id){
+  const s = S.sales[id]; if (!s) return;
+  const its = (s.items || []).map((it, i) => ({...it, i, left:r3(num(it.qty) - returnedQty(id, i))}));
+  const cl = s.clientId && S.clients[s.clientId];
+  openSheet(`<h2>Devolver productos</h2><div class="sub">Venta del ${fmtDate(s.ts)} · ${usd(num(s.total))}</div>
+  <div class="card" style="margin-top:12px">${its.map(it => `<div class="mv" style="align-items:center"><div class="grow"><div>${esc(it.name)}</div><div class="sub">vendidos ${nfq.format(num(it.qty))} a ${usd(num(it.price))}${it.left < num(it.qty) ? ' · ya devueltos ' + nfq.format(r3(num(it.qty) - it.left)) : ''}</div></div>
+    <input type="number" min="0" max="${it.left}" step="any" value="0" data-i="${it.i}" class="retq" style="width:80px;padding:7px" ${it.left <= 0 ? 'disabled' : ''} oninput="retTotal('${id}')"></div>`).join('')}</div>
+  <div class="note" id="retTot">Total a devolver: <b>$0,00</b></div>
+  <label>Cómo se devuelve el dinero</label><select id="retM">${Object.entries(METHODS).filter(([k]) => k !== 'fiado').map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}${cl ? `<option value="fiado">Descontar de lo que debe ${esc(cl.name)} / saldo a favor</option>` : ''}</select>
+  <label class="row" style="gap:8px;color:var(--tx);font-size:14px;margin-top:12px"><input type="checkbox" id="retStock" class="chk" checked> Devolver los productos al inventario</label>
+  <div class="sheet-actions"><button class="btn sec" onclick="showSale('${id}')">Volver</button><button class="btn" onclick="saveReturn('${id}')">Registrar devolución</button></div>`);
+}
+function retTotal(id){ const s = S.sales[id]; let t = 0; document.querySelectorAll('.retq').forEach(e => { const it = s.items[+e.dataset.i]; t += Math.min(num(e.value), num(e.max)) * num(it.price); }); $('#retTot').innerHTML = `Total a devolver: <b>${usd(r2(t))}</b>${cfg.bcv ? ' · ' + bs(r2(t)) : ''}`; }
+async function saveReturn(id){
+  const s = S.sales[id]; if (!s) return;
+  const items = []; document.querySelectorAll('.retq').forEach(e => { const q = Math.min(num(e.value), num(e.max)); if (q > 0){ const it = s.items[+e.dataset.i]; items.push({...it, qty:-r3(q), ix:+e.dataset.i}); } });
+  if (!items.length){ toast('Pon la cantidad a devolver'); return; }
+  const total = r2(items.reduce((a, i) => a + num(i.price) * num(i.qty), 0)), m = $('#retM').value, now = Date.now(), rid = uid();
+  const cur = METHOD_CUR[m] || 'usd';
+  const ret = {ts:now, items, total, sub:total, igtf:0, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, method:m, payments:[{m, usd:total, raw:r2(toCur(total, cur))}], clientId:s.clientId || '', doc:'devolucion', refOf:id, user:me ? me.u : '', userName:me ? me.name : ''};
+  const restock = $('#retStock').checked;
+  closeSheet();
+  if (!(await put('sales', rid, ret))) return;
+  if (restock) for (const it of items) if (it.pid && S.products[it.pid] && S.products[it.pid].track !== false) await put('products', it.pid, {...S.products[it.pid], stock:r3(num(S.products[it.pid].stock) - num(it.qty))});
+  if (m === 'fiado' && s.clientId) await put('movs', uid(), {clientId:s.clientId, type:'abono', amount:-total, rate:cfg.bcv || 0, ts:now, saleId:rid, note:'Devolución de productos', m:'fiado'});
+  toast('Devolución registrada: ' + usd(-total)); showSale(rid);
 }
 async function saveFiscalNo(id){
   const v = $('#fNo').value.trim(); const s = S.sales[id]; if (!s) return;
@@ -1051,7 +1160,9 @@ async function notaPDF(id){
   if (s.igtf){ lr('Subtotal', usd(s.sub)); lr('IGTF 3%', usd(s.igtf)); }
   lr('TOTAL $', usd(num(s.total)), true, 11);
   if (s.rate){ lr('TOTAL Bs', bs(num(s.total), s.rate).replace('Bs ', ''), true, 10); lr('Tasa BCV', nf2.format(s.rate), false, 7.5); }
-  lr('Forma de pago', METHODS[s.method] || s.method, false, 8);
+  if (s.disc) lr('Descuento', '−' + usd(s.disc), false, 8);
+  salePayments(s).forEach(p => lr(METHODS[p.m] || p.m, fmtCur(p.raw, p.cur), false, 8));
+  if (s.change) lr('Vuelto', fmtCur(s.change.raw, s.change.cur), false, 8);
   if (s.userName) lr('Atendido por', s.userName, false, 7.5);
   y += 4; center('¡Gracias por su compra!', 8.5);
   await saveFile('nota-' + (s.noteNo || id) + '.pdf', doc.output('blob'));
@@ -1068,7 +1179,7 @@ function voidSale(id){
 
 /* ---- Inventario ---- */
 VIEWS.inventario = {
-  shell: () => `<div class="row between"><h2>Inventario</h2><div class="gap"><button class="btn sm sec" onclick="openScanner()">${ICON_CAM}</button>${isAdmin() ? `<button class="btn sm sec" onclick="ui.labelMode=!ui.labelMode;ui.selLabels.clear();VIEWS.inventario.fill()">Etiquetas</button><button class="btn sm" onclick="editProduct()">+ Producto</button>` : ''}</div></div>
+  shell: () => `<div class="row between"><h2>Inventario</h2><div class="gap"><button class="btn sm sec" onclick="openScanner()">${ICON_CAM}</button>${isAdmin() ? `<button class="btn sm sec" onclick="ui.labelMode=!ui.labelMode;ui.selLabels.clear();VIEWS.inventario.fill()">Etiquetas</button><button class="btn sm sec" onclick="moreInv()">Más ▾</button><button class="btn sm" onclick="editProduct()">+ Producto</button>` : ''}</div></div>
     <div class="search"><input placeholder="Buscar por nombre, marca o código…" value="${esc(ui.invQ)}" oninput="ui.invQ=this.value;VIEWS.inventario.fill()"></div>
     <div class="seg" id="invSeg"></div><div id="labelBar"></div><div class="list" id="invList"></div>
     ${isAdmin() ? `<button class="btn fab" onclick="editProduct()" aria-label="Añadir producto">+</button>` : ''}`,
@@ -1109,7 +1220,7 @@ function editProduct(id, preset = {}){
   const ed = v => v === '' || v == null ? '' : String(v).replace('.', ',');
   openSheet(`<h2>${id ? 'Editar producto' : 'Nuevo producto'}</h2>
   ${preset.code ? `<div class="warnbox" style="margin-bottom:4px">El código <b>${esc(preset.code)}</b> no está en tu inventario. Ponle nombre y precio para añadirlo.</div>` : ''}
-  <label>Nombre</label><input id="pN" value="${esc(p.name)}" placeholder="Ej: Máquina de café 2 grupos" ${id ? '' : 'autofocus'}>
+  <label>Nombre</label><input id="pN" value="${esc(p.name)}" placeholder="Ej: Harina de maíz 1 kg" ${id ? '' : 'autofocus'}>
   <div class="grid2"><div><label>Categoría</label><input id="pC" list="catList" value="${esc(p.cat)}" placeholder="${cats.length ? 'Elige o escribe una nueva' : 'Escribe una categoría'}"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
   <div><label>Marca / modelo</label><input id="pBr" value="${esc(p.brand || '')}" placeholder="Opcional"></div></div>
   <label>Precio en</label>
@@ -1319,7 +1430,7 @@ async function saveMov(cid, type){
   const a = r2(mvAmountUsd()); if (!(a > 0)){ toast('Pon un monto'); return; }
   const cur = $('#mC').value, raw = num($('#mA').value);
   const d = {clientId:cid, type, amount:a, rate:cfg.bcv || 0, ts:Date.now(), note:$('#mN').value.trim()};
-  if (type === 'abono') d.paidIn = $('#mP').value + (cur === 'bs' ? ' (Bs ' + nf2.format(raw) + ')' : cur === 'eur' ? ' (€' + nf2.format(raw) + ')' : '');
+  if (type === 'abono'){ d.paidIn = $('#mP').value + (cur === 'bs' ? ' (Bs ' + nf2.format(raw) + ')' : cur === 'eur' ? ' (€' + nf2.format(raw) + ')' : ''); d.m = LABEL_TO_M()[$('#mP').value] || ''; d.raw = raw; d.cur = cur; }
   if (await put('movs', uid(), d)){ toast(type === 'abono' ? 'Abono registrado' : 'Deuda registrada'); showClient(cid); }
 }
 function delMov(mid, cid){ ask('¿Borrar movimiento?', 'Se recalculará el saldo del cliente.', 'Borrar', async () => { await del('movs', mid); showClient(cid); }); }
@@ -1335,13 +1446,15 @@ function delClient(id){
 VIEWS.mas = {
   shell(){
     const back = t => `<button class="btn sm sec" onclick="go('mas')">← Más</button><h2 style="margin-top:12px">${t}</h2>`;
-    if (sub && !isAdmin()) sub = '';
+    if (sub && !isAdmin() && !['caja', 'cotizaciones'].includes(sub)) sub = '';
+    if (sub === 'caja') return back('Caja') + `<div id="mx"></div>`;
+    if (sub === 'cotizaciones') return back('Cotizaciones') + `<div id="mx"></div>`;
     if (sub === 'reportes') return back('Reportes') + `<div class="seg" id="repSeg"></div><div id="mx"></div>`;
     if (sub === 'respaldo') return back('Respaldo y exportar') + `<div id="mx"></div>`;
     if (sub === 'ajustes') return back('Ajustes del negocio') + `<div id="mx"></div>`;
     if (sub === 'gastos') return back('Gastos') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="expenseForm()">+ Registrar gasto</button><div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
     if (sub === 'usuarios') return back('Usuarios') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="userForm()">+ Nuevo usuario</button><div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
-    const opts = isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : [];
+    const opts = [['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []);
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
       <div class="item tap row" onclick="passForm(me.u)"><div class="grow"><div class="name">Cambiar mi contraseña</div><div class="sub">${CLOUD() ? esc(me && me.email || '') : 'Usuario: ' + esc(me ? me.u : '')}</div></div><span style="color:var(--mut)">›</span></div>
@@ -1352,6 +1465,8 @@ VIEWS.mas = {
     if (!sub){ $('#stat').textContent = backend === 'cloud' ? 'Datos en la nube' + (navigator.onLine ? '' : ' · sin conexión: se sincroniza al volver') + (window.desktop ? ' · App de PC' : '') : backend === 'db' ? 'Datos guardados en la nube' + (readOnly ? ' · solo lectura' : '') : backend === 'local' ? (window.desktop ? 'Datos guardados solo en este ordenador' : 'Datos guardados solo en este navegador') : 'Conectando…'; return; }
     if (sub === 'reportes') return fillReports();
     if (sub === 'gastos') return fillExpenses();
+    if (sub === 'caja') return fillCashView();
+    if (sub === 'cotizaciones') return fillQuotes();
     if (sub === 'usuarios'){
       const us = Object.entries(S.users).sort((a, b) => (a[1].role === 'admin' ? 0 : 1) - (b[1].role === 'admin' ? 0 : 1) || a[0].localeCompare(b[0]));
       $('#mx').innerHTML = `<div class="list">${us.map(([u, x]) => `<div class="item"><div class="row"><div class="grow"><div class="name">${esc(x.name || u)}${me && me.u === u ? ' <span class="pill ok">tú</span>' : ''}</div><div class="sub">${CLOUD() ? esc(x.email || '') : 'Usuario: <b>' + esc(u) + '</b>'} · ${x.role === 'admin' ? 'Administrador' : 'Vendedor'}${x.def ? ' · <span style="color:var(--warn)">contraseña inicial</span>' : ''}</div></div></div>
@@ -1381,6 +1496,7 @@ VIEWS.mas = {
         <label>Documento por defecto al cobrar</label><select id="aDoc"><option value="fiscal" ${cfg.docDefault !== 'nota' ? 'selected' : ''}>Factura fiscal</option><option value="nota" ${cfg.docDefault === 'nota' ? 'selected' : ''}>Nota de entrega</option></select>
         <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="aI" class="chk" ${cfg.igtf ? 'checked' : ''}> Cobrar IGTF 3% en pagos en divisas (efectivo $, efectivo €, Zelle)</label>
         <p class="note">Actívalo si tu negocio está obligado a cobrar el IGTF (consúltalo con tu contador). Se suma al total y aparece desglosado.</p>
+        <label>Descuento máximo que puede dar un vendedor (%)</label><input id="aX" inputmode="decimal" value="${nf0.format(num(cfg.maxDisc ?? 10))}">
         <label>Moneda por defecto de los precios nuevos</label><select id="aM"><option value="usd" ${cfg.cur !== 'eur' ? 'selected' : ''}>Dólares ($ BCV)</option><option value="eur" ${cfg.cur === 'eur' ? 'selected' : ''}>Euros (€ BCV)</option></select>
         <div class="grid2"><div><label>Aviso de stock bajo</label><input id="aL" inputmode="decimal" value="${nfq.format(num(cfg.lowDefault))}"></div><div><label>Código de país (WhatsApp)</label><input id="aC" inputmode="numeric" value="${esc(cfg.cc)}" placeholder="58"></div></div>
         <button class="btn full" style="margin-top:16px" onclick="saveSettings()">Guardar</button></div>`;
@@ -1388,7 +1504,7 @@ VIEWS.mas = {
   }
 };
 async function saveSettings(){
-  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value})){ ui.doc = cfg.docDefault; toast('Ajustes guardados'); }
+  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; toast('Ajustes guardados'); }
 }
 function fillReports(){
   const ranges = {hoy:'Hoy', '7':'7 días', '30':'30 días', mes:'Este mes'};
@@ -1400,7 +1516,7 @@ function fillReports(){
   const ss = salesArr().filter(s => s.ts >= from);
   const tot = r2(ss.reduce((a, s) => a + num(s.total), 0));
   const cost = r2(ss.reduce((a, s) => a + (s.items || []).reduce((b, i) => b + num(i.cost) * num(i.qty), 0), 0));
-  const byM = {}; ss.forEach(s => byM[s.method] = (byM[s.method] || 0) + num(s.total));
+  const byM = {}; ss.forEach(s => salePayments(s).forEach(p => byM[p.m] = (byM[p.m] || 0) + p.usd));
   const byP = {}; ss.forEach(s => (s.items || []).forEach(i => { const k = i.name; byP[k] = byP[k] || {q:0, t:0}; byP[k].q += num(i.qty); byP[k].t += num(i.price) * num(i.qty); }));
   const top = Object.entries(byP).sort((a, b) => b[1].t - a[1].t).slice(0, 8);
   const maxT = top.length ? top[0][1].t : 1;
@@ -1459,10 +1575,10 @@ VIEWS.proveedores = {
 function editSupplier(id){
   const x = id ? S.suppliers[id] : {name:'', rif:'', phone:'', contact:'', supplies:'', addr:'', note:''};
   openSheet(`<h2>${id ? 'Editar proveedor' : 'Nuevo proveedor'}</h2>
-  <label>Nombre o empresa</label><input id="sN" value="${esc(x.name)}" autofocus placeholder="Ej: Distribuidora Café Express">
+  <label>Nombre o empresa</label><input id="sN" value="${esc(x.name)}" autofocus placeholder="Ej: Distribuidora Central">
   <div class="grid2"><div><label>RIF</label><input id="sR" value="${esc(x.rif || '')}" placeholder="J-12345678-9"></div><div><label>Teléfono / WhatsApp</label><input id="sP" value="${esc(x.phone || '')}" inputmode="tel"></div></div>
   <label>Persona de contacto</label><input id="sC" value="${esc(x.contact || '')}" placeholder="Opcional">
-  <label>Qué te vende</label><input id="sS" value="${esc(x.supplies || '')}" placeholder="Ej: máquinas de café y repuestos">
+  <label>Qué te vende</label><input id="sS" value="${esc(x.supplies || '')}" placeholder="Ej: alimentos y bebidas">
   <label>Dirección</label><input id="sA" value="${esc(x.addr || '')}" placeholder="Opcional">
   <label>Nota</label><input id="sO" value="${esc(x.note || '')}" placeholder="Ej: crédito a 15 días">
   <div class="sheet-actions"><button class="btn sec" onclick="${id ? `showSupplier('${id}')` : 'closeSheet()'}">Cancelar</button><button class="btn" onclick="saveSupplier(${id ? `'${id}'` : 'null'})">Guardar</button></div>`);
@@ -1509,7 +1625,7 @@ async function saveSupPay(sid){
   const cur = $('#spC').value, raw = num($('#spA').value), a = r2(amtToUsd(raw, cur));
   if (!(a > 0)){ toast('Pon un monto'); return; }
   const paidIn = $('#spM').value + (cur === 'bs' ? ' (Bs ' + nf2.format(raw) + ')' : cur === 'eur' ? ' (€' + nf2.format(raw) + ')' : '');
-  if (await put('pmovs', uid(), {supplierId:sid, type:'pago', amount:a, ts:Date.now(), note:$('#spN').value.trim(), paidIn, rate:cfg.bcv || 0, user:me ? me.name : ''})){ toast('Pago registrado'); showSupplier(sid); }
+  if (await put('pmovs', uid(), {supplierId:sid, type:'pago', amount:a, ts:Date.now(), note:$('#spN').value.trim(), paidIn, m:LABEL_TO_M()[$('#spM').value] || '', raw, cur, rate:cfg.bcv || 0, user:me ? me.name : ''})){ toast('Pago registrado'); showSupplier(sid); }
 }
 function delPmov(mid, sid){ ask('¿Borrar movimiento?', 'Se recalculará lo que le debes a este proveedor.', 'Borrar', async () => { await del('pmovs', mid); showSupplier(sid); }); }
 function delSupplier(id){
@@ -1607,7 +1723,7 @@ function expenseForm(id){
 async function saveExpense(id){
   const cur = $('#exCur').value, raw = num($('#exA').value), a = r2(amtToUsd(raw, cur));
   if (!(a > 0)){ toast('Pon el monto'); return; }
-  const d = {cat:$('#exC').value, note:$('#exN').value.trim(), amount:a, raw, cur, ts:dateToTs($('#exD').value), paidIn:$('#exM').value, rate:cfg.bcv || 0, user:me ? me.name : ''};
+  const d = {cat:$('#exC').value, note:$('#exN').value.trim(), amount:a, raw, cur, ts:dateToTs($('#exD').value), paidIn:$('#exM').value, m:LABEL_TO_M()[$('#exM').value] || '', rate:cfg.bcv || 0, user:me ? me.name : ''};
   closeSheet(); if (await put('expenses', id || uid(), d)) toast('Gasto guardado');
 }
 function delExpense(id){ ask('¿Borrar gasto?', 'Se quitará de los reportes y del dashboard.', 'Borrar', async () => { await del('expenses', id); toast('Gasto borrado'); }); }
@@ -1644,7 +1760,7 @@ function dashData(){
   let nSales = 0;
   for (const s of salesArr()){ if (s.ts < R.from) continue; const i = idx[kOf(s.ts)]; if (i == null) continue; nSales++;
     const tax = s.tax ? num(s.tax.i16) + num(s.tax.i8) : 0, net = num(s.total) - num(s.igtf) - (s.doc === 'fiscal' ? tax : 0);
-    inc[i] += net; byMethod[s.method] = (byMethod[s.method] || 0) + num(s.total);
+    inc[i] += net; salePayments(s).forEach(p => byMethod[p.m] = (byMethod[p.m] || 0) + p.usd);
     for (const it of (s.items || [])){ const c = num(it.cost) * num(it.qty); cogs[i] += c; const pr = byProd[it.name] = byProd[it.name] || {v:0, g:0}; pr.v += num(it.price) * num(it.qty); pr.g += num(it.price) * num(it.qty) - c; } }
   for (const e of Object.values(S.expenses)){ if (e.ts < R.from) continue; const i = idx[kOf(e.ts)]; if (i == null) continue; exp[i] += num(e.amount); byCat[e.cat] = (byCat[e.cat] || 0) + num(e.amount); }
   const purch = r2(Object.values(S.purchases).filter(p => p.ts >= R.from).reduce((a, p) => a + num(p.total), 0));
@@ -1706,6 +1822,255 @@ async function drawCharts(D){
   }
 }
 
+/* ============ Caja: apertura y cierre ============ */
+const openCash = () => { const e = Object.entries(S.cash || {}).find(([, c]) => c.status === 'open'); return e ? {id:e[0], ...e[1]} : null; };
+const LABEL_TO_M = () => Object.fromEntries(Object.entries(METHODS).map(([k, v]) => [v, k]));
+function cashSummary(c){
+  const from = c.openedAt, to = c.closedAt || Date.now();
+  const exp = {usd:num(c.open && c.open.usd), bs:num(c.open && c.open.bs), eur:num(c.open && c.open.eur)};
+  const other = {}, sales = {n:0, usd:0}, outs = [];
+  for (const s of Object.values(S.sales)){
+    if (s.ts < from || s.ts > to) continue;
+    if (s.doc !== 'devolucion'){ sales.n++; } sales.usd += num(s.total);
+    for (const p of salePayments(s)){ if (CASH[p.m]) exp[CASH[p.m]] += p.raw; else if (p.m !== 'fiado') other[p.m] = (other[p.m] || 0) + p.usd; }
+    if (s.change) exp[s.change.cur] -= num(s.change.raw);
+  }
+  const L = LABEL_TO_M();
+  for (const m of Object.values(S.movs)) if (m.type === 'abono' && m.ts >= from && m.ts <= to && num(m.amount) > 0){
+    const mk = m.m || L[String(m.paidIn || '').split(' (')[0]];
+    if (CASH[mk]) exp[CASH[mk]] += m.raw != null ? num(m.raw) : toCur(num(m.amount), CASH[mk], m.rate);
+    else if (mk) other[mk] = (other[mk] || 0) + num(m.amount);
+  }
+  const outFrom = (arr, label) => { for (const x of arr) if (x.ts >= from && x.ts <= to){ const mk = x.m || L[String(x.paidIn || '').split(' (')[0]]; if (CASH[mk]){ const cur = CASH[mk]; const v = x.raw != null && (x.cur || 'usd') === cur ? num(x.raw) : toCur(num(x.amount), cur, x.rate); exp[cur] -= v; outs.push(label + ': ' + fmtCur(v, cur)); } } };
+  outFrom(Object.values(S.expenses), 'Gasto'); outFrom(Object.values(S.pmovs).filter(x => x.type === 'pago'), 'Pago a proveedor');
+  return {exp:{usd:r2(exp.usd), bs:r2(exp.bs), eur:r2(exp.eur)}, other, sales:{n:sales.n, usd:r2(sales.usd)}, outs};
+}
+function renderCashBar(){
+  const el = $('#cashBar'); if (!el) return;
+  const c = openCash();
+  el.innerHTML = c ? `<div class="row between" style="background:#0f2a22;border:1px solid #1f5a45;border-radius:12px;padding:8px 12px;margin-bottom:12px"><span class="sub" style="margin:0;color:#a9e7cc">Caja abierta desde ${new Date(c.openedAt).toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'})}${c.openedBy ? ' · ' + esc(c.openedBy) : ''}</span><button class="btn sm sec" onclick="closeCashForm()">Cerrar caja</button></div>`
+    : `<div class="row between" style="background:#2a2110;border:1px solid #5b4416;border-radius:12px;padding:8px 12px;margin-bottom:12px"><span class="sub" style="margin:0;color:#ffd58f">La caja está cerrada</span><button class="btn sm" onclick="openCashForm()">Abrir caja</button></div>`;
+}
+const curInputs = (pre, vals = {}) => `<div class="grid2"><div><label>Efectivo en $</label><input id="${pre}usd" inputmode="decimal" placeholder="0,00" value="${vals.usd ?? ''}"></div><div><label>Efectivo en Bs</label><input id="${pre}bs" inputmode="decimal" placeholder="0,00" value="${vals.bs ?? ''}"></div></div>${cfg.eur ? `<label>Efectivo en €</label><input id="${pre}eur" inputmode="decimal" placeholder="0,00" value="${vals.eur ?? ''}">` : ''}`;
+const readCur = pre => ({usd:r2(num(($('#' + pre + 'usd') || {}).value)), bs:r2(num(($('#' + pre + 'bs') || {}).value)), eur:r2(num(($('#' + pre + 'eur') || {}).value))});
+function openCashForm(){
+  if (openCash()){ toast('Ya hay una caja abierta'); return; }
+  const last = Object.values(S.cash || {}).filter(c => c.status === 'closed').sort((a, b) => b.closedAt - a.closedAt)[0];
+  openSheet(`<h2>Abrir caja</h2><p class="note" style="margin-top:0">Cuenta el efectivo con el que empiezas el día (el fondo para dar vuelto).</p>
+  ${curInputs('oc', last && last.counted ? last.counted : {})}
+  ${last ? `<p class="note">Rellenado con lo que se contó en el último cierre (${fmtDate(last.closedAt)}).</p>` : ''}
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="saveOpenCash()">Abrir caja</button></div>`);
+}
+async function saveOpenCash(){
+  if (openCash()){ closeSheet(); return; }
+  const id = uid();
+  if (await put('cash', id, {status:'open', openedAt:Date.now(), openedBy:me ? me.name : '', open:readCur('oc'), rate:cfg.bcv || 0})){ closeSheet(); toast('Caja abierta'); render(); }
+}
+function closeCashForm(){
+  const c = openCash(); if (!c){ toast('No hay caja abierta'); return; }
+  const sm = cashSummary(c);
+  openSheet(`<h2>Cerrar caja</h2><div class="sub">Abierta ${fmtDate(c.openedAt)}${c.openedBy ? ' por ' + esc(c.openedBy) : ''} · ${sm.sales.n} ventas · ${usd(sm.sales.usd)}</div>
+  <div class="card" style="margin-top:12px;padding:6px 14px"><div class="sub" style="font-weight:600">Efectivo que debería haber</div>
+    <div class="mv"><span>Dólares</span><b>${usd(sm.exp.usd)}</b></div><div class="mv"><span>Bolívares</span><b>${bsF(sm.exp.bs)}</b></div>${cfg.eur || sm.exp.eur ? `<div class="mv"><span>Euros</span><b>${eurF(sm.exp.eur)}</b></div>` : ''}
+    ${sm.outs.length ? `<div class="sub" style="padding:6px 0">Ya restado: ${esc(sm.outs.join(' · '))}</div>` : ''}</div>
+  ${Object.keys(sm.other).length ? `<div class="card" style="margin-top:8px;padding:6px 14px"><div class="sub" style="font-weight:600">Otros cobros (revísalos en el banco)</div>${Object.entries(sm.other).map(([k, v]) => `<div class="mv"><span>${METHODS[k] || k}</span><b>${usd(r2(v))}${cfg.bcv ? ' <span class="sub">(' + bs(v) + ')</span>' : ''}</b></div>`).join('')}</div>` : ''}
+  <h3>Efectivo contado</h3>${curInputs('cc')}
+  <div id="ccDiff" class="note"></div>
+  <label>Nota (opcional)</label><input id="ccN" placeholder="Ej: faltan 2 $, se dio vuelto de más">
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="saveCloseCash('${c.id}')">Cerrar caja</button></div>`);
+  ['usd', 'bs', 'eur'].forEach(k => { const e = $('#cc' + k); if (e) e.oninput = () => ccDiff(sm.exp); });
+}
+function ccDiff(exp){
+  const c = readCur('cc'), parts = [];
+  for (const k of ['usd', 'bs', 'eur']){ if (k === 'eur' && !cfg.eur && !exp.eur) continue; const d = r2(c[k] - exp[k]); if (Math.abs(d) >= 0.01) parts.push(`${d > 0 ? 'Sobran' : 'Faltan'} <b style="color:${d > 0 ? 'var(--acc)' : 'var(--warn)'}">${fmtCur(Math.abs(d), k)}</b>`); }
+  $('#ccDiff').innerHTML = parts.length ? parts.join(' · ') : '<b style="color:var(--acc)">Cuadra perfecto ✓</b>';
+}
+async function saveCloseCash(id){
+  const c = S.cash[id]; if (!c) return;
+  const sm = cashSummary({...c, closedAt:Date.now()}), counted = readCur('cc');
+  const diff = {usd:r2(counted.usd - sm.exp.usd), bs:r2(counted.bs - sm.exp.bs), eur:r2(counted.eur - sm.exp.eur)};
+  if (await put('cash', id, {...c, status:'closed', closedAt:Date.now(), closedBy:me ? me.name : '', expected:sm.exp, counted, diff, other:sm.other, sales:sm.sales, note:$('#ccN').value.trim()})){ closeSheet(); toast('Caja cerrada'); render(); }
+}
+function fillCashView(){
+  const c = openCash();
+  const hist = Object.entries(S.cash || {}).map(([id, x]) => ({id, ...x})).filter(x => x.status === 'closed').sort((a, b) => b.closedAt - a.closedAt).slice(0, isAdmin() ? 60 : 5);
+  const diffTxt = d => { const p = []; ['usd', 'bs', 'eur'].forEach(k => { if (d && Math.abs(num(d[k])) >= 0.01) p.push((d[k] > 0 ? '+' : '−') + fmtCur(Math.abs(d[k]), k)); }); return p.length ? `<span style="color:var(--warn)">${p.join(' · ')}</span>` : '<span style="color:var(--acc)">cuadró</span>'; };
+  $('#mx').innerHTML = (c ? (() => { const sm = cashSummary(c); return `<div class="card"><div class="row between"><div class="name">Caja abierta</div><span class="pill ok">desde ${new Date(c.openedAt).toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'})}</span></div>
+      <div class="sub">${sm.sales.n} ventas · ${usd(sm.sales.usd)}</div>
+      <div class="mv"><span>Efectivo $ esperado</span><b>${usd(sm.exp.usd)}</b></div><div class="mv"><span>Efectivo Bs esperado</span><b>${bsF(sm.exp.bs)}</b></div>${cfg.eur ? `<div class="mv"><span>Efectivo € esperado</span><b>${eurF(sm.exp.eur)}</b></div>` : ''}
+      <button class="btn full" style="margin-top:10px" onclick="closeCashForm()">Cerrar caja</button></div>`; })()
+    : `<div class="card"><div class="name">La caja está cerrada</div><p class="note">Ábrela al empezar el día con el efectivo del fondo. Al cerrarla, el sistema te dice cuánto debería haber y si falta o sobra.</p><button class="btn full" style="margin-top:10px" onclick="openCashForm()">Abrir caja</button></div>`)
+    + `<h3>Cierres anteriores</h3><div class="list">${hist.length ? hist.map(x => `<div class="item"><div class="row between"><div><div class="name" style="font-size:14px">${fmtDate(x.closedAt)}</div><div class="sub">${esc(x.closedBy || '')} · ${x.sales ? x.sales.n + ' ventas · ' + usd(x.sales.usd) : ''}</div></div><div class="sub" style="text-align:right">${diffTxt(x.diff)}</div></div>${x.note ? `<div class="sub">${esc(x.note)}</div>` : ''}</div>`).join('') : '<div class="empty">Todavía no hay cierres.</div>'}</div>`;
+}
+
+/* ============ Cotizaciones ============ */
+const quotes = () => Object.entries(S.quotes || {}).map(([id, q]) => ({id, ...q})).sort((a, b) => b.ts - a.ts);
+const quoteStatus = q => q.status === 'vendida' ? 'vendida' : (q.ts + num(q.validDays || 7) * 864e5 < Date.now() ? 'vencida' : 'abierta');
+function quoteForm(){
+  if (!cart.length){ toast('Añade productos al carrito'); return; }
+  const C = ui.cust;
+  openSheet(`<h2>Guardar como cotización</h2><p class="note" style="margin-top:0">Se guarda con los precios de hoy y la puedes mandar por WhatsApp o en PDF. Luego, si el cliente acepta, la conviertes en venta.</p>
+  <label>Cliente</label><input id="qN" value="${esc(C.name || '')}" placeholder="Nombre o empresa" autofocus>
+  <div class="grid2"><div><label>Teléfono</label><input id="qP" value="${esc(C.phone || '')}" inputmode="tel" placeholder="0414 1234567"></div><div><label>Cédula / RIF</label><input id="qR" value="${esc(C.rif || '')}" placeholder="Opcional"></div></div>
+  <div class="grid2"><div><label>Válida por (días)</label><input id="qV" type="number" min="1" value="7"></div><div><label>Nota</label><input id="qO" placeholder="Ej: incluye instalación"></div></div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="saveQuote()">Guardar</button></div>`);
+}
+async function saveQuote(){
+  const name = $('#qN').value.trim(); if (!name){ toast('Pon el nombre del cliente'); return; }
+  const items = netItems(), t = taxCalc(items, 0), seq = num(cfg.quoteSeq) + 1, id = uid();
+  await putCfg({quoteSeq:seq});
+  const q = {no:'COT-' + String(seq).padStart(5, '0'), ts:Date.now(), items, sub0:cartSub0(), disc:discUsd(), total:t.total, rate:cfg.bcv || 0, customer:{name, phone:$('#qP').value.trim(), rif:$('#qR').value.trim().toUpperCase()}, validDays:Math.max(1, parseInt($('#qV').value) || 7), note:$('#qO').value.trim(), status:'abierta', user:me ? me.name : ''};
+  if (await put('quotes', id, q)){ cart = []; ui.disc = {type:'pct', v:''}; lastScan = null; shellFor = ''; render(); showQuote(id); toast('Cotización ' + q.no + ' guardada'); }
+}
+function quoteText(q){
+  return `*${cfg.name}*\nCotización ${q.no} · ${fmtDay(q.ts)}\nPara: ${q.customer.name}\n\n${q.items.map(i => `${nfq.format(num(i.qty))} × ${i.name} — ${usd(r2(num(i.price) * num(i.qty)))}`).join('\n')}\n\n*Total: ${usd(num(q.total))}*${cfg.bcv ? '\n' + bs(num(q.total)) + ' a la tasa BCV de hoy (' + nf2.format(cfg.bcv) + ')' : ''}\nVálida hasta el ${fmtDay(q.ts + num(q.validDays) * 864e5)}${q.note ? '\n\n' + q.note : ''}`;
+}
+function showQuote(id){
+  const q = S.quotes[id]; if (!q) return;
+  const st = quoteStatus(q);
+  openSheet(`<div class="row between"><h2 style="margin:0">Cotización ${esc(q.no)}</h2><span class="pill ${st === 'vendida' ? 'ok' : st === 'vencida' ? 'out' : 'low'}">${st}</span></div>
+  <div class="sub">${fmtDate(q.ts)} · válida ${q.validDays} días${q.user ? ' · ' + esc(q.user) : ''}</div>
+  <div class="sub" style="margin-top:4px">Cliente: <b>${esc(q.customer.name)}</b>${q.customer.phone ? ' · ' + esc(q.customer.phone) : ''}${q.customer.rif ? ' · ' + esc(q.customer.rif) : ''}</div>
+  <div class="card" style="margin-top:12px">${q.items.map(i => `<div class="mv"><span>${nfq.format(num(i.qty))} × ${esc(i.name)}</span><b>${usd(r2(num(i.price) * num(i.qty)))}</b></div>`).join('')}${q.disc ? `<div class="mv"><span>Descuento incluido</span><b>−${usd(q.disc)}</b></div>` : ''}<div class="mv"><b>Total</b><b>${usd(num(q.total))}${cfg.bcv ? ' · ' + bs(num(q.total)) : ''}</b></div></div>
+  ${q.note ? `<p class="note">${esc(q.note)}</p>` : ''}
+  <div class="gap" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="quotePDF('${id}')">PDF</button><a class="btn wa" style="flex:1" href="${waLink(q.customer.phone, quoteText(q))}" target="_blank" rel="noopener">WhatsApp</a></div>
+  ${st !== 'vendida' ? `<button class="btn full" style="margin-top:8px" onclick="quoteToCart('${id}')">Convertir en venta</button>` : q.saleId ? `<button class="btn sec full" style="margin-top:8px" onclick="showSale('${q.saleId}')">Ver la venta</button>` : ''}
+  <div class="sheet-actions">${isAdmin() ? `<button class="btn bad" onclick="ask('¿Eliminar cotización?','Se borrará ${esc(q.no)}.','Eliminar',async()=>{await del('quotes','${id}');toast('Cotización eliminada')})">Eliminar</button>` : ''}<button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+function quoteToCart(id){
+  const q = S.quotes[id]; if (!q) return;
+  cart = q.items.map(i => ({pid:i.pid, name:i.name, price:num(i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16}));
+  ui.disc = {type:'pct', v:''}; ui.fromQuote = id;
+  ui.cust = {rif:q.customer.rif || '', name:q.customer.name || '', addr:'', phone:q.customer.phone || ''};
+  closeSheet(); go('vender'); toast('Cotización cargada en el carrito');
+}
+async function quotePDF(id){
+  const q = S.quotes[id]; if (!q || !window.jspdf){ toast('No se pudo crear el PDF'); return; }
+  const { jsPDF } = window.jspdf, doc = new jsPDF({unit:'mm', format:'a4'});
+  let y = 20; const L = 18, R = 192;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(String(cfg.name || ''), L, y);
+  doc.setFontSize(20); doc.setTextColor(40, 120, 90); doc.text('COTIZACIÓN', R, y, {align:'right'}); doc.setTextColor(0);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); y += 6;
+  [cfg.rif && 'RIF: ' + cfg.rif, cfg.addr, cfg.phone && 'Tel: ' + cfg.phone].filter(Boolean).forEach(t => { doc.text(String(t), L, y); y += 4.5; });
+  doc.setFontSize(10); doc.text('Nº ' + q.no, R, 28, {align:'right'}); doc.text('Fecha: ' + fmtDay(q.ts), R, 33, {align:'right'}); doc.text('Válida hasta: ' + fmtDay(q.ts + num(q.validDays) * 864e5), R, 38, {align:'right'});
+  y = Math.max(y, 44) + 4; doc.setDrawColor(200); doc.line(L, y, R, y); y += 7;
+  doc.setFont('helvetica', 'bold'); doc.text('Cliente:', L, y); doc.setFont('helvetica', 'normal'); doc.text(String(q.customer.name) + (q.customer.rif ? '  ·  ' + q.customer.rif : '') + (q.customer.phone ? '  ·  ' + q.customer.phone : ''), L + 18, y); y += 10;
+  doc.setFillColor(240, 243, 248); doc.rect(L, y - 5, R - L, 8, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
+  doc.text('Cant.', L + 2, y); doc.text('Descripción', L + 20, y); doc.text('Precio $', 150, y, {align:'right'}); doc.text('Subtotal $', R - 2, y, {align:'right'}); y += 8;
+  doc.setFont('helvetica', 'normal');
+  q.items.forEach(i => { const lines = doc.splitTextToSize(String(i.name), 105); if (y > 265){ doc.addPage(); y = 20; } doc.text(nfq.format(num(i.qty)), L + 2, y); doc.text(lines, L + 20, y); doc.text(nf2.format(num(i.price)), 150, y, {align:'right'}); doc.text(nf2.format(r2(num(i.price) * num(i.qty))), R - 2, y, {align:'right'}); y += 5 * lines.length + 2; });
+  y += 2; doc.line(110, y, R, y); y += 7;
+  if (q.disc){ doc.text('Descuento incluido: −' + usd(q.disc), R - 2, y, {align:'right'}); y += 6; }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('TOTAL: ' + usd(num(q.total)), R - 2, y, {align:'right'}); y += 6;
+  if (cfg.bcv){ doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.text(bs(num(q.total)) + ' a la tasa BCV de hoy (' + nf2.format(cfg.bcv) + ')', R - 2, y, {align:'right'}); y += 5; }
+  y += 6; doc.setFontSize(8.5); doc.setTextColor(100);
+  doc.text(doc.splitTextToSize((q.note ? q.note + '. ' : '') + 'Precios en dólares. El monto en bolívares se calcula con la tasa oficial del BCV del día del pago. Sujeto a disponibilidad.', R - L), L, y);
+  await saveFile('cotizacion-' + q.no + '.pdf', doc.output('blob'));
+}
+function fillQuotes(){
+  const qs = quotes();
+  const f = ui.qF || 'abierta';
+  $('#mx').innerHTML = `<div class="seg">${[['abierta', 'Abiertas'], ['vendida', 'Vendidas'], ['vencida', 'Vencidas'], ['todas', 'Todas']].map(([k, l]) => `<button class="${f === k ? 'on' : ''}" onclick="ui.qF='${k}';fillQuotes()">${l} (${k === 'todas' ? qs.length : qs.filter(q => quoteStatus(q) === k).length})</button>`).join('')}</div>
+  <div class="list">${qs.filter(q => f === 'todas' || quoteStatus(q) === f).map(q => { const st = quoteStatus(q); return `<div class="item tap row" onclick="showQuote('${q.id}')"><div class="grow"><div class="name">${esc(q.customer.name)}</div><div class="sub">${esc(q.no)} · ${fmtDay(q.ts)} · ${q.items.length} producto${q.items.length === 1 ? '' : 's'}</div></div><div style="text-align:right"><div class="price">${usd(num(q.total))}</div><span class="pill ${st === 'vendida' ? 'ok' : st === 'vencida' ? 'out' : 'low'}">${st}</span></div></div>`; }).join('') || '<div class="empty">No hay cotizaciones aquí.<br>Para crear una: añade productos en Vender y pulsa "Cotización".</div>'}</div>`;
+}
+
+/* ============ Importar productos desde Excel / CSV ============ */
+let xlsxP = null;
+function loadXLSX(){ if (window.XLSX) return Promise.resolve(true); return xlsxP || (xlsxP = new Promise(res => { const s = document.createElement('script'); s.src = (window.LIBS && LIBS.xlsx) || 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = () => res(!!window.XLSX); s.onerror = () => { xlsxP = null; res(false); }; document.head.appendChild(s); })); }
+function parseNum(v){ let s = String(v ?? '').trim().replace(/[^\d.,-]/g, ''); if (!s) return NaN; if (s.includes('.') && s.includes(',')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''); else if (s.includes(',')) s = s.replace(',', '.'); return parseFloat(s); }
+function parseCSV(text){
+  const first = text.split(/\r?\n/)[0] || '', sep = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ';' : ',';
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++){ const ch = text[i];
+    if (q){ if (ch === '"'){ if (text[i + 1] === '"'){ cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === sep){ row.push(cur); cur = ''; } else if (ch === '\n' || ch === '\r'){ if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; } else cur += ch; }
+  if (cur || row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c).trim()));
+}
+const normH = h => String(h || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const HMAP = [['name', /^(nombre|producto|descripcion|articulo|item)/], ['code', /(codigo|barra|barcode|sku|ean)/], ['cat', /^(categoria|rubro|departamento|grupo|familia)/], ['price', /^(precio|pvp|precio venta|venta)/], ['cur', /^(moneda|divisa)/], ['cost', /^(costo|coste|precio compra|compra)/], ['stock', /^(stock|existencia|cantidad|inventario|unidades)/], ['min', /(minimo|min)/], ['unit', /^(unidad|medida)/], ['brand', /^(marca|modelo)/], ['iva', /^(iva|impuesto)/]];
+function mapRows(rows){
+  const head = rows[0].map(normH), idx = {};
+  head.forEach((h, i) => { for (const [k, re] of HMAP) if (idx[k] == null && re.test(h)){ idx[k] = i; break; } });
+  if (idx.name == null || idx.price == null) return {error:'No encontré las columnas "Nombre" y "Precio". Usa la plantilla.'};
+  const out = [], errs = [];
+  rows.slice(1).forEach((r, n) => {
+    const g = k => idx[k] == null ? '' : String(r[idx[k]] ?? '').trim();
+    const name = g('name'), price = parseNum(g('price'));
+    if (!name){ return; } if (!(price > 0)){ errs.push('Fila ' + (n + 2) + ': ' + name + ' sin precio'); return; }
+    const ivaS = g('iva').toLowerCase(), iva = /ex/.test(ivaS) ? 0 : (parseNum(ivaS) === 8 ? 8 : (ivaS === '0' ? 0 : 16));
+    const cur = /eur|€/i.test(g('cur')) ? 'eur' : 'usd';
+    const unitS = normH(g('unit')), unit = ['kg', 'g', 'lt', 'paquete', 'caja'].find(u => unitS.startsWith(u.slice(0, 2))) || 'unidad';
+    out.push({name, code:g('code').replace(/\s+/g, '').replace(/\.0$/, ''), cat:g('cat'), price:r2(price), cur, cost:r2(parseNum(g('cost')) || 0), stock:r3(parseNum(g('stock')) || 0), min:g('min') === '' ? '' : r3(parseNum(g('min')) || 0), unit, brand:g('brand'), iva});
+  });
+  return {rows:out, errs};
+}
+function importForm(){
+  openSheet(`<h2>Importar productos</h2><p class="note" style="margin-top:0">Carga todo tu inventario de una vez desde Excel. Columnas que entiende: <b>Nombre, Precio</b> (obligatorias), Código, Categoría, Moneda (USD/EUR), Costo, Stock, Mínimo, Unidad, Marca, IVA (16, 8 o Exento).</p>
+  <button class="btn sec full" style="margin-top:6px" onclick="importTemplate()">Descargar plantilla de Excel (CSV)</button>
+  <label>Archivo (.xlsx, .xls o .csv)</label><input type="file" accept=".xlsx,.xls,.csv,text/csv" onchange="importFile(this.files[0])">
+  <div id="impPrev" style="margin-top:12px"></div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+function importTemplate(){ saveFile('plantilla-productos.csv', csv([['Nombre', 'Código', 'Categoría', 'Precio', 'Moneda', 'Costo', 'Stock', 'Mínimo', 'Unidad', 'Marca', 'IVA'], ['Harina de maíz 1 kg', '7591234567890', 'Alimentos', '1,20', 'USD', '0,90', '50', '10', 'unidad', 'Marca X', '0'], ['Refresco 2 L', '', 'Bebidas', '2,50', 'USD', '1,80', '24', '6', 'unidad', '', '16']])); }
+let impRows = null;
+async function importFile(file){
+  if (!file) return;
+  const el = $('#impPrev'); el.innerHTML = '<div class="sub">Leyendo…</div>';
+  let rows;
+  try {
+    if (/\.xlsx?$/i.test(file.name)){ if (!(await loadXLSX())){ el.innerHTML = '<div class="warnbox">No se pudo cargar el lector de Excel. Guarda el archivo como CSV e inténtalo de nuevo.</div>'; return; } const wb = XLSX.read(await file.arrayBuffer(), {type:'array'}); rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''}); }
+    else rows = parseCSV((await file.text()).replace(/^﻿/, ''));
+  } catch(e){ el.innerHTML = '<div class="warnbox">No se pudo leer el archivo.</div>'; return; }
+  if (!rows || rows.length < 2){ el.innerHTML = '<div class="warnbox">El archivo está vacío.</div>'; return; }
+  const m = mapRows(rows); if (m.error){ el.innerHTML = `<div class="warnbox">${esc(m.error)}</div>`; return; }
+  impRows = m.rows.map(r => { const ex = (r.code && findByCode(r.code)) || products().find(p => normH(p.name) === normH(r.name)); return {...r, exId:ex ? ex.id : null}; });
+  const nNew = impRows.filter(r => !r.exId).length, nUpd = impRows.length - nNew;
+  el.innerHTML = `<div class="card"><div class="name" style="font-size:14px">${impRows.length} productos leídos</div><p class="note">${nNew} nuevos · ${nUpd} ya existen y se actualizarán (precio, costo, stock y datos)${m.errs.length ? ` · <span style="color:var(--warn)">${m.errs.length} filas con error</span>` : ''}</p>
+  ${m.errs.length ? `<div class="sub" style="max-height:80px;overflow:auto">${m.errs.slice(0, 20).map(esc).join('<br>')}</div>` : ''}
+  <div class="sub" style="margin-top:6px">${impRows.slice(0, 5).map(r => `${esc(r.name)} · ${r.cur === 'eur' ? '€' : '$'}${nf2.format(r.price)} · stock ${nfq.format(r.stock)}`).join('<br>')}${impRows.length > 5 ? '<br>…' : ''}</div>
+  <button class="btn full" style="margin-top:10px" ${impRows.length ? '' : 'disabled'} onclick="doImport()">Importar ${impRows.length} productos</button></div>`;
+}
+async function doImport(){
+  if (!impRows) return; const rows = impRows; impRows = null;
+  $('#impPrev').innerHTML = '<div class="sub" id="impProg">Importando…</div>';
+  let n = 0;
+  for (const r of rows){
+    const {exId, ...d} = r; const base = exId ? S.products[exId] : {created:Date.now(), track:true};
+    if (d.code && findByCode(d.code, exId || undefined)) d.code = '';
+    await put('products', exId || uid(), {...base, ...d, updated:Date.now()});
+    if (++n % 10 === 0){ const p = $('#impProg'); if (p) p.textContent = 'Importando… ' + n + ' de ' + rows.length; }
+  }
+  closeSheet(); toast(n + ' productos importados'); shellFor = ''; render();
+}
+
+function moreInv(){
+  openSheet(`<h2>Inventario</h2><div class="list" style="margin-top:6px">
+  <div class="item tap" onclick="importForm()"><div class="name">Importar desde Excel</div><div class="sub">Carga muchos productos de una vez</div></div>
+  <div class="item tap" onclick="priceAdjForm()"><div class="name">Ajustar precios en bloque</div><div class="sub">Sube o baja precios por categoría en %</div></div>
+  <div class="item tap" onclick="closeSheet();ui.labelMode=true;ui.selLabels.clear();VIEWS.inventario.fill()"><div class="name">Imprimir etiquetas</div><div class="sub">Con precio y código de barras</div></div>
+  <div class="item tap" onclick="closeSheet();csvInv()"><div class="name">Exportar inventario a Excel</div><div class="sub">Archivo CSV</div></div></div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+/* ============ Ajustar precios en bloque ============ */
+function priceAdjForm(){
+  const cats = categories();
+  openSheet(`<h2>Ajustar precios</h2><p class="note" style="margin-top:0">Sube o baja los precios de varios productos a la vez.</p>
+  <label>Productos</label><select id="paC"><option value="">Todos</option>${cats.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+  <div class="grid2"><div><label>Cambio (%)</label><input id="paP" inputmode="decimal" placeholder="Ej: 10 o -5" oninput="paPrev()"></div>
+  <div><label>Redondear a</label><select id="paR" onchange="paPrev()"><option value="0.01">Céntimo</option><option value="0.05">0,05</option><option value="0.1">0,10</option><option value="0.5">0,50</option><option value="1">1</option></select></div></div>
+  <label class="row" style="gap:8px;color:var(--tx);font-size:14px;margin-top:12px"><input type="checkbox" id="paK" class="chk"> Aplicar también al costo</label>
+  <div id="paV" class="note"></div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="doPriceAdj()">Aplicar</button></div>`);
+}
+function paCalc(){ const c = $('#paC').value, pct = num($('#paP').value), step = num($('#paR').value) || 0.01; const ps = products().filter(p => !c || p.cat === c); const rnd = v => Math.max(step, Math.round(v / step) * step); return {ps, pct, f:v => r2(rnd(v * (1 + pct / 100)))}; }
+function paPrev(){ const {ps, pct, f} = paCalc(); $('#paV').innerHTML = pct ? `${ps.length} productos. Ejemplo: ${ps.slice(0, 3).map(p => `${esc(p.name)} ${nf2.format(num(p.price))} → <b>${nf2.format(f(num(p.price)))}</b>`).join(' · ')}` : ''; }
+async function doPriceAdj(){
+  const {ps, pct, f} = paCalc(); if (!pct){ toast('Pon el porcentaje'); return; }
+  const k = $('#paK').checked; closeSheet(); toast('Actualizando ' + ps.length + ' precios…');
+  for (const p of ps){ const {id, ...rest} = p; await put('products', id, {...rest, price:f(num(p.price)), ...(k && num(p.cost) ? {cost:r2(num(p.cost) * (1 + pct / 100))} : {}), updated:Date.now()}); }
+  toast(ps.length + ' precios actualizados');
+}
 /* ---- Tasas (visible para todos, se actualiza en vivo) ---- */
 function ago(ts){ if (!ts) return 'nunca'; const m = Math.round((Date.now() - ts) / 60000); if (m < 1) return 'hace un momento'; if (m < 60) return 'hace ' + m + ' min'; const h = Math.round(m / 60); if (h < 24) return 'hace ' + h + ' h'; const d = Math.round(h / 24); return 'hace ' + d + ' día' + (d > 1 ? 's' : ''); }
 VIEWS.tasas = {

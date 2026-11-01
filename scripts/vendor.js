@@ -9,6 +9,7 @@ const libs = [
   ['JsBarcode.all.min.js', ['jsbarcode/dist/JsBarcode.all.min.js']],
   ['chart.umd.js', ['chart.js/dist/chart.umd.min.js', 'chart.js/dist/chart.umd.js', 'chart.js/dist/chart.min.js']],
   ['zxing.min.js', ['@zxing/library/umd/index.min.js', '@zxing/library/umd/index.js']],
+  ['xlsx.full.min.js', ['xlsx/dist/xlsx.full.min.js']],
   ['firebase-app-compat.js', ['firebase/firebase-app-compat.js', 'firebase/compat/dist/firebase-app-compat.js']],
   ['firebase-auth-compat.js', ['firebase/firebase-auth-compat.js', 'firebase/compat/dist/firebase-auth-compat.js']],
   ['firebase-firestore-compat.js', ['firebase/firebase-firestore-compat.js', 'firebase/compat/dist/firebase-firestore-compat.js']]
