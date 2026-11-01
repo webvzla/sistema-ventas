@@ -122,12 +122,12 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="lgBtn" style="margin-top:16px">Entrar</button>
   <div id="lgMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div style="text-align:center;margin-top:10px"><a href="#" id="lgReset" style="display:none;font-size:13px" onclick="resetPass();return false">¿Olvidaste tu contraseña?</a></div>
-  <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Necesitas un código de activación.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button></div>
+  <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Necesitas un código de activación.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button><a id="lgWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a></div>
 </form>
 <form class="lg-card" id="setupForm" style="display:none;max-height:92vh;overflow:auto" onsubmit="doSetup(event)" autocomplete="off">
   <div class="brand">Bienvenido</div><div class="sub" id="suNote">Configura tu negocio. Solo se hace una vez.</div>
   <div id="suLw"><label>Código de activación</label><input id="suL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
-  <div class="sub" style="margin-top:4px">Te lo da quien te vendió el sistema.</div></div>
+  <div class="sub" style="margin-top:4px">Te lo da quien te vendió el sistema.<span id="suWa"></span></div></div>
   <label>Nombre del negocio</label><input id="suB" placeholder="Ej: Comercial La Esquina">
   <h3 style="margin-top:18px">Administrador (tú)</h3>
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
@@ -538,6 +538,7 @@ function authScreen(){
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
   $('#suLw').style.display = c ? 'block' : 'none';
+  if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación del Sistema de Ventas para mi negocio.'); $('#lgWa').href = href; $('#lgWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
 async function doSetup(ev){

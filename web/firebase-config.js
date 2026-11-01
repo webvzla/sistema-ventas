@@ -12,4 +12,6 @@ window.FIREBASE_CONFIG = {
 // Dueño del sistema: solo esta cuenta ve "Licencias y clientes" y puede generar códigos de activación.
 window.OWNER_UID = "3Wuh1CLsC2XeIS58uXkRSlQIXHJ2";
 // Contacto que se muestra cuando falta un código o la licencia venció (ej: "WhatsApp 0414-0000000"). Vacío = genérico.
-window.APP_CONTACT = "";
+window.APP_CONTACT = "por WhatsApp al +34 663 40 79 74";
+// Número de WhatsApp para pedir códigos o renovar (solo dígitos, con código de país).
+window.APP_WA = "34663407974";
