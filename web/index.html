@@ -117,7 +117,9 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <h2 style="margin-top:18px">Iniciar sesión</h2>
   <label id="lgUl">Usuario</label><input id="lgU" name="username" autocomplete="username" autocapitalize="none" autocorrect="off">
   <label>Contraseña</label><input id="lgP" name="password" type="password" autocomplete="current-password">
-  <button class="btn full" id="lgBtn" style="margin-top:18px">Entrar</button>
+  <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="lgKeep" class="chk"> Mantener la sesión iniciada en este dispositivo</label>
+  <div class="sub" style="margin-top:4px">Si no lo marcas, al cerrar el navegador o la app tendrás que volver a poner la clave.</div>
+  <button class="btn full" id="lgBtn" style="margin-top:16px">Entrar</button>
   <div id="lgMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div style="text-align:center;margin-top:10px"><a href="#" id="lgReset" style="display:none;font-size:13px" onclick="resetPass();return false">¿Olvidaste tu contraseña?</a></div>
   <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Tienes un negocio nuevo?</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button></div>
@@ -453,6 +455,7 @@ async function sha(str){
   catch(e){ let h1 = 5381, h2 = 52711; for (let i = 0; i < str.length; i++){ const c = str.charCodeAt(i); h1 = (h1 * 33) ^ c; h2 = (h2 * 31) ^ c; } return 'x' + (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16); }
 }
 function showLogin(msg){
+  try { $('#lgKeep').checked = keepPref(); } catch(e){}
   document.body.classList.add('locked'); $('#login').classList.add('on'); closeSheet();
   authScreen();
   $('#lgBrand').innerHTML = esc(cfg.name || 'Mi Negocio');
@@ -492,7 +495,7 @@ async function doSetup(ev){
   if (CLOUD()){
     pendingSetup = true;
     try {
-      msg('Creando tu cuenta…');
+      msg('Creando tu cuenta…'); await applyPersistence(keepPref());
       const cred = await FB.auth.createUserWithEmailAndPassword(au, ap);
       const id = cred.user.uid; bizId = id; DB = fbWrap(FB.fs, id);
       const b = FB.fs.batch(), now = Date.now();
@@ -523,8 +526,10 @@ async function doLogin(ev){
   if (!loaded){ $('#lgMsg').textContent = 'Cargando datos, espera un momento…'; return; }
   const u = $('#lgU').value.trim().toLowerCase(), p = $('#lgP').value;
   if (!u || !p){ $('#lgMsg').textContent = CLOUD() ? 'Escribe correo y contraseña' : 'Escribe usuario y contraseña'; return; }
+  const keep = $('#lgKeep').checked; setKeep(keep);
   if (CLOUD()){
     $('#lgBtn').disabled = true; $('#lgMsg').textContent = 'Entrando…';
+    await applyPersistence(keep);
     try { await FB.auth.signInWithEmailAndPassword(u, p); $('#lgMsg').textContent = ''; } catch(e){ loginErr(fbMsg(e)); }
     $('#lgBtn').disabled = false; return;
   }
@@ -538,9 +543,13 @@ async function resetPass(){
   if (!e){ $('#lgMsg').textContent = 'Escribe tu correo arriba y vuelve a tocar "¿Olvidaste tu contraseña?"'; return; }
   try { await FB.auth.sendPasswordResetEmail(e); $('#lgMsg').textContent = 'Te enviamos un correo para cambiar la contraseña'; } catch(err){ $('#lgMsg').textContent = fbMsg(err); }
 }
+const keepPref = () => { try { return localStorage.getItem('negocio_keep') === '1'; } catch(e){ return false; } };
+function setKeep(v){ try { localStorage.setItem('negocio_keep', v ? '1' : '0'); } catch(e){} }
+async function applyPersistence(keep){ if (CLOUD()) try { await FB.auth.setPersistence(keep ? firebase.auth.Auth.Persistence.LOCAL : firebase.auth.Auth.Persistence.SESSION); } catch(e){} }
+const sessStore = () => keepPref() ? localStorage : sessionStorage;
 function setMe(u, user){
   me = {u, name:user.name || u, role:user.role === 'admin' ? 'admin' : 'vendedor'};
-  try { localStorage.setItem('negocio_sess', JSON.stringify({u, h:user.hash})); } catch(e){}
+  try { localStorage.removeItem('negocio_sess'); sessionStorage.removeItem('negocio_sess'); sessStore().setItem('negocio_sess', JSON.stringify({u, h:user.hash})); } catch(e){}
   $('#login').classList.remove('on'); document.body.classList.remove('locked');
   $('#lgP').value = '';
   go(isAdmin() ? 'panel' : 'vender');
@@ -550,12 +559,12 @@ function logout(){
   cart = []; lastScan = null;
   if (CLOUD()){ FB.auth.signOut(); return; }
   me = null;
-  try { localStorage.removeItem('negocio_sess'); } catch(e){}
+  try { localStorage.removeItem('negocio_sess'); sessionStorage.removeItem('negocio_sess'); } catch(e){}
   showLogin('Sesión cerrada');
 }
 function tryResume(){
   if (me) return;
-  let s = null; try { s = JSON.parse(localStorage.getItem('negocio_sess') || 'null'); } catch(e){}
+  let s = null; try { s = JSON.parse(localStorage.getItem('negocio_sess') || sessionStorage.getItem('negocio_sess') || 'null'); } catch(e){}
   const user = s && S.users[s.u];
   if (user && user.hash === s.h) setMe(s.u, user); else showLogin();
 }
@@ -563,7 +572,7 @@ function checkSession(){
   if (!me || !loaded || !Object.keys(S.users).length) return;
   const u = S.users[me.u];
   if (CLOUD()){ if (!u){ toast('Tu usuario fue eliminado de este negocio'); logout(); return; } me.name = u.name || me.name; me.role = u.role === 'admin' ? 'admin' : 'vendedor'; return; }
-  let s = null; try { s = JSON.parse(localStorage.getItem('negocio_sess') || 'null'); } catch(e){}
+  let s = null; try { s = JSON.parse(localStorage.getItem('negocio_sess') || sessionStorage.getItem('negocio_sess') || 'null'); } catch(e){}
   if (!u || (s && s.h && u.hash !== s.h)) logout();
   else { me.name = u.name || me.u; me.role = u.role === 'admin' ? 'admin' : 'vendedor'; }
 }
@@ -608,7 +617,7 @@ async function savePass(u){
   const salt = uid(), hash = await sha(salt + ':' + p1);
   const {def, ...rest} = user;
   if (await put('users', u, {...rest, salt, hash, updated:Date.now()})){
-    if (self) try { localStorage.setItem('negocio_sess', JSON.stringify({u, h:hash})); } catch(e){}
+    if (self) try { sessStore().setItem('negocio_sess', JSON.stringify({u, h:hash})); } catch(e){}
     closeSheet(); toast('Contraseña cambiada'); render();
   }
 }
