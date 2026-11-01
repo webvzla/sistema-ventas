@@ -87,7 +87,7 @@ label{display:block;font-size:12.5px;color:var(--mut);font-weight:600;margin:12p
 #ov{position:fixed;inset:0;background:rgba(3,6,14,.7);z-index:20;display:none;align-items:flex-end;justify-content:center}
 #ov.on{display:flex}
 #sheet{background:#111a2c;border:1px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:90vh;overflow:auto;padding:18px 18px 26px}
-@media(min-width:700px){#ov{align-items:center}#sheet{border-radius:20px;border-bottom:1px solid var(--line)}}
+@media(min-width:700px){.fab{display:none!important}#ov{align-items:center}#sheet{border-radius:20px;border-bottom:1px solid var(--line)}}
 #sheet h2{font-size:19px}
 .sheet-actions{display:flex;gap:8px;margin-top:18px}
 .sheet-actions .btn{flex:1}
@@ -277,7 +277,7 @@ function renderNav(){
   const act = view === 'tasas' && isAdmin() ? 'mas' : view;
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === act));
 }
-function go(v, s = ''){ if (ADMIN_ONLY.includes(v) && !isAdmin()) v = 'inicio'; if (v === 'inicio' && isAdmin()) v = 'panel'; view = v; sub = s; shellFor = ''; window.scrollTo(0, 0); render(); }
+function go(v, s = ''){ if (ADMIN_ONLY.includes(v) && !isAdmin()) v = 'inicio'; if (v === 'inicio' && isAdmin()) v = 'panel'; if (v === 'tasas' && view !== 'tasas') setTimeout(() => autoRates(), 300); view = v; sub = s; shellFor = ''; window.scrollTo(0, 0); render(); }
 function render(){
   if (!me){ if ($('#login').classList.contains('on')){ authScreen(); $('#lgBrand').innerHTML = esc(cfg.name || 'Mi Negocio'); $('#lgBtn').disabled = !loaded; if (loaded && $('#lgMsg').textContent === 'Cargando datos…') $('#lgMsg').textContent = ''; } return; }
   checkSession(); if (!me) return;
@@ -374,8 +374,13 @@ async function fbCreateMember(email, pass, name, role){
 }
 
 /* ============ Programa de PC: tasa BCV automática y copias diarias ============ */
+const RATES_URL = location.protocol === 'https:' && /github\.io$/.test(location.hostname) ? 'tasas.json' : 'https://webvzla.github.io/sistema-ventas/tasas.json';
 async function fetchRates(){
   if (window.desktop){ try { const r = await window.desktop.bcv(); if (r && r.usd) return {...r, src:'bcv.org.ve'}; } catch(e){ console.warn('BCV', e); } }
+  try {
+    const r = await fetch(RATES_URL + '?t=' + Date.now(), {cache:'no-store'});
+    if (r.ok){ const j = await r.json(); if (num(j.usd) > 0) return {usd:num(j.usd), eur:num(j.eur) || null, dateISO:j.dateISO || null, dateText:j.dateText || '', src:'BCV (' + (j.src || 'servidor') + ')'}; }
+  } catch(e){ console.warn('tasas.json', e); }
   try {
     const get = async u => { const r = await fetch(u, {cache:'no-store'}); if (!r.ok) throw new Error(r.status); return r.json(); };
     const [d, e] = await Promise.all([get('https://ve.dolarapi.com/v1/dolares/oficial'), get('https://ve.dolarapi.com/v1/euros/oficial').catch(() => null)]);
@@ -1061,7 +1066,7 @@ function voidSale(id){
 
 /* ---- Inventario ---- */
 VIEWS.inventario = {
-  shell: () => `<div class="row between"><h2>Inventario</h2><div class="gap"><button class="btn sm sec" onclick="openScanner()">${ICON_CAM}</button>${isAdmin() ? `<button class="btn sm sec" onclick="ui.labelMode=!ui.labelMode;ui.selLabels.clear();VIEWS.inventario.fill()">Etiquetas</button>` : ''}</div></div>
+  shell: () => `<div class="row between"><h2>Inventario</h2><div class="gap"><button class="btn sm sec" onclick="openScanner()">${ICON_CAM}</button>${isAdmin() ? `<button class="btn sm sec" onclick="ui.labelMode=!ui.labelMode;ui.selLabels.clear();VIEWS.inventario.fill()">Etiquetas</button><button class="btn sm" onclick="editProduct()">+ Producto</button>` : ''}</div></div>
     <div class="search"><input placeholder="Buscar por nombre, marca o código…" value="${esc(ui.invQ)}" oninput="ui.invQ=this.value;VIEWS.inventario.fill()"></div>
     <div class="seg" id="invSeg"></div><div id="labelBar"></div><div class="list" id="invList"></div>
     ${isAdmin() ? `<button class="btn fab" onclick="editProduct()" aria-label="Añadir producto">+</button>` : ''}`,
@@ -1075,9 +1080,12 @@ VIEWS.inventario = {
       && (ui.invF === 'todos' || (ui.invF === 'bajo' ? p.track !== false && stockState(p) !== 'ok' : ui.invF === 'sincod' ? !p.code : (p.cat || '') === ui.invF.slice(4))));
     const nNoCode = [...ui.selLabels].filter(id => S.products[id] && !S.products[id].code).length;
     $('#labelBar').innerHTML = ui.labelMode ? `<div class="card" style="margin-bottom:10px">
-      <div class="sub" style="margin:0 0 8px">Marca los productos para imprimir su etiqueta con precio y código de barras (${ui.selLabels.size} elegidos).${nNoCode ? ` A ${nNoCode} sin código se les creará uno nuevo.` : ''}</div>
-      <div class="row wrap" style="gap:8px"><label style="margin:0;font-size:13px">Copias de cada una</label><input id="lblCopies" type="number" min="1" max="50" value="${ui.copies || 1}" style="width:70px;padding:7px" onchange="ui.copies=Math.max(1,Math.min(50,parseInt(this.value)||1))">
-      <span class="grow"></span><button class="btn sm sec" onclick="${ps.map(p => `ui.selLabels.add('${p.id}')`).join(';')};VIEWS.inventario.fill()">Todos</button>
+      <div class="row between"><div class="name" style="font-size:14px">Etiquetas con código de barras</div><a href="#" class="sub" onclick="labelHelp();return false">¿Cómo se usan?</a></div>
+      <div class="sub" style="margin:4px 0 8px">Marca los productos (${ui.selLabels.size} elegidos).${nNoCode ? ` A ${nNoCode} sin código se les creará uno nuevo.` : ''}</div>
+      <div class="grid2"><div><label style="margin-top:0">Formato</label><select onchange="ui.lblFmt=this.value"><option value="a4" ${ui.lblFmt !== 'termica' ? 'selected' : ''}>Hoja A4 · 21 etiquetas</option><option value="termica" ${ui.lblFmt === 'termica' ? 'selected' : ''}>Impresora térmica 50×30 mm</option></select></div>
+      <div><label style="margin-top:0">Copias de cada una</label><input type="number" min="1" max="50" value="${ui.copies || 1}" onchange="ui.copies=Math.max(1,Math.min(50,parseInt(this.value)||1))"></div></div>
+      <label class="row" style="gap:8px;color:var(--tx);font-size:13px"><input type="checkbox" class="chk" ${ui.lblBs ? 'checked' : ''} onchange="ui.lblBs=this.checked"> Incluir precio en Bs (cambia cada día con la tasa)</label>
+      <div class="gap" style="margin-top:10px"><button class="btn sm sec" onclick="${ps.map(p => `ui.selLabels.add('${p.id}')`).join(';')};VIEWS.inventario.fill()">Marcar todos</button><button class="btn sm sec" onclick="ui.selLabels.clear();VIEWS.inventario.fill()">Ninguno</button>
       <button class="btn sm" ${ui.selLabels.size ? '' : 'disabled'} onclick="makeLabels()">Crear PDF</button></div></div>` : '';
     const val = r2(all.reduce((a, p) => a + Math.max(0, num(p.stock)) * (toUsd(num(p.cost) || num(p.price), curOf(p)) || 0), 0));
     $('#invList').innerHTML = !all.length ? `<div class="empty">Todavía no hay productos.<br>Escanea el código de un producto o toca <b>+</b>.</div>`
@@ -1095,12 +1103,12 @@ function editProduct(id, preset = {}){
   if (!isAdmin()){ if (id) priceSheet(id); return; }
   const p = id ? S.products[id] : {name:'', cat:'', brand:'', unit:'unidad', cur:cfg.cur || 'usd', price:'', cost:'', stock:'', min:'', code:preset.code || '', warranty:'', track:true};
   if (!p) return;
-  const cats = [...new Set([...categories(), ...DEFAULT_CATS])];
+  const cats = categories();
   const ed = v => v === '' || v == null ? '' : String(v).replace('.', ',');
   openSheet(`<h2>${id ? 'Editar producto' : 'Nuevo producto'}</h2>
   ${preset.code ? `<div class="warnbox" style="margin-bottom:4px">El código <b>${esc(preset.code)}</b> no está en tu inventario. Ponle nombre y precio para añadirlo.</div>` : ''}
   <label>Nombre</label><input id="pN" value="${esc(p.name)}" placeholder="Ej: Máquina de café 2 grupos" ${id ? '' : 'autofocus'}>
-  <div class="grid2"><div><label>Categoría</label><input id="pC" list="catList" value="${esc(p.cat)}" placeholder="Elige o escribe"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
+  <div class="grid2"><div><label>Categoría</label><input id="pC" list="catList" value="${esc(p.cat)}" placeholder="${cats.length ? 'Elige o escribe una nueva' : 'Escribe una categoría'}"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
   <div><label>Marca / modelo</label><input id="pBr" value="${esc(p.brand || '')}" placeholder="Opcional"></div></div>
   <label>Precio en</label>
   <div class="seg" style="margin:0"><button type="button" id="curU" class="${curOf(p) === 'usd' ? 'on' : ''}" onclick="setCur('usd')">Dólares ($ BCV)</button><button type="button" id="curE" class="${curOf(p) === 'eur' ? 'on' : ''}" onclick="setCur('eur')">Euros (€ BCV)</button></div>
@@ -1186,34 +1194,61 @@ async function makeLabels(){
   closeSheet();
   const sel = products().filter(p => ui.selLabels.has(p.id));
   for (const p of sel) if (!p.code){ const code = genCode(); p.code = code; const {id, ...rest} = p; await put('products', id, rest); }
-  const copies = ui.copies || 1;
+  const copies = ui.copies || 1, withBs = !!ui.lblBs, thermal = ui.lblFmt === 'termica';
   const list = []; sel.forEach(p => { for (let i = 0; i < copies; i++) list.push(p); });
-  const { jsPDF } = window.jspdf; const doc = new jsPDF({unit:'mm', format:'a4'});
-  const cols = 3, w = 63, h = 38, mx = 10.5, my = 15.5, perPage = cols * 7;
+  const { jsPDF } = window.jspdf;
   const cache = {};
-  list.forEach((p, i) => {
-    if (i && i % perPage === 0) doc.addPage();
-    const k = i % perPage, x = mx + (k % cols) * w, y = my + Math.floor(k / cols) * h;
-    doc.setDrawColor(190); doc.setLineDashPattern([1, 1], 0); doc.rect(x, y, w, h);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(120);
-    doc.text(String(cfg.name || ''), x + 3, y + 4.5);
-    if (p.brand) doc.text(String(p.brand).slice(0, 28), x + w - 3, y + 4.5, {align:'right'});
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(20);
-    doc.text(doc.splitTextToSize(String(p.name), w - 6)[0], x + 3, y + 9.5);
-    doc.setFontSize(17); doc.text(pMain(p), x + 3, y + 17.5);
-    const b = pBs(p);
-    if (b){ doc.setFontSize(10); doc.text(bsF(b), x + w - 3, y + 17.5, {align:'right'}); }
-    if (!cache[p.code]){ const cv = document.createElement('canvas'); cache[p.code] = drawBarcode(cv, p.code, {width:2, height:52, fontSize:18, margin:4}) ? {url:cv.toDataURL('image/png'), r:cv.width / cv.height} : null; }
-    const im = cache[p.code];
-    if (im){ const ih = 15, iw = Math.min(w - 8, ih * im.r); doc.addImage(im.url, 'PNG', x + (w - iw) / 2, y + 20.5, iw, ih); }
-  });
-  await saveFile('etiquetas-' + new Date().toISOString().slice(0, 10) + '.pdf', doc.output('blob'));
+  const bc = p => { if (!(p.code in cache)){ const cv = document.createElement('canvas'); cache[p.code] = drawBarcode(cv, p.code, {width:2, height:52, fontSize:18, margin:4}) ? {url:cv.toDataURL('image/png'), r:cv.width / cv.height} : null; } return cache[p.code]; };
+  let doc;
+  if (thermal){
+    // Impresora de etiquetas: una etiqueta de 50 × 30 mm por página.
+    doc = new jsPDF({unit:'mm', format:[50, 30], orientation:'landscape'});
+    list.forEach((p, i) => {
+      if (i) doc.addPage([50, 30], 'landscape');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(0);
+      doc.text(doc.splitTextToSize(String(p.name), 46)[0], 2, 4);
+      doc.setFontSize(13); doc.text(pMain(p), 2, 10.5);
+      const b = pBs(p);
+      if (withBs && b){ doc.setFontSize(7.5); doc.text(bsF(b), 48, 10.5, {align:'right'}); }
+      const im = bc(p); if (im){ const ih = 16, iw = Math.min(46, ih * im.r); doc.addImage(im.url, 'PNG', (50 - iw) / 2, 12.5, iw, ih); }
+    });
+  } else {
+    // Hoja A4 de 21 etiquetas adhesivas (63,5 × 38,1 mm, 3 columnas × 7 filas).
+    doc = new jsPDF({unit:'mm', format:'a4'});
+    const w = 63.5, h = 38.1, pitchX = 66.0, mx = 7.2, my = 15.15, cols = 3, perPage = 21;
+    list.forEach((p, i) => {
+      if (i && i % perPage === 0) doc.addPage();
+      const k = i % perPage, x = mx + (k % cols) * pitchX, y = my + Math.floor(k / cols) * h;
+      doc.setDrawColor(200); doc.setLineDashPattern([0.8, 0.8], 0); doc.rect(x, y, w, h);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(120);
+      doc.text(String(cfg.name || ''), x + 3, y + 4.5);
+      if (p.brand) doc.text(String(p.brand).slice(0, 28), x + w - 3, y + 4.5, {align:'right'});
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(20);
+      doc.text(doc.splitTextToSize(String(p.name), w - 6)[0], x + 3, y + 9.5);
+      doc.setFontSize(17); doc.text(pMain(p), x + 3, y + 17.5);
+      const b = pBs(p);
+      if (withBs && b){ doc.setFontSize(10); doc.text(bsF(b), x + w - 3, y + 17.5, {align:'right'}); }
+      const im = bc(p); if (im){ const ih = 15, iw = Math.min(w - 8, ih * im.r); doc.addImage(im.url, 'PNG', x + (w - iw) / 2, y + 20.5, iw, ih); }
+    });
+  }
+  await saveFile('etiquetas-' + (thermal ? 'termica-' : 'A4-') + new Date().toISOString().slice(0, 10) + '.pdf', doc.output('blob'));
   ui.labelMode = false; ui.selLabels.clear(); shellFor = ''; render();
+}
+function labelHelp(){
+  openSheet(`<h2>Cómo poner el código a tus productos</h2>
+  <p class="note" style="font-size:14px">1. En Inventario toca <b>Etiquetas</b>, marca los productos y pulsa <b>Crear PDF</b>. A los que no tengan código se les crea uno.<br>
+  2. Imprime el PDF <b>al 100 %</b> (sin "ajustar a la página") y pega la etiqueta en el producto o en su estante.<br>
+  3. Al vender, escanea la etiqueta: el sistema reconoce el producto y su precio.</p>
+  <div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">Opción A · Hoja A4 de etiquetas adhesivas</div><p class="note">Cualquier impresora normal. Compra hojas A4 de <b>21 etiquetas de 63,5 × 38,1 mm</b> (en papelerías, referencias tipo Avery L7160 o Apli 1273). También puedes imprimir en papel normal, recortar y pegar con cinta transparente.</p></div>
+  <div class="card" style="margin-top:8px"><div class="name" style="font-size:14px">Opción B · Impresora de etiquetas térmica</div><p class="note">La más cómoda para una tienda. Usa rollos de <b>50 × 30 mm</b> e imprime una etiqueta por página. No gasta tinta.</p></div>
+  <div class="card" style="margin-top:8px"><div class="name" style="font-size:14px">Productos que ya traen código</div><p class="note">Refrescos, chucherías, café envasado… ya tienen su código de fábrica: no hace falta imprimir nada. Escanéalo y, si no está en el inventario, el sistema te pide nombre y precio.</p></div>
+  <p class="note">Consejo: no incluyas el precio en Bs en la etiqueta, porque cambia cada día con la tasa. Al escanear, el sistema siempre calcula los Bs con la tasa actual.</p>
+  <div class="sheet-actions"><button class="btn" onclick="closeSheet()">Entendido</button></div>`);
 }
 
 /* ---- Fiados ---- */
 VIEWS.fiados = {
-  shell: () => `<h2>Clientes</h2><div id="fiTop"></div><div class="seg" id="fiSeg"></div>
+  shell: () => `<div class="row between"><h2>Clientes</h2><button class="btn sm" onclick="editClient()">+ Nuevo cliente</button></div><div id="fiTop"></div><div class="seg" id="fiSeg"></div>
     <div class="search"><input placeholder="Buscar cliente…" value="${esc(ui.fiQ)}" oninput="ui.fiQ=this.value;VIEWS.fiados.fill()"></div>
     <div class="list" id="fiList"></div>
     <button class="btn fab" onclick="editClient()" aria-label="Añadir cliente">+</button>`,
@@ -1302,8 +1337,8 @@ VIEWS.mas = {
     if (sub === 'reportes') return back('Reportes') + `<div class="seg" id="repSeg"></div><div id="mx"></div>`;
     if (sub === 'respaldo') return back('Respaldo y exportar') + `<div id="mx"></div>`;
     if (sub === 'ajustes') return back('Ajustes del negocio') + `<div id="mx"></div>`;
-    if (sub === 'gastos') return back('Gastos') + `<div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
-    if (sub === 'usuarios') return back('Usuarios') + `<div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
+    if (sub === 'gastos') return back('Gastos') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="expenseForm()">+ Registrar gasto</button><div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
+    if (sub === 'usuarios') return back('Usuarios') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="userForm()">+ Nuevo usuario</button><div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
     const opts = isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : [];
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
@@ -1402,7 +1437,7 @@ const todayISO = () => { const d = new Date(); return new Date(d - d.getTimezone
 const dateToTs = v => { const [y, m, d] = String(v || '').split('-').map(Number); if (!y) return Date.now(); const now = new Date(); return new Date(y, m - 1, d, now.getHours(), now.getMinutes()).getTime(); };
 
 VIEWS.proveedores = {
-  shell: () => `<h2>Proveedores</h2><div id="prTop"></div>
+  shell: () => `<div class="row between"><h2>Proveedores</h2><button class="btn sm" onclick="editSupplier()">+ Nuevo proveedor</button></div><div id="prTop"></div>
     <div class="search"><input placeholder="Buscar proveedor…" value="${esc(ui.prQ || '')}" oninput="ui.prQ=this.value;VIEWS.proveedores.fill()"></div>
     <div class="list" id="prList"></div>
     <button class="btn fab" onclick="editSupplier()" aria-label="Añadir proveedor">+</button>`,

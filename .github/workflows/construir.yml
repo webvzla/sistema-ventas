@@ -3,6 +3,7 @@ name: Construir app de PC y versión web
 on:
   push:
     branches: [main]
+    paths-ignore: ['web/tasas.json']
   workflow_dispatch: {}
 
 permissions:
