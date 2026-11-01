@@ -122,10 +122,12 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="lgBtn" style="margin-top:16px">Entrar</button>
   <div id="lgMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div style="text-align:center;margin-top:10px"><a href="#" id="lgReset" style="display:none;font-size:13px" onclick="resetPass();return false">¿Olvidaste tu contraseña?</a></div>
-  <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Tienes un negocio nuevo?</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button></div>
+  <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Necesitas un código de activación.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button></div>
 </form>
 <form class="lg-card" id="setupForm" style="display:none;max-height:92vh;overflow:auto" onsubmit="doSetup(event)" autocomplete="off">
   <div class="brand">Bienvenido</div><div class="sub" id="suNote">Configura tu negocio. Solo se hace una vez.</div>
+  <div id="suLw"><label>Código de activación</label><input id="suL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
+  <div class="sub" style="margin-top:4px">Te lo da quien te vendió el sistema.</div></div>
   <label>Nombre del negocio</label><input id="suB" placeholder="Ej: Comercial La Esquina">
   <h3 style="margin-top:18px">Administrador (tú)</h3>
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
@@ -336,7 +338,7 @@ function fbMsg(e){
   if (/requires-recent-login/.test(c)) return 'Por seguridad, cierra sesión y vuelve a entrar';
   return 'Error: ' + (e && e.message || c);
 }
-function clearData(){ cfgLoaded = false; unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; COLS.forEach(c => S[c] = {}); cfg = {...DEF_CFG}; }
+function clearData(){ cfgLoaded = false; lic.unsub.forEach(u => { try { u(); } catch(e){} }); lic.unsub = []; unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; COLS.forEach(c => S[c] = {}); cfg = {...DEF_CFG}; }
 function subscribeAll(){
   unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = [];
   loaded = false; cfgLoaded = false;
@@ -358,13 +360,18 @@ function subscribeAll(){
 }
 async function onFbUser(u){
   if (pendingSetup) return;
-  if (!u){ me = null; bizId = null; clearData(); cart = []; loaded = true; showLogin(); return; }
+  if (!u){ me = null; bizId = null; clearData(); cart = []; loaded = true; showLogin(ui.authMsg || ''); ui.authMsg = ''; return; }
   let prof = null;
   try { const d = await FB.fs.doc('users/' + u.uid).get(); prof = d.exists ? d.data() : null; } catch(e){ console.warn(e); }
-  if (!prof || !prof.biz){ await FB.auth.signOut(); showLogin('Esta cuenta no pertenece a ningún negocio. Pide al administrador que te añada.'); return; }
+  if (!prof || !prof.biz){ ui.authMsg = 'Esta cuenta no pertenece a ningún negocio. Pide al administrador que te añada.'; await FB.auth.signOut(); return; }
+  try {
+    const bd = await FB.fs.doc('biz/' + prof.biz).get(); const b = bd.exists ? bd.data() : null;
+    if (b && b.blocked){ ui.authMsg = 'El acceso de este negocio está suspendido.' + contactTxt(); await FB.auth.signOut(); return; }
+    if (b && num(b.expires) && num(b.expires) < Date.now()){ ui.authMsg = 'La licencia de este negocio venció el ' + fmtDay(b.expires) + '.' + contactTxt(); await FB.auth.signOut(); return; }
+  } catch(e){ console.warn('biz', e); }
   bizId = prof.biz; DB = fbWrap(FB.fs, bizId);
   me = {u:u.uid, name:prof.name || u.email, role:prof.role === 'admin' ? 'admin' : 'vendedor', email:u.email};
-  subscribeAll();
+  subscribeAll(); ownerSubscribe();
   $('#login').classList.remove('on'); document.body.classList.remove('locked'); $('#lgP').value = '';
   go(isAdmin() ? 'panel' : 'vender');
   setTimeout(afterLogin, 1500);
@@ -451,6 +458,59 @@ function afterLogin(){
   window.addEventListener('offline', () => toast('Sin internet: puedes seguir vendiendo, se sincroniza al volver'));
 }
 
+/* ============ Licencias: solo el dueño del sistema da acceso ============ */
+const isOwner = () => CLOUD() && me && window.OWNER_UID && me.u === window.OWNER_UID;
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function genLicCode(){ const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = crypto.getRandomValues(new Uint32Array(12)); let s = ''; for (let i = 0; i < 12; i++) s += A[r[i] % A.length]; return s; }
+const fmtCode = c => String(c).replace(/(.{4})(?=.)/g, '$1-');
+const contactTxt = () => window.APP_CONTACT ? ' Contacta a ' + window.APP_CONTACT + '.' : ' Contacta a quien te dio el sistema.';
+let lic = {list:{}, biz:{}, unsub:[]};
+function ownerSubscribe(){
+  lic.unsub.forEach(u => { try { u(); } catch(e){} }); lic.unsub = [];
+  if (!isOwner()) return;
+  lic.unsub.push(FB.fs.collection('licenses').onSnapshot(s => { lic.list = {}; s.docs.forEach(d => lic.list[d.id] = d.data()); if (view === 'mas' && sub === 'licencias') fillLicenses(); }, e => console.warn('licenses', e)));
+  lic.unsub.push(FB.fs.collection('biz').onSnapshot(s => { lic.biz = {}; s.docs.forEach(d => lic.biz[d.id] = d.data()); if (view === 'mas' && sub === 'licencias') fillLicenses(); }, e => console.warn('biz', e)));
+}
+function licForm(){
+  openSheet(`<h2>Nuevo código de activación</h2><p class="note" style="margin-top:0">Cada código sirve para crear <b>un</b> negocio. Dáselo solo a quien te haya pagado.</p>
+  <label>Para quién es (nota)</label><input id="lcN" placeholder="Ej: Bodega de Luis · pagó 1 mes" autofocus>
+  <label>Vence</label><select id="lcE"><option value="0">Sin vencimiento</option><option value="1">En 1 mes</option><option value="3">En 3 meses</option><option value="6">En 6 meses</option><option value="12">En 1 año</option></select>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="saveLic()">Generar</button></div>`);
+}
+const addMonths = (ts, m) => { const d = new Date(ts); d.setMonth(d.getMonth() + m); return d.getTime(); };
+async function saveLic(){
+  const m = +$('#lcE').value, code = genLicCode();
+  const d = {used:false, note:$('#lcN').value.trim(), createdAt:Date.now(), expires:m ? addMonths(Date.now(), m) : 0, months:m};
+  try { await FB.fs.doc('licenses/' + code).set(d); showLic(code, d); } catch(e){ toast(fbMsg(e)); }
+}
+function licMsg(code){ return `Tu código de activación del Sistema de Ventas es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o https://webvzla.github.io/sistema-ventas/\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
+function showLic(code, d){
+  d = d || lic.list[code] || {};
+  openSheet(`<h2>Código de activación</h2>
+  <div class="total" style="text-align:center;margin-top:8px"><div class="v" style="font-size:28px;letter-spacing:2px">${fmtCode(code)}</div><div class="s">${d.used ? 'Usado por ' + esc((lic.biz[d.biz] || {}).name || d.bizName || '') : 'Sin usar'}${d.expires ? ' · vence ' + fmtDay(d.expires) : ' · sin vencimiento'}</div></div>
+  ${d.note ? `<p class="note">${esc(d.note)}</p>` : ''}
+  <div class="gap" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="navigator.clipboard.writeText('${fmtCode(code)}').then(()=>toast('Copiado'),()=>toast('Cópialo a mano'))">Copiar</button><a class="btn wa" style="flex:1" href="${waLink('', licMsg(code))}" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>
+  <div class="sheet-actions">${!d.used ? `<button class="btn bad" onclick="ask('¿Borrar código?','Ya no se podrá usar.','Borrar',async()=>{await FB.fs.doc('licenses/${code}').delete();toast('Código borrado')})">Borrar</button>` : ''}<button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+async function bizSet(id, data, msg){ try { await FB.fs.doc('biz/' + id).set(data, {merge:true}); toast(msg); } catch(e){ toast(fbMsg(e)); } }
+function bizMenu(id){
+  const b = lic.biz[id] || {}; const exp = num(b.expires), venc = exp && exp < Date.now();
+  openSheet(`<h2>${esc(b.name || 'Negocio')}</h2><div class="sub">Creado ${b.created ? fmtDay(b.created) : '—'}${b.license ? ' · código ' + fmtCode(b.license) : ' · sin código (anterior a las licencias)'}</div>
+  <div class="card" style="margin-top:12px"><div class="mv"><span>Estado</span><b style="color:${b.blocked ? 'var(--bad)' : venc ? 'var(--warn)' : 'var(--acc)'}">${b.blocked ? 'Bloqueado' : venc ? 'Vencido' : 'Activo'}</b></div><div class="mv"><span>Vence</span><b>${exp ? fmtDay(exp) : 'Nunca'}</b></div></div>
+  <h3>Extender acceso</h3><div class="gap">${[1, 3, 6, 12].map(m => `<button class="btn sm sec" onclick="bizSet('${id}',{expires:addMonths(Math.max(Date.now(),${exp || 0}),${m})},'Acceso extendido ${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}');closeSheet()">+${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}</button>`).join('')}<button class="btn sm sec" onclick="bizSet('${id}',{expires:0},'Sin vencimiento');closeSheet()">Sin vencimiento</button></div>
+  <div class="sheet-actions">${id !== me.u ? (b.blocked ? `<button class="btn" onclick="bizSet('${id}',{blocked:false},'Negocio desbloqueado');closeSheet()">Desbloquear</button>` : `<button class="btn bad" onclick="bizSet('${id}',{blocked:true},'Negocio bloqueado');closeSheet()">Bloquear acceso</button>`) : ''}<button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+function fillLicenses(){
+  if (!$("#mx")) return;
+  const codes = Object.entries(lic.list).sort((a, b) => b[1].createdAt - a[1].createdAt);
+  const bizs = Object.entries(lic.biz).sort((a, b) => num(b[1].created) - num(a[1].created));
+  const st = b => b.blocked ? ['Bloqueado', 'out'] : (num(b.expires) && num(b.expires) < Date.now()) ? ['Vencido', 'low'] : ['Activo', 'ok'];
+  $('#mx').innerHTML = `<p class="note" style="margin-top:-4px">Solo tú ves esta sección. Sin un código tuyo nadie puede crear un negocio en el sistema, aunque descargue la app o abra la página.</p>
+  <button class="btn full" onclick="licForm()">+ Generar código de activación</button>
+  <h3>Negocios (${bizs.length})</h3><div class="list">${bizs.map(([id, b]) => { const [t, c] = st(b); return `<div class="item tap row" onclick="bizMenu('${id}')"><div class="grow"><div class="name">${esc(b.name || '—')}${id === me.u ? ' <span class="pill">tú</span>' : ''}</div><div class="sub">${b.expires ? 'Vence ' + fmtDay(b.expires) : 'Sin vencimiento'}${b.created ? ' · desde ' + fmtDay(b.created) : ''}</div></div><span class="pill ${c}">${t}</span></div>`; }).join('') || '<div class="empty">Aún no hay negocios.</div>'}</div>
+  <h3>Códigos (${codes.length})</h3><div class="list">${codes.map(([code, d]) => `<div class="item tap row" onclick="showLic('${code}')"><div class="grow"><div class="name" style="letter-spacing:1px">${fmtCode(code)}</div><div class="sub">${esc(d.note || '')}${d.expires ? ' · vence ' + fmtDay(d.expires) : ''}</div></div><span class="pill ${d.used ? '' : 'ok'}">${d.used ? 'Usado' : 'Libre'}</span></div>`).join('') || '<div class="empty">Genera un código para cada cliente nuevo.</div>'}</div>`;
+}
+
 /* ============ Usuarios y contraseña ============ */
 let me = null;
 const isAdmin = () => !!me && me.role === 'admin';
@@ -477,6 +537,7 @@ function authScreen(){
   $('#suU').type = $('#seU').type = c ? 'email' : 'text';
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
+  $('#suLw').style.display = c ? 'block' : 'none';
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
 async function doSetup(ev){
@@ -500,13 +561,19 @@ async function doSetup(ev){
     pendingSetup = true;
     try {
       msg('Creando tu cuenta…'); await applyPersistence(keepPref());
+      const code = normCode($('#suL').value);
+      if (code.length < 8){ pendingSetup = false; $('#suBtn').disabled = false; return msg('Escribe el código de activación.' + contactTxt()); }
       const cred = await FB.auth.createUserWithEmailAndPassword(au, ap);
       const id = cred.user.uid; bizId = id; DB = fbWrap(FB.fs, id);
+      let L = null; try { const ld = await FB.fs.doc('licenses/' + code).get(); L = ld.exists ? ld.data() : null; } catch(e){}
+      const bad = !L ? 'Ese código de activación no existe.' : L.used ? 'Ese código ya fue usado.' : null;
+      if (bad){ try { await cred.user.delete(); } catch(e){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg(bad + contactTxt()); }
       const b = FB.fs.batch(), now = Date.now();
-      b.set(FB.fs.doc('biz/' + id), {name:biz, owner:id, created:now});
+      b.set(FB.fs.doc('biz/' + id), {name:biz, owner:id, created:now, license:code, expires:num(L.expires) || 0});
+      b.update(FB.fs.doc('licenses/' + code), {used:true, biz:id, usedAt:now, email:au, bizName:biz});
       b.set(FB.fs.doc('biz/' + id + '/members/' + id), {name:an, role:'admin', email:au, created:now});
       b.set(FB.fs.doc('users/' + id), {biz:id, role:'admin', name:an, email:au});
-      await b.commit();
+      try { await b.commit(); } catch(e){ try { await cred.user.delete(); } catch(e2){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg('No se pudo activar con ese código.' + contactTxt()); }
       await FB.fs.doc('biz/' + id + '/config/main').set({...DEF_CFG, name:biz});
       if (wantE){ msg('Creando el usuario del empleado…'); try { await fbCreateMember(eu, ep, en, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
       pendingSetup = false; ui.setupMode = false; msg('');
@@ -1550,6 +1617,8 @@ VIEWS.mas = {
   shell(){
     const back = t => `<button class="btn sm sec" onclick="go('mas')">← Más</button><h2 style="margin-top:12px">${t}</h2>`;
     if (sub && !isAdmin() && !['caja', 'cotizaciones'].includes(sub)) sub = '';
+    if (sub === 'licencias' && !isOwner()) sub = '';
+    if (sub === 'licencias') return back('Licencias y clientes') + `<div id="mx"></div>`;
     if (sub === 'caja') return back('Caja') + `<div id="mx"></div>`;
     if (sub === 'cotizaciones') return back('Cotizaciones') + `<div id="mx"></div>`;
     if (sub === 'reportes') return back('Reportes') + `<div class="seg" id="repSeg"></div><div id="mx"></div>`;
@@ -1558,7 +1627,7 @@ VIEWS.mas = {
     if (sub === 'log') return back('Registro de actividad') + `<div id="mx"></div>`;
     if (sub === 'gastos') return back('Gastos') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="expenseForm()">+ Registrar gasto</button><div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
     if (sub === 'usuarios') return back('Usuarios') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="userForm()">+ Nuevo usuario</button><div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
-    const opts = [['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []);
+    const opts = (isOwner() ? [['licencias', '★ Licencias y clientes', 'Códigos de activación, negocios, vencimientos y bloqueos']] : []).concat([['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []));
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
       <div class="item tap row" onclick="passForm(me.u)"><div class="grow"><div class="name">Cambiar mi contraseña</div><div class="sub">${CLOUD() ? esc(me && me.email || '') : 'Usuario: ' + esc(me ? me.u : '')}</div></div><span style="color:var(--mut)">›</span></div>
@@ -1570,6 +1639,7 @@ VIEWS.mas = {
     if (sub === 'reportes') return fillReports();
     if (sub === 'gastos') return fillExpenses();
     if (sub === 'caja') return fillCashView();
+    if (sub === 'licencias') return fillLicenses();
     if (sub === 'log') return fillLog();
     if (sub === 'cotizaciones') return fillQuotes();
     if (sub === 'usuarios'){

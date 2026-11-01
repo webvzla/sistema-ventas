@@ -8,3 +8,8 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: "550176231446",
   appId: "1:550176231446:web:df966883f2eb51d0a06537"
 };
+
+// Dueño del sistema: solo esta cuenta ve "Licencias y clientes" y puede generar códigos de activación.
+window.OWNER_UID = "3Wuh1CLsC2XeIS58uXkRSlQIXHJ2";
+// Contacto que se muestra cuando falta un código o la licencia venció (ej: "WhatsApp 0414-0000000"). Vacío = genérico.
+window.APP_CONTACT = "";

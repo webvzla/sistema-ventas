@@ -5,8 +5,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signed() { return request.auth != null; }
+    // Dueño del sistema (genera los códigos de activación y administra las licencias).
+    function owner() { return signed() && request.auth.uid == '3Wuh1CLsC2XeIS58uXkRSlQIXHJ2'; }
     function memberDoc(b) { return /databases/$(database)/documents/biz/$(b)/members/$(request.auth.uid); }
-    function member(b) { return signed() && exists(memberDoc(b)); }
+    function bizOk(b) {
+      let d = get(/databases/$(database)/documents/biz/$(b)).data;
+      return d.get('blocked', false) == false && (d.get('expires', 0) == 0 || d.get('expires', 0) > request.time.toMillis());
+    }
+    function member(b) { return signed() && exists(memberDoc(b)) && bizOk(b); }
     function admin(b) { return member(b) && get(memberDoc(b)).data.role == 'admin'; }
     function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
 
@@ -20,10 +26,27 @@ service cloud.firestore {
       allow delete: if signed() && admin(resource.data.biz);
     }
 
+    // Códigos de activación: los crea el dueño; quien se registra solo puede marcar como usado el suyo.
+    match /licenses/{code} {
+      allow get: if signed();
+      allow list, create, delete: if owner();
+      allow update: if owner() || (signed()
+        && resource.data.used == false
+        && request.resource.data.used == true
+        && request.resource.data.biz == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'biz', 'usedAt', 'email', 'bizName'])
+        && getAfter(/databases/$(database)/documents/biz/$(request.auth.uid)).data.license == code);
+    }
+
     match /biz/{b} {
-      allow read: if member(b);
-      allow create: if signed() && b == request.auth.uid;
-      allow update: if admin(b);
+      allow read: if (signed() && exists(memberDoc(b))) || owner();
+      allow create: if signed() && b == request.auth.uid
+        && request.resource.data.keys().hasOnly(['name', 'owner', 'created', 'license', 'expires'])
+        && exists(/databases/$(database)/documents/licenses/$(request.resource.data.license))
+        && get(/databases/$(database)/documents/licenses/$(request.resource.data.license)).data.used == false
+        && getAfter(/databases/$(database)/documents/licenses/$(request.resource.data.license)).data.biz == b
+        && request.resource.data.expires == get(/databases/$(database)/documents/licenses/$(request.resource.data.license)).data.get('expires', 0);
+      allow update: if owner();
 
       match /members/{uid} {
         allow read: if member(b);
