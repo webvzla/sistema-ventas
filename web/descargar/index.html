@@ -4,145 +4,169 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sistema de Ventas · Inventario y ventas en dólares y bolívares</title>
-<meta name="description" content="Programa de inventario y ventas para negocios en Venezuela: precios en $ y €, conversión automática a Bs con la tasa BCV, caja, clientes, proveedores y reportes. Para Windows y móvil.">
-<meta name="theme-color" content="#0F2A33">
+<meta name="description" content="Programa de inventario y ventas para negocios en Venezuela: precios en $ y €, conversión automática a Bs con la tasa BCV, caja, clientes, fiados, proveedores y reportes. Para Windows y móvil. Prueba gratis 7 días.">
+<meta name="theme-color" content="#fffdf6">
 <link rel="icon" href="../icon.png">
 <meta property="og:title" content="Sistema de Ventas">
-<meta property="og:description" content="Inventario, ventas y caja en dólares y bolívares, con la tasa BCV del día.">
+<meta property="og:description" content="Inventario, ventas y caja en dólares y bolívares, con la tasa BCV del día. Prueba gratis 7 días.">
 <meta property="og:image" content="https://stocksoft.web.app/app-vender.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Caveat:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* "La Libreta de la Bodega": la misma estética de papel, bolígrafo y resaltador que la app. */
 :root{
-  --ink:#0F2A33; --ink-2:#1B3B46; --paper:#F4F7F6; --white:#FFFFFF;
-  --green:#138A5B; --green-d:#0E6B47; --mint:#D7F0E4; --yellow:#FFE27A;
-  --slate:#566A72; --line:#D6E0DD;
-  --display:'Bricolage Grotesque', 'Figtree', system-ui, sans-serif;
-  --body:'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono:'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  --desk:#e9e0cc;--paper:#f6f0e2;--card:#fffdf6;--line:#d8cbb0;--line2:#bfae8c;
+  --ink:#1b2440;--mut:#6f6857;--blue:#2346d1;--hi:#ffe14d;--red:#d7263d;--green:#1f8a5b;
+  --rule:rgba(35,70,209,.09);--margin:rgba(215,38,61,.38);--tape:rgba(255,236,170,.8);
+  --board:#18221d;--chalk:#eef1e8;--chalk-mut:#a3b0a5;--chalk-y:#ffd84d;
+  --head:'Bricolage Grotesque',system-ui,sans-serif;--body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;--hand:'Caveat',cursive;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;background:var(--desk)}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
-body{font-family:var(--body);color:var(--ink);background:var(--paper);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+body{font-family:var(--body);color:var(--ink);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  background:repeating-linear-gradient(to bottom,transparent 0 31px,var(--rule) 31px 32px),var(--paper)}
 a{color:inherit}
 img{max-width:100%;display:block}
-:focus-visible{outline:3px solid var(--green);outline-offset:3px;border-radius:6px}
+:focus-visible{outline:3px solid var(--blue);outline-offset:3px;border-radius:4px}
 .wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+mark{background:linear-gradient(transparent 52%,var(--hi) 52% 90%,transparent 90%);color:inherit;padding:0 .08em}
+.hand{font-family:var(--hand);font-weight:700}
 
-/* Cabecera */
-.top{position:sticky;top:0;z-index:10;background:rgba(244,247,246,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+/* Cabecera con espiral */
+.top{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:2px solid var(--ink)}
+.top::after{content:'';position:absolute;left:0;right:0;bottom:-10px;height:12px;pointer-events:none;background:radial-gradient(circle at 13px 6px,var(--desk) 0 4px,var(--ink) 4.5px 5.5px,transparent 6px) repeat-x;background-size:26px 12px}
 .top .wrap{display:flex;align-items:center;justify-content:space-between;height:68px;gap:16px}
-.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:19px;text-decoration:none}
-.brand img{width:32px;height:32px;border-radius:9px}
-.nav{display:flex;align-items:center;gap:28px;font-weight:500;font-size:15px}
-.nav a{text-decoration:none;color:var(--slate)}
-.nav a:hover{color:var(--ink)}
-.nav a.btn-green,.nav a.btn-green:hover{color:#fff}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;font:700 16px var(--body);text-decoration:none;border-radius:12px;padding:14px 22px;border:2px solid transparent;cursor:pointer;transition:background .15s,transform .15s}
-.btn-green{background:var(--green);color:#fff}
-.btn-green:hover{background:var(--green-d)}
-.btn-line{border-color:var(--ink);color:var(--ink);background:transparent}
-.btn-line:hover{background:var(--ink);color:#fff}
-.btn-sm{padding:9px 16px;font-size:14px;border-radius:10px}
-.btn svg{width:20px;height:20px;flex:none}
+.brand{display:flex;align-items:center;gap:10px;font:700 30px/1 var(--hand);text-decoration:none}
+.brand img{width:32px;height:32px;border-radius:7px;border:2px solid var(--ink)}
+.nav{display:flex;align-items:center;gap:26px;font-weight:600;font-size:15px}
+.nav a{text-decoration:none;color:var(--mut)}
+.nav a:hover{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hi);text-decoration-thickness:.4em;text-underline-offset:-.15em}
 @media (max-width:820px){.nav a:not(.btn){display:none}}
+@media (max-width:480px){.brand{font-size:24px;white-space:nowrap}.brand img{width:28px;height:28px}.nav .btn-sm{white-space:nowrap;padding:6px 11px;font-size:13px}.top .wrap{padding:0 16px}}
+
+/* Botones tipo pegatina */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;font:700 16px var(--body);text-decoration:none;border-radius:9px;padding:13px 22px;border:2px solid var(--ink);cursor:pointer;box-shadow:4px 4px 0 var(--ink);transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translate(4px,4px);box-shadow:0 0 0 var(--ink)}
+.btn:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--ink)}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-hi{background:var(--hi);color:var(--ink)}
+.btn-line{background:var(--card);color:var(--ink)}
+.btn-sm{padding:7px 14px;font-size:14px;box-shadow:3px 3px 0 var(--ink)}
+.btn svg{width:20px;height:20px;flex:none}
 
 /* Portada */
-.hero{padding:72px 0 88px}
+.hero{padding:76px 0 96px;background:linear-gradient(90deg,transparent 0 46px,var(--margin) 46px 48px,transparent 48px)}
 .hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center}
-h1{font-family:var(--display);font-weight:800;font-size:clamp(40px,5.6vw,68px);line-height:1.02;letter-spacing:-.02em;max-width:13ch}
-.lead{font-size:20px;color:var(--slate);margin-top:22px;max-width:46ch}
-.hero-ctas{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
-.hero-ctas .btn-green{font-size:18px;padding:18px 28px;border-radius:14px}
-.hero-note{margin-top:16px;font-size:14px;color:var(--slate)}
+.kicker{display:inline-block;font:700 24px/1 var(--hand);color:var(--red);transform:rotate(-2deg);margin-bottom:14px}
+h1{font-family:var(--head);font-weight:800;font-size:clamp(40px,5.6vw,70px);line-height:1.02;letter-spacing:-.025em;max-width:14ch}
+.lead{font-size:20px;color:var(--mut);margin-top:22px;max-width:46ch}
+.hero-ctas{display:flex;flex-wrap:wrap;gap:16px;margin-top:34px}
+.hero-ctas .btn{font-size:18px;padding:16px 26px}
+.hero-note{margin-top:20px;font-size:15px;color:var(--mut)}
+.hero-note b{color:var(--ink)}
 
-/* Ticket en vivo */
+/* Ticket en vivo con cinta adhesiva y apunte a mano */
 .ticket-col{position:relative;justify-self:center;width:100%;max-width:380px}
-.ticket{background:var(--white);font-family:var(--mono);font-size:14px;color:#1d2b30;padding:28px 26px 30px;position:relative;box-shadow:0 30px 60px -30px rgba(15,42,51,.45);transform:rotate(1.2deg)}
-.ticket::before,.ticket::after{content:"";position:absolute;left:0;right:0;height:12px;background:radial-gradient(circle at 8px -2px,transparent 8px,var(--white) 8.5px) repeat-x;background-size:16px 12px}
-.ticket::before{top:-11px;transform:rotate(180deg)}
-.ticket::after{bottom:-11px}
-.t-head{text-align:center;border-bottom:1px dashed #b9c6c2;padding-bottom:12px;margin-bottom:12px}
-.t-head b{display:block;font-size:15px;letter-spacing:.04em}
+.ticket{--z:8px;background:#fff;font-family:var(--mono);font-size:14px;color:#1d2433;padding:30px 26px calc(30px + var(--z));position:relative;transform:rotate(1.4deg);
+  -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - var(--z)) no-repeat,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/calc(2*var(--z)) var(--z) repeat-x;
+  mask:linear-gradient(#000 0 0) top/100% calc(100% - var(--z)) no-repeat,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/calc(2*var(--z)) var(--z) repeat-x;
+  filter:drop-shadow(6px 8px 0 rgba(27,36,64,.18))}
+.tape{position:absolute;top:-14px;left:50%;width:120px;height:28px;margin-left:-60px;background:var(--tape);transform:rotate(-3deg);z-index:2;border-left:2px dotted rgba(0,0,0,.08);border-right:2px dotted rgba(0,0,0,.08)}
+.t-head{text-align:center;border-bottom:1.5px dashed #b9b19c;padding-bottom:12px;margin-bottom:12px}
+.t-head b{display:block;font-size:15px;letter-spacing:.05em}
 .t-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
 .t-row span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.t-sep{border-top:1px dashed #b9c6c2;margin:12px 0}
+.t-sep{border-top:1.5px dashed #b9b19c;margin:12px 0}
 .t-total{font-weight:600;font-size:16px}
-.t-bs{background:var(--yellow);margin:8px -10px 0;padding:8px 10px;font-weight:600;font-size:18px;display:flex;justify-content:space-between}
-.t-rate{margin-top:14px;font-size:12px;color:#5d6d72;text-align:center}
-.ticket-cap{margin-top:30px;font-size:14px;color:var(--slate);text-align:center}
-.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:1px;box-shadow:0 0 0 0 rgba(19,138,91,.5);animation:pulse 2s infinite}
-@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(19,138,91,0)}100%{box-shadow:0 0 0 0 rgba(19,138,91,0)}}
-@media (max-width:900px){.hero{padding:48px 0 64px}.hero .wrap{grid-template-columns:1fr;gap:56px}}
+.t-bs{background:linear-gradient(transparent 12%,var(--hi) 12% 88%,transparent 88%);margin:8px -8px 0;padding:8px;font-weight:600;font-size:19px;display:flex;justify-content:space-between}
+.t-rate{margin-top:14px;font-size:12px;color:#6f6857;text-align:center}
+.scribble{position:absolute;right:-6px;bottom:-62px;font:700 23px/1.05 var(--hand);color:var(--blue);transform:rotate(-4deg);text-align:right;max-width:220px}
+.scribble svg{position:absolute;left:-46px;top:-30px;width:52px;height:44px;color:var(--blue)}
+.live{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:1px;box-shadow:0 0 0 0 rgba(31,138,91,.5);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(31,138,91,0)}100%{box-shadow:0 0 0 0 rgba(31,138,91,0)}}
+@media (max-width:900px){.hero{padding:52px 0 110px;background:none}.hero .wrap{grid-template-columns:1fr;gap:60px}.scribble{right:4px}}
 
 /* Secciones */
-section{padding:88px 0}
-h2{font-family:var(--display);font-weight:700;font-size:clamp(30px,3.6vw,44px);line-height:1.08;letter-spacing:-.015em;max-width:22ch}
-.intro{color:var(--slate);font-size:18px;margin-top:14px;max-width:58ch}
+section{padding:92px 0}
+h2{font-family:var(--head);font-weight:800;font-size:clamp(30px,3.8vw,46px);line-height:1.06;letter-spacing:-.02em;max-width:22ch}
+.intro{color:var(--mut);font-size:18px;margin-top:14px;max-width:58ch}
 
-/* Funciones */
-.features{background:var(--white);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.f-grid{display:grid;grid-template-columns:repeat(2,1fr);column-gap:64px;margin-top:48px}
-.f{display:grid;grid-template-columns:44px 1fr;gap:18px;padding:26px 0;border-top:1px solid var(--line)}
-.f-ico{width:44px;height:44px;border-radius:12px;background:var(--mint);color:var(--green-d);display:grid;place-items:center}
-.f-ico svg{width:22px;height:22px}
-.f h3{font-family:var(--display);font-weight:700;font-size:20px;line-height:1.25}
-.f p{color:var(--slate);margin-top:6px;font-size:16px}
-@media (max-width:760px){.f-grid{grid-template-columns:1fr}}
+/* Funciones: fichas clavadas en la pared */
+.features{background:var(--desk);border-top:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+.f-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:26px;margin-top:48px}
+.f{position:relative;background:linear-gradient(to bottom,transparent 0 46px,var(--margin) 46px 47.5px,transparent 47.5px),repeating-linear-gradient(to bottom,transparent 0 27px,var(--rule) 27px 28px),var(--card);border:1.5px solid var(--line2);border-radius:3px;padding:20px 20px 22px;box-shadow:4px 5px 0 rgba(27,36,64,.12);transform:rotate(-.6deg);transition:transform .15s}
+.f:nth-child(even){transform:rotate(.7deg)}
+.f:nth-child(3n){transform:rotate(-.2deg)}
+.f:hover{transform:rotate(0) translateY(-3px)}
+.f::before{content:'';position:absolute;top:-7px;left:50%;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ff8a8a,var(--red) 60%,#8f1424);box-shadow:1px 2px 0 rgba(0,0,0,.25)}
+.f-head{display:flex;align-items:center;gap:12px;height:26px}
+.f-ico{width:36px;height:36px;border-radius:50%;border:2px solid var(--blue);color:var(--blue);display:grid;place-items:center;flex:none;transform:rotate(-6deg)}
+.f-ico svg{width:19px;height:19px}
+.f h3{font-family:var(--head);font-weight:800;font-size:19px;line-height:1.2}
+.f p{color:var(--mut);margin-top:18px;font-size:15.5px;line-height:28px}
 
 /* Vista de la app */
 .show .wrap{display:grid;grid-template-columns:.85fr 1.15fr;gap:72px;align-items:center}
-.phone{justify-self:center;width:290px;border-radius:40px;background:#0b1220;padding:12px;box-shadow:0 40px 80px -40px rgba(15,42,51,.6),inset 0 0 0 2px #2a3550}
-.phone img{border-radius:30px;width:100%}
+.phone{justify-self:center;width:290px;border-radius:38px;background:var(--ink);padding:11px;box-shadow:10px 10px 0 var(--hi),10px 10px 0 2px var(--ink);transform:rotate(-2deg)}
+.phone img{border-radius:28px;width:100%}
 .checks{list-style:none;margin-top:28px;display:grid;gap:16px}
-.checks li{display:grid;grid-template-columns:26px 1fr;gap:12px;font-size:17px}
-.checks svg{width:22px;height:22px;color:var(--green);margin-top:3px}
+.checks li{display:grid;grid-template-columns:30px 1fr;gap:12px;font-size:17px}
+.checks svg{width:26px;height:26px;color:var(--green);margin-top:1px}
 .checks b{font-weight:700}
-@media (max-width:900px){.show .wrap{grid-template-columns:1fr;gap:48px}.phone{order:2}}
+@media (max-width:900px){.show .wrap{grid-template-columns:1fr;gap:52px}.phone{order:2}}
 
-/* Pasos */
+/* Pasos: números a bolígrafo rojo con círculo a mano */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:48px;counter-reset:s}
-.step{position:relative;padding-top:64px}
-.step::before{counter-increment:s;content:counter(s);position:absolute;top:0;left:0;font-family:var(--display);font-weight:800;font-size:44px;line-height:1;color:var(--green)}
-.step h3{font-family:var(--display);font-weight:700;font-size:21px}
-.step p{color:var(--slate);margin-top:8px}
-.step a{color:var(--green-d);font-weight:600}
-@media (max-width:760px){.steps{grid-template-columns:1fr;gap:28px}}
+.step{position:relative;padding-top:78px}
+.step::before{counter-increment:s;content:counter(s);position:absolute;top:0;left:0;width:62px;height:58px;display:grid;place-items:center;font:700 44px/1 var(--hand);color:var(--red);border:2.5px solid var(--red);border-radius:52% 48% 55% 45% / 50% 58% 42% 50%;transform:rotate(-8deg)}
+.step h3{font-family:var(--head);font-weight:800;font-size:21px}
+.step p{color:var(--mut);margin-top:8px}
+.step a{color:var(--blue);font-weight:700}
+.step .tag{display:inline-block;margin-top:10px;font:700 11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--green);border:1.5px solid currentColor;border-radius:4px;padding:2px 7px;transform:rotate(-3deg)}
+@media (max-width:760px){.steps{grid-template-columns:1fr;gap:30px}}
 
-/* Descarga */
-.dl{background:var(--ink);color:#E8F1EE;padding:96px 0}
+/* Descarga: la pizarra */
+.dl{--z:12px;background:radial-gradient(ellipse at 30% 20%,rgba(255,255,255,.05),transparent 60%),var(--board);color:var(--chalk);padding:100px 0;border-top:10px solid #6b4a2b;border-bottom:10px solid #6b4a2b;box-shadow:inset 0 0 0 2px #4a321c}
 .dl .wrap{display:grid;grid-template-columns:1.2fr .8fr;gap:56px;align-items:center}
-.dl h2{color:#fff}
-.dl .intro{color:#A9BFC0}
-.btn-big{margin-top:34px;background:var(--yellow);color:var(--ink);font-family:var(--display);font-weight:800;font-size:clamp(20px,2.4vw,26px);padding:24px 36px;border-radius:18px;box-shadow:0 14px 0 -6px #c9a930}
-.btn-big:hover{transform:translateY(-2px);background:#ffd84a}
+.dl h2{color:var(--chalk)}
+.dl h2 .hand{color:var(--chalk-y);font-size:1.1em}
+.dl .intro{color:var(--chalk-mut)}
+.dl .intro b{color:var(--chalk)}
+.btn-big{margin-top:34px;background:var(--chalk-y);color:var(--board);border-color:var(--chalk);box-shadow:6px 6px 0 var(--chalk);font:800 clamp(20px,2.4vw,26px) var(--head);padding:22px 34px;border-radius:12px}
+.btn-big:hover{box-shadow:7px 7px 0 var(--chalk)}
+.btn-big:active{box-shadow:0 0 0 var(--chalk)}
 .btn-big svg{width:28px;height:28px}
-.dl-note{margin-top:18px;font-size:14px;color:#A9BFC0;max-width:52ch}
-.dl-alt{margin-top:22px;font-size:15px}
-.dl-alt a{color:#fff;font-weight:600}
-.req{background:var(--ink-2);border-radius:18px;padding:28px}
-.req h3{font-family:var(--display);font-size:19px;color:#fff;margin-bottom:12px}
+.dl-note{margin-top:20px;font-size:14px;color:var(--chalk-mut);max-width:52ch}
+.dl-alt{margin-top:20px;font-size:15px}
+.dl-alt a{color:var(--chalk-y);font-weight:700}
+.req{border:2px dashed rgba(238,241,232,.45);border-radius:10px;padding:26px}
+.req h3{font:700 30px/1 var(--hand);color:var(--chalk-y);margin-bottom:14px}
 .req dl{display:grid;grid-template-columns:auto 1fr;gap:10px 18px;font-size:15px}
-.req dt{color:#A9BFC0}
-.req dd{color:#fff}
+.req dt{color:var(--chalk-mut)}
+.req dd{color:var(--chalk)}
 @media (max-width:900px){.dl .wrap{grid-template-columns:1fr}}
 
-/* Preguntas */
+/* Preguntas como apuntes */
 .faq{max-width:780px}
-.faq details{border-top:1px solid var(--line);padding:20px 0}
-.faq details:last-child{border-bottom:1px solid var(--line)}
-.faq summary{cursor:pointer;font-family:var(--display);font-weight:700;font-size:19px;list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq details{border-top:1.5px dashed var(--line2);padding:18px 0}
+.faq details:last-child{border-bottom:1.5px dashed var(--line2)}
+.faq summary{cursor:pointer;font-family:var(--head);font-weight:800;font-size:19px;list-style:none;display:flex;justify-content:space-between;gap:16px}
 .faq summary::-webkit-details-marker{display:none}
-.faq summary::after{content:"+";font-size:26px;line-height:1;color:var(--green);transition:transform .2s}
+.faq summary::after{content:"+";font:700 34px/.8 var(--hand);color:var(--red);transition:transform .2s}
 .faq details[open] summary::after{transform:rotate(45deg)}
-.faq p{color:var(--slate);margin-top:10px;max-width:64ch}
+.faq details[open] summary{text-decoration:underline;text-decoration-color:var(--hi);text-decoration-thickness:.36em;text-underline-offset:-.14em;text-decoration-skip-ink:none}
+.faq p{color:var(--mut);margin-top:10px;max-width:64ch}
+.faq a{color:var(--blue);font-weight:600}
 
-/* Pie */
-footer{border-top:1px solid var(--line);padding:36px 0;font-size:14px;color:var(--slate)}
+/* Pie con borde rasgado */
+footer{--z:9px;position:relative;background:var(--card);padding:40px 0 36px;font-size:14px;color:var(--mut);margin-top:20px}
+footer::before{content:'';position:absolute;left:0;right:0;top:calc(-1 * var(--z));height:var(--z);background:conic-gradient(from 135deg at top,#0000,var(--card) 1deg 89deg,#0000 90deg) top/calc(2*var(--z)) 100% repeat-x}
 footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;align-items:center}
-footer a{color:var(--ink);font-weight:600}
+footer a{color:var(--ink);font-weight:700}
+footer .hand{font-size:22px;color:var(--ink)}
 </style>
 </head>
 <body>
@@ -154,7 +178,7 @@ footer a{color:var(--ink);font-weight:600}
       <a href="#funciones">Funciones</a>
       <a href="#empezar">Cómo empezar</a>
       <a href="#preguntas">Preguntas</a>
-      <a class="btn btn-green btn-sm" href="#descargar">Descargar</a>
+      <a class="btn btn-hi btn-sm" href="https://stocksoft.web.app/app/">Probar gratis</a>
     </nav>
   </div>
 </header>
@@ -163,21 +187,23 @@ footer a{color:var(--ink);font-weight:600}
   <section class="hero">
     <div class="wrap">
       <div>
-        <h1>Vende en dólares y cobra en bolívares sin sacar la calculadora.</h1>
-        <p class="lead">Inventario, ventas, caja y reportes para tu negocio. Cada precio se convierte solo con la tasa oficial del BCV del día, en tu ordenador y en el móvil.</p>
+        <span class="kicker">Para bodegas, tiendas y comercios de Venezuela</span>
+        <h1>Vende en dólares y cobra en bolívares <mark>sin sacar la calculadora.</mark></h1>
+        <p class="lead">Inventario, ventas, caja, fiados y reportes para tu negocio. Cada precio se convierte solo con la tasa oficial del BCV del día, en tu ordenador y en el móvil.</p>
         <div class="hero-ctas">
-          <a class="btn btn-green" href="#descargar">
+          <a class="btn btn-blue" href="https://stocksoft.web.app/app/">Probar gratis 7 días</a>
+          <a class="btn btn-line" href="#descargar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
-            Descargar Sistema de Ventas
+            Descargar para Windows
           </a>
-          <a class="btn btn-line" href="https://stocksoft.web.app/app/">Usar en el navegador</a>
         </div>
-        <p class="hero-note">Para Windows 10 y 11, y en cualquier móvil desde el navegador. Necesitas un código de activación.</p>
+        <p class="hero-note"><b>7 días gratis, sin código ni tarjeta.</b> Luego activas tu licencia y sigues con todos tus datos.</p>
       </div>
 
       <div class="ticket-col">
+        <span class="tape" aria-hidden="true"></span>
         <div class="ticket" aria-label="Ejemplo de una venta convertida a bolívares con la tasa BCV de hoy">
-          <div class="t-head"><b>COMERCIAL LA ESQUINA</b>Nota de entrega · ejemplo</div>
+          <div class="t-head"><b>BODEGA LA ESQUINA</b>Nota de entrega · ejemplo</div>
           <div class="t-row"><span>2 × Harina de maíz 1 kg</span><span>$2,40</span></div>
           <div class="t-row"><span>1 × Café molido 500 g</span><span>$5,50</span></div>
           <div class="t-row"><span>1 × Refresco 2 L</span><span>$2,50</span></div>
@@ -185,43 +211,43 @@ footer a{color:var(--ink);font-weight:600}
           <div class="t-row t-total"><span>TOTAL</span><span>$10,40</span></div>
           <div class="t-bs"><span>Bs</span><span id="tBs">9.251,58</span></div>
           <div class="t-row" style="margin-top:8px"><span>En euros</span><span id="tEur">€9,33</span></div>
-          <div class="t-rate">Tasa BCV <span id="tRate">889,58</span> Bs/$ · <span id="tDate">fecha valor</span></div>
+          <div class="t-rate"><span class="live" aria-hidden="true"></span>Tasa BCV <span id="tRate">889,58</span> Bs/$ · <span id="tDate">fecha valor</span></div>
         </div>
-        <p class="ticket-cap"><span class="live" aria-hidden="true"></span>Calculado ahora con la tasa oficial publicada hoy</p>
+        <p class="scribble"><svg viewBox="0 0 52 44" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M48 40C34 38 18 30 10 10"/><path d="M4 16l6-8 8 5"/></svg>calculado ahora con la tasa de hoy</p>
       </div>
     </div>
   </section>
 
   <section class="features" id="funciones">
     <div class="wrap">
-      <h2>Todo lo que pasa en tu mostrador, en un solo lugar.</h2>
+      <h2>Todo lo que pasa en tu mostrador, <mark>en un solo lugar.</mark></h2>
       <p class="intro">Pensado para bodegas, tiendas, ferreterías, farmacias, distribuidoras y cualquier negocio que compra en dólares y cobra en varias monedas.</p>
       <div class="f-grid">
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><h3>Dólares, euros y bolívares</h3><p>Pon tus precios en $ o €. El sistema los muestra en Bs con la tasa BCV del día, que se actualiza sola.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg></div><div><h3>Inventario con alertas</h3><p>Stock en tiempo real, aviso cuando algo se está acabando, importación desde Excel y ajuste de precios por categoría.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M16 8v8"/></svg></div><div><h3>Ventas con código de barras</h3><p>Escanea con lector USB o con la cámara del móvil. Crea e imprime etiquetas para los productos que no tienen código.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg></div><div><h3>Pagos mixtos y vuelto</h3><p>Una parte en efectivo $, otra por pago móvil o punto. Calcula lo que falta, el vuelto y el IGTF si te corresponde.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18M8 15h3"/></svg></div><div><h3>Cierre de caja que cuadra</h3><p>Abre con tu fondo y al cerrar ves cuánto debería haber en $, Bs y €. Si falta o sobra, lo sabes al momento.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.5 3 5.2"/></svg></div><div><h3>Clientes, fiados y proveedores</h3><p>Lo que te deben y lo que debes, con abonos, historial y recordatorios por WhatsApp.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div><div><h3>Reportes y ganancias</h3><p>Ingresos, costos, gastos y ganancia neta con gráficos. Lo más vendido y lo que vende cada empleado.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div><h3>Empleados con permisos</h3><p>El vendedor vende y cobra; el administrador controla precios, costos y correcciones. Todo queda registrado.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></div><div><h3>Facturas, notas y cotizaciones</h3><p>Desglose de IVA para tu máquina fiscal, notas de entrega en PDF y presupuestos que conviertes en venta con un toque.</p></div></div>
-        <div class="f"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A7 7 0 0 0 4.3 12.5 4 4 0 0 0 6 20h11.5"/></svg></div><div><h3>En la nube y sin internet</h3><p>Ves tu negocio desde el móvil al instante. Si se cae la conexión sigues vendiendo, y todo se sincroniza al volver.</p></div></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><h3>Dólares, euros y bolívares</h3></div><p>Pon tus precios en $ o €. El sistema los muestra en Bs con la tasa BCV del día, que se actualiza sola.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg></div><h3>Inventario con alertas</h3></div><p>Stock en tiempo real, aviso cuando algo se está acabando, importación desde Excel y ajuste de precios por categoría.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M16 8v8"/></svg></div><h3>Código de barras</h3></div><p>Escanea con lector USB o con la cámara del móvil. Crea e imprime etiquetas para los productos que no tienen código.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg></div><h3>Pagos mixtos y vuelto</h3></div><p>Una parte en efectivo $, otra por pago móvil o punto. Calcula lo que falta, el vuelto y el IGTF si te corresponde.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18M8 15h3"/></svg></div><h3>Cierre de caja que cuadra</h3></div><p>Abre con tu fondo y al cerrar ves cuánto debería haber en $, Bs y €. Si falta o sobra, lo sabes al momento.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.8c1.6.8 2.6 2.5 3 5.2"/></svg></div><h3>Clientes, fiados y proveedores</h3></div><p>Lo que te deben y lo que debes, con abonos, historial y recordatorios por WhatsApp.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div><h3>Reportes y ganancias</h3></div><p>Ingresos, costos, gastos y ganancia neta con gráficos. Lo más vendido y lo que vende cada empleado.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><h3>Empleados con permisos</h3></div><p>El vendedor vende y cobra; el administrador controla precios, costos y correcciones. Todo queda registrado.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></div><h3>Facturas, notas y cotizaciones</h3></div><p>Desglose de IVA para tu máquina fiscal, notas de entrega en PDF y presupuestos que conviertes en venta con un toque.</p></div>
+        <div class="f"><div class="f-head"><div class="f-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A7 7 0 0 0 4.3 12.5 4 4 0 0 0 6 20h11.5"/></svg></div><h3>En la nube y sin internet</h3></div><p>Ves tu negocio desde el móvil al instante. Si se cae la conexión sigues vendiendo, y todo se sincroniza al volver.</p></div>
       </div>
     </div>
   </section>
 
   <section class="show">
     <div class="wrap">
-      <div class="phone"><img src="app-vender.png" alt="Pantalla de venta: producto escaneado con su precio en dólares y en bolívares, y la caja abierta" width="400" height="860" loading="lazy"></div>
+      <div class="phone"><img src="app-vender.png" alt="Pantalla de venta de la app con aspecto de libreta: productos con su precio en dólares y en bolívares" width="390" height="844" loading="lazy"></div>
       <div>
-        <h2>Hecho para cómo se vende en Venezuela.</h2>
+        <h2>Hecho para cómo se vende <mark>en Venezuela.</mark></h2>
         <p class="intro">Escaneas el producto y le dices al cliente el precio en las dos monedas en un segundo. Sin tablas de conversión ni calculadora.</p>
         <ul class="checks">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Tasa BCV automática.</b> Se actualiza sola varias veces al día, sin que nadie la escriba.</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Pago móvil, punto, Zelle y efectivo</b> en la misma venta.</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Fiados con saldo en dólares,</b> para que la deuda no pierda valor.</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Copia de seguridad diaria</b> en tu ordenador, además de la nube.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13c2 1.5 3.5 3.5 5 6 3-7 7-11.5 11-14"/></svg><span><b>Tasa BCV automática.</b> Se actualiza sola varias veces al día, sin que nadie la escriba.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13c2 1.5 3.5 3.5 5 6 3-7 7-11.5 11-14"/></svg><span><b>Pago móvil, punto, Zelle y efectivo</b> en la misma venta.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13c2 1.5 3.5 3.5 5 6 3-7 7-11.5 11-14"/></svg><span><b>Fiados con saldo en dólares,</b> para que la deuda no pierda valor.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13c2 1.5 3.5 3.5 5 6 3-7 7-11.5 11-14"/></svg><span><b>Copia de seguridad diaria</b> en tu ordenador, además de la nube.</span></li>
         </ul>
       </div>
     </div>
@@ -231,9 +257,9 @@ footer a{color:var(--ink);font-weight:600}
     <div class="wrap">
       <h2>Empieza en tres pasos.</h2>
       <div class="steps">
-        <div class="step"><h3>Descarga e instala</h3><p>Baja el instalador para Windows desde la sección de descarga, o abre la versión web en el móvil.</p></div>
-        <div class="step"><h3>Pide tu código de activación</h3><p>Cada negocio necesita su código. <a href="https://wa.me/34663407974?text=Hola%2C%20quiero%20un%20c%C3%B3digo%20de%20activaci%C3%B3n%20del%20Sistema%20de%20Ventas%20para%20mi%20negocio." target="_blank" rel="noopener">Pídelo por WhatsApp</a>.</p></div>
-        <div class="step"><h3>Crea tu negocio</h3><p>Escribe el código, el nombre de tu negocio, tu correo y una contraseña. Añade a tus empleados y empieza a vender.</p></div>
+        <div class="step"><h3>Abre o descarga</h3><p>Usa la versión web en el móvil o baja el instalador para Windows desde la sección de descarga.</p></div>
+        <div class="step"><h3>Crea tu negocio</h3><p>Pon el nombre de tu negocio, tu correo y una contraseña. Sin código: empiezas tu prueba al momento.</p><span class="tag">7 días gratis</span></div>
+        <div class="step"><h3>Activa tu licencia</h3><p>Cuando quieras seguir, <a href="https://wa.me/34663407974?text=Hola%2C%20quiero%20un%20c%C3%B3digo%20de%20activaci%C3%B3n%20del%20Sistema%20de%20Ventas%20para%20mi%20negocio." target="_blank" rel="noopener">pide tu código por WhatsApp</a> y escríbelo en la app. Conservas todos tus datos.</p></div>
       </div>
     </div>
   </section>
@@ -241,7 +267,7 @@ footer a{color:var(--ink);font-weight:600}
   <section class="dl" id="descargar">
     <div class="wrap">
       <div>
-        <h2>Descarga el programa para Windows.</h2>
+        <h2>Descarga el programa <span class="hand">para Windows.</span></h2>
         <p class="intro">Al pulsar el botón se descarga el instalador <b>Sistema-de-Ventas-Setup.exe</b> (unos 80 MB), siempre en su versión más reciente. Ábrelo al terminar y sigue los pasos.</p>
         <a class="btn btn-big" id="dlBtn" href="https://github.com/webvzla/sistema-ventas/releases/latest/download/Sistema-de-Ventas-Setup.exe" download>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -251,13 +277,13 @@ footer a{color:var(--ink);font-weight:600}
         <p class="dl-alt">¿Desde el móvil? <a href="https://stocksoft.web.app/app/">Ábrelo en el navegador</a> y añádelo a tu pantalla de inicio.</p>
       </div>
       <div class="req">
-        <h3>Requisitos</h3>
+        <h3>Lo que necesitas</h3>
         <dl>
           <dt>Ordenador</dt><dd>Windows 10 u 11 (64 bits)</dd>
           <dt>Móvil</dt><dd>Android o iPhone con Chrome o Safari</dd>
           <dt>Internet</dt><dd>Para sincronizar; funciona también sin conexión</dd>
           <dt>Lector</dt><dd>Opcional: cualquier lector de códigos USB o Bluetooth</dd>
-          <dt>Acceso</dt><dd>Código de activación por negocio</dd>
+          <dt>Acceso</dt><dd>7 días de prueba gratis; después, código de activación por negocio</dd>
         </dl>
       </div>
     </div>
@@ -267,7 +293,8 @@ footer a{color:var(--ink);font-weight:600}
     <div class="wrap">
       <h2>Preguntas frecuentes</h2>
       <div class="faq" style="margin-top:36px">
-        <details><summary>¿Cómo consigo el código de activación?</summary><p>Escríbenos por <a href="https://wa.me/34663407974" target="_blank" rel="noopener">WhatsApp al +34 663 40 79 74</a>. Te enviamos el código y las instrucciones para crear tu negocio.</p></details>
+        <details><summary>¿Puedo probarlo antes de pagar?</summary><p>Sí. Crea tu cuenta de negocio sin código y tienes 7 días gratis con todas las funciones. Cuando termine la prueba, escribes tu código de activación y sigues con todos tus datos.</p></details>
+        <details><summary>¿Cómo consigo el código de activación?</summary><p>Escríbenos por <a href="https://wa.me/34663407974" target="_blank" rel="noopener">WhatsApp al +34 663 40 79 74</a>. Te enviamos el código y lo escribes en la app, en "Activar licencia".</p></details>
         <details><summary>¿La tasa del BCV se actualiza sola?</summary><p>Sí. El sistema consulta la tasa oficial del dólar y del euro varias veces al día y recalcula todos los precios en bolívares. También puedes ajustarla a mano si lo necesitas.</p></details>
         <details><summary>¿Funciona sin internet?</summary><p>Sí. Puedes seguir vendiendo sin conexión y, cuando vuelve el internet, todo se sincroniza con la nube y con los demás dispositivos.</p></details>
         <details><summary>¿Emite facturas fiscales?</summary><p>El sistema calcula el desglose de IVA e IGTF y registra el número de la factura, pero la factura legal se imprime en tu máquina fiscal homologada por el SENIAT. Para ventas sin factura genera notas de entrega.</p></details>
@@ -280,7 +307,7 @@ footer a{color:var(--ink);font-weight:600}
 
 <footer>
   <div class="wrap">
-    <span>© 2026 Sistema de Ventas</span>
+    <span class="hand">Sistema de Ventas · 2026</span>
     <span>Contacto: <a href="https://wa.me/34663407974" target="_blank" rel="noopener">WhatsApp +34 663 40 79 74</a></span>
   </div>
 </footer>
