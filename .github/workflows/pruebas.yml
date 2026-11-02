@@ -1,0 +1,42 @@
+name: Versión de pruebas
+
+# Al subir a la rama "pruebas" se publica en un canal de vista previa de Firebase
+# (una dirección distinta de stocksoft.web.app). Los clientes no la ven. Cuando Francisco
+# aprueba, se pasa a main y entonces se publica de verdad (construir.yml).
+on:
+  push:
+    branches: [pruebas]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: pruebas
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Publicar versión de pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund --ignore-scripts
+      - run: npm run vendor && bash scripts/build-site.sh
+      - id: deploy
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: sistema-ventas-e085f
+          channelId: pruebas
+          expires: 30d
+      - name: Dirección de la versión de pruebas
+        run: |
+          echo "### Versión de pruebas" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.deploy.outputs.details_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "App: ${{ steps.deploy.outputs.details_url }}/app/" >> $GITHUB_STEP_SUMMARY

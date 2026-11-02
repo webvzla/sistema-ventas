@@ -1,5 +1,8 @@
-name: Construir app de PC y versión web
+name: Publicar web (versión real)
 
+# Publica la web real (stocksoft.web.app y GitHub Pages) al subir a main.
+# La app de PC carga esta web desde internet, así que estos cambios les llegan a los clientes
+# sin ningún aviso de actualización. El instalador de Windows va aparte (instalador.yml).
 on:
   push:
     branches: [main]
@@ -35,27 +38,6 @@ jobs:
           path: web
       - id: deploy
         uses: actions/deploy-pages@v4
-
-  windows:
-    name: Instalador de Windows (.exe)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm install --no-audit --no-fund
-      - name: Versión
-        shell: bash
-        run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
-      - name: Construir y publicar (con actualización automática)
-        run: npm run release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: instalador-windows
-          path: dist/*.exe
 
   firebase:
     name: Sitio stocksoft.web.app

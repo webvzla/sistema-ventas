@@ -1,0 +1,39 @@
+name: Instalador de Windows
+
+# Solo se genera una versión nueva del programa de PC (y los clientes ven "Hay una nueva versión")
+# cuando cambia el propio programa: electron/, package.json o el icono. También se puede lanzar a mano.
+on:
+  push:
+    branches: [main]
+    paths: ['electron/**', 'package.json', 'build/**']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instalador
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Instalador de Windows (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      # 1.1.x: este flujo empieza a contar de nuevo, y debe quedar por encima de las 1.0.x publicadas.
+      - name: Versión
+        shell: bash
+        run: npm version 1.1.${{ github.run_number }} --no-git-tag-version --allow-same-version
+      - name: Construir y publicar (con actualización automática)
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: dist/*.exe
