@@ -122,12 +122,12 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="lgBtn" style="margin-top:16px">Entrar</button>
   <div id="lgMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div style="text-align:center;margin-top:10px"><a href="#" id="lgReset" style="display:none;font-size:13px" onclick="resetPass();return false">¿Olvidaste tu contraseña?</a></div>
-  <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Necesitas un código de activación.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button><a id="lgWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a></div>
+  <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Pruébalo <b>gratis 7 días</b>, sin código.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button><a id="lgWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a></div>
 </form>
 <form class="lg-card" id="setupForm" style="display:none;max-height:92vh;overflow:auto" onsubmit="doSetup(event)" autocomplete="off">
   <div class="brand">Bienvenido</div><div class="sub" id="suNote">Configura tu negocio. Solo se hace una vez.</div>
-  <div id="suLw"><label>Código de activación</label><input id="suL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
-  <div class="sub" style="margin-top:4px">Te lo da quien te vendió el sistema.<span id="suWa"></span></div></div>
+  <div id="suLw"><label>Código de activación (opcional)</label><input id="suL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
+  <div class="sub" style="margin-top:4px">Sin código empiezas con <b>7 días de prueba gratis</b>. Luego activas tu licencia con un código.<span id="suWa"></span></div></div>
   <label>Nombre del negocio</label><input id="suB" placeholder="Ej: Comercial La Esquina">
   <h3 style="margin-top:18px">Administrador (tú)</h3>
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
@@ -140,6 +140,14 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="suBtn" style="margin-top:18px">Crear y entrar</button>
   <div id="suMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div id="suBack" style="display:none;text-align:center;margin-top:10px"><a href="#" onclick="ui.setupMode=false;authScreen();return false">Ya tengo cuenta → Entrar</a></div>
+</form>
+<form class="lg-card" id="renewForm" style="display:none" onsubmit="doRenew(event)" autocomplete="off">
+  <div class="brand" id="rnTitle">Tu prueba terminó</div><div class="sub" id="rnNote">Tus datos siguen guardados. Activa tu licencia para seguir usando el sistema.</div>
+  <label>Código de activación</label><input id="rnL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
+  <button class="btn full" id="rnBtn" style="margin-top:16px">Activar</button>
+  <div id="rnMsg" class="note" style="text-align:center;color:var(--warn)"></div>
+  <a id="rnWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a>
+  <div style="text-align:center;margin-top:10px"><a href="#" onclick="ui.renew=null;FB.auth.signOut();return false">Cerrar sesión</a></div>
 </form></div>
 <div id="ov" onclick="if(event.target===this)closeSheet()"><div id="sheet"></div></div>
 <div id="toast"></div>
@@ -363,9 +371,13 @@ function subscribeAll(){
   });
   unsubs.push(DB.doc('config/main').onSnapshot(snap => { if (snap.exists) cfg = {...DEF_CFG, ...snap.data()}; if (snap.exists || !snap.metadata.fromCache) cfgLoaded = true; done('cfg', snap); render(); }, e => { pending.delete('cfg'); render(); }));
 }
+const TRIAL_MS = 7 * 864e5;
+let bizInfo = null;
+// Fecha en que termina el acceso del negocio (0 = sin vencimiento). La prueba cuenta desde la hora del servidor.
+const bizExp = b => b.trial ? (b.trialStart && b.trialStart.toMillis ? b.trialStart.toMillis() : Date.now()) + TRIAL_MS : num(b.expires);
 async function onFbUser(u){
   if (pendingSetup) return;
-  if (!u){ me = null; bizId = null; clearData(); cart = []; loaded = true; showLogin(ui.authMsg || ''); ui.authMsg = ''; return; }
+  if (!u){ me = null; bizId = null; bizInfo = null; ui.renew = null; clearData(); cart = []; loaded = true; showLogin(ui.authMsg || ''); ui.authMsg = ''; return; }
   let prof = null;
   try { const d = await FB.fs.doc('users/' + u.uid).get(); prof = d.exists ? d.data() : null; } catch(e){ console.warn(e); }
   if (!prof || !prof.biz){ ui.authMsg = 'Esta cuenta no pertenece a ningún negocio. Pide al administrador que te añada.'; await FB.auth.signOut(); return; }
@@ -373,8 +385,16 @@ async function onFbUser(u){
     const bd = await FB.fs.doc('biz/' + prof.biz).get(); const b = bd.exists ? bd.data() : null;
     if (!b){ ui.authMsg = 'Esta cuenta no tiene un negocio activado con un código válido.' + contactTxt(); await FB.auth.signOut(); return; }
     if (b.blocked){ ui.authMsg = 'El acceso de este negocio está suspendido.' + contactTxt(); await FB.auth.signOut(); return; }
-    if (num(b.expires) && num(b.expires) < Date.now()){ ui.authMsg = 'La licencia de este negocio venció el ' + fmtDay(b.expires) + '.' + contactTxt(); await FB.auth.signOut(); return; }
+    const exp = bizExp(b);
+    if (exp && exp < Date.now()){
+      const what = b.trial ? 'La prueba gratis de este negocio terminó el ' : 'La licencia de este negocio venció el ';
+      // Quien creó el negocio puede activarlo con un código sin perder sus datos; los demás esperan al administrador.
+      if (prof.biz === u.uid && prof.role === 'admin'){ ui.renew = {biz:b, title:b.trial ? 'Tu prueba terminó' : 'Tu licencia venció', note:what + fmtDay(exp) + '. Tus datos siguen guardados: activa tu licencia con un código para seguir.'}; showLogin(''); return; }
+      ui.authMsg = what + fmtDay(exp) + '. Pide al administrador que active la licencia.'; await FB.auth.signOut(); return;
+    }
+    bizInfo = b;
   } catch(e){ console.warn('biz', e); }
+  ui.renew = null;
   bizId = prof.biz; DB = fbWrap(FB.fs, bizId);
   me = {u:u.uid, name:prof.name || u.email, role:prof.role === 'admin' ? 'admin' : 'vendedor', email:u.email};
   subscribeAll(); ownerSubscribe();
@@ -500,20 +520,20 @@ function showLic(code, d){
 }
 async function bizSet(id, data, msg){ try { await FB.fs.doc('biz/' + id).set(data, {merge:true}); toast(msg); } catch(e){ toast(fbMsg(e)); } }
 function bizMenu(id){
-  const b = lic.biz[id] || {}; const exp = num(b.expires), venc = exp && exp < Date.now();
-  openSheet(`<h2>${esc(b.name || 'Negocio')}</h2><div class="sub">Creado ${b.created ? fmtDay(b.created) : '—'}${b.license ? ' · código ' + fmtCode(b.license) : ' · sin código (anterior a las licencias)'}</div>
-  <div class="card" style="margin-top:12px"><div class="mv"><span>Estado</span><b style="color:${b.blocked ? 'var(--bad)' : venc ? 'var(--warn)' : 'var(--acc)'}">${b.blocked ? 'Bloqueado' : venc ? 'Vencido' : 'Activo'}</b></div><div class="mv"><span>Vence</span><b>${exp ? fmtDay(exp) : 'Nunca'}</b></div></div>
-  <h3>Extender acceso</h3><div class="gap">${[1, 3, 6, 12].map(m => `<button class="btn sm sec" onclick="bizSet('${id}',{expires:addMonths(Math.max(Date.now(),${exp || 0}),${m})},'Acceso extendido ${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}');closeSheet()">+${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}</button>`).join('')}<button class="btn sm sec" onclick="bizSet('${id}',{expires:0},'Sin vencimiento');closeSheet()">Sin vencimiento</button></div>
+  const b = lic.biz[id] || {}; const exp = bizExp(b), venc = exp && exp < Date.now();
+  openSheet(`<h2>${esc(b.name || 'Negocio')}</h2><div class="sub">Creado ${b.created ? fmtDay(b.created) : '—'}${b.license ? ' · código ' + fmtCode(b.license) : b.trial ? ' · prueba gratis de 7 días' : ' · sin código (anterior a las licencias)'}</div>
+  <div class="card" style="margin-top:12px"><div class="mv"><span>Estado</span><b style="color:${b.blocked ? 'var(--bad)' : venc ? 'var(--warn)' : 'var(--acc)'}">${b.blocked ? 'Bloqueado' : venc ? (b.trial ? 'Prueba terminada' : 'Vencido') : b.trial ? 'En prueba' : 'Activo'}</b></div><div class="mv"><span>Vence</span><b>${exp ? fmtDay(exp) : 'Nunca'}</b></div></div>
+  <h3>Extender acceso</h3><div class="gap">${[1, 3, 6, 12].map(m => `<button class="btn sm sec" onclick="bizSet('${id}',{trial:false,expires:addMonths(Math.max(Date.now(),${exp || 0}),${m})},'Acceso extendido ${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}');closeSheet()">+${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}</button>`).join('')}<button class="btn sm sec" onclick="bizSet('${id}',{trial:false,expires:0},'Sin vencimiento');closeSheet()">Sin vencimiento</button></div>
   <div class="sheet-actions">${id !== me.u ? (b.blocked ? `<button class="btn" onclick="bizSet('${id}',{blocked:false},'Negocio desbloqueado');closeSheet()">Desbloquear</button>` : `<button class="btn bad" onclick="bizSet('${id}',{blocked:true},'Negocio bloqueado');closeSheet()">Bloquear acceso</button>`) : ''}<button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
 function fillLicenses(){
   if (!$("#mx")) return;
   const codes = Object.entries(lic.list).sort((a, b) => b[1].createdAt - a[1].createdAt);
   const bizs = Object.entries(lic.biz).sort((a, b) => num(b[1].created) - num(a[1].created));
-  const st = b => b.blocked ? ['Bloqueado', 'out'] : (num(b.expires) && num(b.expires) < Date.now()) ? ['Vencido', 'low'] : ['Activo', 'ok'];
-  $('#mx').innerHTML = `<p class="note" style="margin-top:-4px">Solo tú ves esta sección. Sin un código tuyo nadie puede crear un negocio en el sistema, aunque descargue la app o abra la página.</p>
+  const st = b => b.blocked ? ['Bloqueado', 'out'] : (bizExp(b) && bizExp(b) < Date.now()) ? [b.trial ? 'Prueba terminada' : 'Vencido', 'low'] : b.trial ? ['En prueba', 'low'] : ['Activo', 'ok'];
+  $('#mx').innerHTML = `<p class="note" style="margin-top:-4px">Solo tú ves esta sección. Los negocios nuevos tienen 7 días de prueba gratis; después solo siguen con un código tuyo (o si les extiendes el acceso aquí).</p>
   <button class="btn full" onclick="licForm()">+ Generar código de activación</button>
-  <h3>Negocios (${bizs.length})</h3><div class="list">${bizs.map(([id, b]) => { const [t, c] = st(b); return `<div class="item tap row" onclick="bizMenu('${id}')"><div class="grow"><div class="name">${esc(b.name || '—')}${id === me.u ? ' <span class="pill">tú</span>' : ''}</div><div class="sub">${b.expires ? 'Vence ' + fmtDay(b.expires) : 'Sin vencimiento'}${b.created ? ' · desde ' + fmtDay(b.created) : ''}</div></div><span class="pill ${c}">${t}</span></div>`; }).join('') || '<div class="empty">Aún no hay negocios.</div>'}</div>
+  <h3>Negocios (${bizs.length})</h3><div class="list">${bizs.map(([id, b]) => { const [t, c] = st(b); return `<div class="item tap row" onclick="bizMenu('${id}')"><div class="grow"><div class="name">${esc(b.name || '—')}${id === me.u ? ' <span class="pill">tú</span>' : ''}</div><div class="sub">${bizExp(b) ? (b.trial ? 'Prueba hasta ' : 'Vence ') + fmtDay(bizExp(b)) : 'Sin vencimiento'}${b.created ? ' · desde ' + fmtDay(b.created) : ''}</div></div><span class="pill ${c}">${t}</span></div>`; }).join('') || '<div class="empty">Aún no hay negocios.</div>'}</div>
   <h3>Códigos (${codes.length})</h3><div class="list">${codes.map(([code, d]) => `<div class="item tap row" onclick="showLic('${code}')"><div class="grow"><div class="name" style="letter-spacing:1px">${fmtCode(code)}</div><div class="sub">${esc(d.note || '')}${d.expires ? ' · vence ' + fmtDay(d.expires) : ''}</div></div><span class="pill ${d.used ? '' : 'ok'}">${d.used ? 'Usado' : 'Libre'}</span></div>`).join('') || '<div class="empty">Genera un código para cada cliente nuevo.</div>'}</div>`;
 }
 
@@ -533,9 +553,12 @@ function showLogin(msg){
   $('#lgBtn').disabled = !loaded;
 }
 function authScreen(){
-  const setup = CLOUD() ? !!ui.setupMode : (loaded && !Object.keys(S.users).length);
+  const renew = CLOUD() && !!ui.renew;
+  const setup = !renew && (CLOUD() ? !!ui.setupMode : (loaded && !Object.keys(S.users).length));
   $('#setupForm').style.display = setup ? 'block' : 'none';
-  document.querySelector('#login form.lg-card:not(#setupForm)').style.display = setup ? 'none' : 'block';
+  $('#renewForm').style.display = renew ? 'block' : 'none';
+  document.querySelector('#login form.lg-card:not(#setupForm):not(#renewForm)').style.display = setup || renew ? 'none' : 'block';
+  if (renew){ $('#rnTitle').textContent = ui.renew.title; $('#rnNote').textContent = ui.renew.note; }
   const c = CLOUD();
   $('#lgUl').textContent = c ? 'Correo' : 'Usuario'; $('#lgU').type = c ? 'email' : 'text';
   $('#suUl').textContent = c ? 'Correo' : 'Usuario'; $('#seUl').textContent = c ? 'Correo' : 'Usuario';
@@ -544,7 +567,7 @@ function authScreen(){
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
   $('#suLw').style.display = c ? 'block' : 'none';
-  if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación del Sistema de Ventas para mi negocio.'); $('#lgWa').href = href; $('#lgWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
+  if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación del Sistema de Ventas para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
 async function doSetup(ev){
@@ -569,15 +592,23 @@ async function doSetup(ev){
     try {
       msg('Creando tu cuenta…'); await applyPersistence(keepPref());
       const code = normCode($('#suL').value);
-      if (code.length < 8){ pendingSetup = false; $('#suBtn').disabled = false; return msg('Escribe el código de activación.' + contactTxt()); }
+      // Sin código: prueba gratis de 7 días. Con código: licencia.
+      const trial = !code;
+      if (!trial && code.length < 8){ pendingSetup = false; $('#suBtn').disabled = false; return msg('El código de activación está incompleto. Déjalo vacío para empezar la prueba gratis.'); }
       const cred = await FB.auth.createUserWithEmailAndPassword(au, ap);
       const id = cred.user.uid; bizId = id; DB = fbWrap(FB.fs, id);
-      let L = null; try { const ld = await FB.fs.doc('licenses/' + code).get(); L = ld.exists ? ld.data() : null; } catch(e){}
-      const bad = !L ? 'Ese código de activación no existe.' : L.used ? 'Ese código ya fue usado.' : null;
-      if (bad){ try { await cred.user.delete(); } catch(e){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg(bad + contactTxt()); }
+      let L = null;
+      if (!trial){
+        try { const ld = await FB.fs.doc('licenses/' + code).get(); L = ld.exists ? ld.data() : null; } catch(e){}
+        const bad = !L ? 'Ese código de activación no existe.' : L.used ? 'Ese código ya fue usado.' : (num(L.expires) && num(L.expires) < Date.now()) ? 'Ese código ya venció.' : null;
+        if (bad){ try { await cred.user.delete(); } catch(e){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg(bad + contactTxt()); }
+      }
       const b = FB.fs.batch(), now = Date.now();
-      b.set(FB.fs.doc('biz/' + id), {name:biz, owner:id, created:now, license:code, expires:num(L.expires) || 0});
-      b.update(FB.fs.doc('licenses/' + code), {used:true, biz:id, usedAt:now, email:au, bizName:biz});
+      if (trial) b.set(FB.fs.doc('biz/' + id), {name:biz, owner:id, created:now, trial:true, trialStart:firebase.firestore.FieldValue.serverTimestamp()});
+      else {
+        b.set(FB.fs.doc('biz/' + id), {name:biz, owner:id, created:now, license:code, expires:num(L.expires) || 0});
+        b.update(FB.fs.doc('licenses/' + code), {used:true, biz:id, usedAt:now, email:au, bizName:biz});
+      }
       b.set(FB.fs.doc('biz/' + id + '/members/' + id), {name:an, role:'admin', email:au, created:now});
       b.set(FB.fs.doc('users/' + id), {biz:id, role:'admin', name:an, email:au});
       try { await b.commit(); } catch(e){ try { await cred.user.delete(); } catch(e2){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg('No se pudo activar con ese código.' + contactTxt()); }
@@ -585,7 +616,7 @@ async function doSetup(ev){
       if (wantE){ msg('Creando el usuario del empleado…'); try { await fbCreateMember(eu, ep, en, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
-      toast('¡Listo! Bienvenido, ' + an);
+      toast(trial ? '¡Listo! Tienes 7 días de prueba gratis, ' + an : '¡Listo! Bienvenido, ' + an);
     } catch(e){ pendingSetup = false; msg(fbMsg(e)); }
     $('#suBtn').disabled = false;
     return;
@@ -597,6 +628,44 @@ async function doSetup(ev){
   $('#suBtn').disabled = false;
   setMe(au, admin);
   toast('¡Listo! Bienvenido, ' + an);
+}
+// Activa o renueva el negocio de quien lo creó gastando un código. Devuelve un mensaje de error o null.
+async function activateCode(raw){
+  const u = FB.auth.currentUser, code = normCode(raw);
+  if (!u) return 'Vuelve a iniciar sesión';
+  if (code.length < 8) return 'Escribe el código de activación.' + contactTxt();
+  let L = null; try { const ld = await FB.fs.doc('licenses/' + code).get(); L = ld.exists ? ld.data() : null; } catch(e){}
+  if (!L) return 'Ese código de activación no existe.' + contactTxt();
+  if (L.used) return 'Ese código ya fue usado.' + contactTxt();
+  if (num(L.expires) && num(L.expires) < Date.now()) return 'Ese código ya venció.' + contactTxt();
+  const b = FB.fs.batch(), now = Date.now();
+  b.update(FB.fs.doc('biz/' + u.uid), {license:code, expires:num(L.expires) || 0, trial:false});
+  b.update(FB.fs.doc('licenses/' + code), {used:true, biz:u.uid, usedAt:now, email:(u.email || '').toLowerCase(), bizName:(bizInfo || (ui.renew || {}).biz || {}).name || ''});
+  try { await b.commit(); } catch(e){ return 'No se pudo activar con ese código.' + contactTxt(); }
+  return null;
+}
+async function doRenew(ev){
+  if (ev) ev.preventDefault();
+  $('#rnBtn').disabled = true; $('#rnMsg').textContent = 'Activando…';
+  const err = await activateCode($('#rnL').value);
+  $('#rnBtn').disabled = false; $('#rnMsg').textContent = err || '';
+  if (!err){ ui.renew = null; $('#rnL').value = ''; await onFbUser(FB.auth.currentUser); toast('¡Licencia activada!'); }
+}
+function renewSheet(){
+  openSheet(`<h2>Activar licencia</h2><p class="note" style="margin-top:0">Escribe el código de activación que te dieron. Tus datos se mantienen.</p>
+  <label>Código de activación</label><input id="rsL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px" autofocus>
+  <div id="rsMsg" class="note" style="color:var(--warn)"></div>
+  ${window.APP_WA ? `<a class="btn wa full" style="margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, quiero un código de activación del Sistema de Ventas para mi negocio.')}">Pedir un código por WhatsApp</a>` : ''}
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="rsBtn" onclick="(async()=>{$('#rsBtn').disabled=true;const e=await activateCode($('#rsL').value);$('#rsBtn').disabled=false;if(e){$('#rsMsg').textContent=e;return;}closeSheet();const d=await FB.fs.doc('biz/'+bizId).get();bizInfo=d.data();render();toast('¡Licencia activada!');})()">Activar</button></div>`);
+}
+// Aviso de la prueba gratis (o de una licencia que vence pronto) para el administrador que creó el negocio.
+function trialBox(){
+  if (!CLOUD() || !bizInfo || !me || me.u !== bizId) return '';
+  const exp = bizExp(bizInfo); if (!exp) return '';
+  const days = Math.max(0, Math.ceil((exp - Date.now()) / 864e5));
+  if (!bizInfo.trial && days > 7) return '';
+  const t = bizInfo.trial ? `Prueba gratis: te ${days === 1 ? 'queda 1 día' : 'quedan ' + days + ' días'} (hasta el ${fmtDay(exp)}).` : `Tu licencia vence el ${fmtDay(exp)}.`;
+  return `<div class="warnbox">${t} <a href="#" onclick="renewSheet();return false"><b>Activar licencia</b></a></div>`;
 }
 const loginErr = m => { $('#lgMsg').textContent = m || 'Usuario o contraseña incorrectos'; $('#lgP').value = ''; $('#lgP').focus(); };
 async function doLogin(ev){
@@ -763,6 +832,7 @@ VIEWS.inicio = {
     if (isAdmin() && S.users[me.u] && S.users[me.u].def) h += `<div class="warnbox">Estás usando la contraseña inicial (admin/admin). <a href="#" onclick="passForm('${me.u}');return false">Cámbiala ahora →</a></div>`;
     if (ratesStale()) h += `<div class="warnbox">${cfg.bcv ? 'La tasa no se ha actualizado en más de un día.' : 'Aún no hay tasa del dólar.'} <a href="#" onclick="go('tasas');return false">Actualizar tasa →</a></div>`;
     if (backend === 'local') h += `<div class="warnbox">${LOCAL_TXT()}</div>`;
+    h += trialBox();
     if (readOnly) h += `<div class="warnbox">Estás en modo solo lectura: puedes ver los datos pero no cambiarlos.</div>`;
     h += `<h2>Hoy</h2>
     <div class="grid2">
@@ -1967,6 +2037,7 @@ VIEWS.panel = {
     if (S.users[me.u] && S.users[me.u].def) al += `<div class="warnbox">Estás usando la contraseña inicial (admin/admin). <a href="#" onclick="passForm('${me.u}');return false">Cámbiala ahora →</a></div>`;
     if (ratesStale()) al += `<div class="warnbox">La tasa lleva más de un día sin actualizarse. <a href="#" onclick="go('tasas');return false">Ver tasas →</a></div>`;
     if (backend === 'local') al += `<div class="warnbox">${LOCAL_TXT()}</div>`;
+    al += trialBox();
     $('#dAlerts').innerHTML = al;
     const tile = (k, v, s, cls = '', click = '') => `<div class="card stat" ${click ? `style="cursor:pointer" onclick="${click}"` : ''}><div class="k">${k}</div><div class="v ${cls}" style="font-size:20px">${v}</div><div class="s">${s}</div></div>`;
     const debt = totalDebt(), pay = totalPayable(), low = products().filter(p => p.track !== false && stockState(p) !== 'ok').length;

@@ -11,17 +11,29 @@ service cloud.firestore {
     function bizPath(b) { return /databases/$(database)/documents/biz/$(b); }
     function licPath(c) { return /databases/$(database)/documents/licenses/$(c); }
     function memberDoc(b) { return /databases/$(database)/documents/biz/$(b)/members/$(request.auth.uid); }
+    // Prueba gratis: 7 días contados con la hora del servidor (no se puede trucar con el reloj del equipo).
+    function trialOk(d) { return d.get('trial', false) == true && request.time < d.trialStart + duration.value(7, 'd'); }
+    function licOk(d) { return d.get('trial', false) == false && (d.get('expires', 0) == 0 || d.get('expires', 0) > request.time.toMillis()); }
     function bizOk(b) {
       let d = get(bizPath(b)).data;
-      return d.get('blocked', false) == false && (d.get('expires', 0) == 0 || d.get('expires', 0) > request.time.toMillis());
+      return d.get('blocked', false) == false && (licOk(d) || trialOk(d));
     }
     function member(b) { return signed() && exists(memberDoc(b)) && bizOk(b); }
     function admin(b) { return member(b) && get(memberDoc(b)).data.role == 'admin'; }
     function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
     function validRole(r) { return r in ['admin', 'vendedor']; }
     function shortStr(v, max) { return v is string && v.size() <= max; }
-    // El negocio existe (o queda creado en esta misma operación) con un código de activación.
-    function licensedAfter(b) { return existsAfter(bizPath(b)) && getAfter(bizPath(b)).data.get('license', '') != ''; }
+    // El negocio existe (o queda creado en esta misma operación) con un código de activación o en prueba.
+    function licensedAfter(b) { return existsAfter(bizPath(b)) && (getAfter(bizPath(b)).data.get('license', '') != '' || getAfter(bizPath(b)).data.get('trial', false) == true); }
+    // Gastar un código de activación sin usar en el negocio b dentro de esta misma operación.
+    function spendsLicense(b, code) {
+      return code is string && code != ''
+        && exists(licPath(code))
+        && get(licPath(code)).data.used == false
+        && getAfter(licPath(code)).data.used == true
+        && getAfter(licPath(code)).data.biz == b
+        && request.resource.data.expires == get(licPath(code)).data.get('expires', 0);
+    }
 
     // Perfil de cada cuenta: a qué negocio pertenece y con qué rol.
     match /users/{uid} {
@@ -58,19 +70,26 @@ service cloud.firestore {
 
     match /biz/{b} {
       allow read: if (signed() && exists(memberDoc(b))) || owner();
-      // Un negocio solo se crea gastando un código de activación válido y sin usar, en la misma operación.
+      // Un negocio se crea gastando un código de activación válido y sin usar (en la misma operación),
+      // o como prueba gratis de 7 días que empieza a la hora del servidor.
       allow create: if signed() && b == request.auth.uid
-        && request.resource.data.keys().hasOnly(['name', 'owner', 'created', 'license', 'expires'])
         && request.resource.data.owner == b
         && shortStr(request.resource.data.name, 100)
-        && request.resource.data.license is string
-        && exists(licPath(request.resource.data.license))
-        && get(licPath(request.resource.data.license)).data.used == false
-        && getAfter(licPath(request.resource.data.license)).data.used == true
-        && getAfter(licPath(request.resource.data.license)).data.biz == b
-        && request.resource.data.expires == get(licPath(request.resource.data.license)).data.get('expires', 0);
-      // Bloquear, desbloquear o cambiar el vencimiento: solo el dueño del sistema.
-      allow update, delete: if owner();
+        && ((request.resource.data.keys().hasOnly(['name', 'owner', 'created', 'license', 'expires'])
+             && spendsLicense(b, request.resource.data.license))
+          || (request.resource.data.keys().hasOnly(['name', 'owner', 'created', 'trial', 'trialStart'])
+             && request.resource.data.trial == true
+             && request.resource.data.trialStart == request.time));
+      // El administrador que creó el negocio puede activarlo o renovarlo gastando un código nuevo
+      // (aunque la prueba o la licencia hayan vencido). Nada más: ni desbloquearse ni alargarse a mano.
+      allow update: if owner() || (signed() && b == request.auth.uid
+        && exists(memberDoc(b)) && get(memberDoc(b)).data.role == 'admin'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['license', 'expires', 'trial'])
+        && request.resource.data.license != resource.data.get('license', '')
+        && request.resource.data.get('trial', false) == false
+        && spendsLicense(b, request.resource.data.license));
+      // Bloquear, desbloquear o cambiar el vencimiento a mano: solo el dueño del sistema.
+      allow delete: if owner();
 
       match /members/{uid} {
         function validMember() {
