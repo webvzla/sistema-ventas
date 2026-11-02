@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,3 +50,13 @@ jobs:
           path: web
       - if: steps.commit.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
+      # La misma tasa en stocksoft.web.app (la app la lee de /app/tasas.json).
+      - if: steps.commit.outputs.changed == 'true' && env.SA != ''
+        run: bash scripts/build-site.sh
+      - if: steps.commit.outputs.changed == 'true' && env.SA != ''
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: sistema-ventas-e085f
+          channelId: live

@@ -2,56 +2,87 @@ rules_version = '2';
 // Reglas de seguridad del Sistema de Ventas.
 // Cada negocio está en biz/{id}. Solo sus miembros pueden ver sus datos.
 // Los vendedores pueden vender y cobrar, pero no modificar inventario, precios, proveedores, gastos ni usuarios.
+// Ningún negocio existe sin un código de activación válido, y nadie puede tocar datos de otro negocio.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signed() { return request.auth != null; }
     // Dueño del sistema (genera los códigos de activación y administra las licencias).
     function owner() { return signed() && request.auth.uid == '3Wuh1CLsC2XeIS58uXkRSlQIXHJ2'; }
+    function bizPath(b) { return /databases/$(database)/documents/biz/$(b); }
+    function licPath(c) { return /databases/$(database)/documents/licenses/$(c); }
     function memberDoc(b) { return /databases/$(database)/documents/biz/$(b)/members/$(request.auth.uid); }
     function bizOk(b) {
-      let d = get(/databases/$(database)/documents/biz/$(b)).data;
+      let d = get(bizPath(b)).data;
       return d.get('blocked', false) == false && (d.get('expires', 0) == 0 || d.get('expires', 0) > request.time.toMillis());
     }
     function member(b) { return signed() && exists(memberDoc(b)) && bizOk(b); }
     function admin(b) { return member(b) && get(memberDoc(b)).data.role == 'admin'; }
     function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function validRole(r) { return r in ['admin', 'vendedor']; }
+    function shortStr(v, max) { return v is string && v.size() <= max; }
+    // El negocio existe (o queda creado en esta misma operación) con un código de activación.
+    function licensedAfter(b) { return existsAfter(bizPath(b)) && getAfter(bizPath(b)).data.get('license', '') != ''; }
 
     // Perfil de cada cuenta: a qué negocio pertenece y con qué rol.
     match /users/{uid} {
+      function validProfile() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['biz', 'role', 'name', 'email']) && d.biz is string
+          && validRole(d.role) && shortStr(d.get('name', ''), 100) && shortStr(d.get('email', ''), 200);
+      }
       allow read: if signed() && (request.auth.uid == uid || admin(resource.data.biz));
-      allow create: if signed() && (
-        (request.auth.uid == uid && request.resource.data.biz == uid && request.resource.data.role == 'admin') ||
+      allow create: if signed() && validProfile() && (
+        // Quien activa un negocio nuevo: solo junto con su negocio con licencia.
+        (request.auth.uid == uid && request.resource.data.biz == uid && request.resource.data.role == 'admin' && licensedAfter(uid)) ||
         admin(request.resource.data.biz));
-      allow update: if signed() && admin(resource.data.biz) && request.resource.data.biz == resource.data.biz;
+      allow update: if signed() && validProfile() && admin(resource.data.biz) && request.resource.data.biz == resource.data.biz;
       allow delete: if signed() && admin(resource.data.biz);
     }
 
     // Códigos de activación: los crea el dueño; quien se registra solo puede marcar como usado el suyo.
     match /licenses/{code} {
-      allow get: if signed();
+      // Un código ya usado solo lo ven el dueño y el negocio que lo usó (no se filtran correos ni nombres).
+      allow get: if owner() || (signed() && (resource.data.used == false || resource.data.get('biz', '') == request.auth.uid));
       allow list, create, delete: if owner();
       allow update: if owner() || (signed()
         && resource.data.used == false
+        && (resource.data.get('expires', 0) == 0 || resource.data.expires > request.time.toMillis())
         && request.resource.data.used == true
         && request.resource.data.biz == request.auth.uid
+        && request.resource.data.email is string
+        && request.resource.data.email.lower() == request.auth.token.email.lower()
+        && shortStr(request.resource.data.get('bizName', ''), 100)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'biz', 'usedAt', 'email', 'bizName'])
-        && getAfter(/databases/$(database)/documents/biz/$(request.auth.uid)).data.license == code);
+        && getAfter(bizPath(request.auth.uid)).data.license == code);
     }
 
     match /biz/{b} {
       allow read: if (signed() && exists(memberDoc(b))) || owner();
+      // Un negocio solo se crea gastando un código de activación válido y sin usar, en la misma operación.
       allow create: if signed() && b == request.auth.uid
         && request.resource.data.keys().hasOnly(['name', 'owner', 'created', 'license', 'expires'])
-        && exists(/databases/$(database)/documents/licenses/$(request.resource.data.license))
-        && get(/databases/$(database)/documents/licenses/$(request.resource.data.license)).data.used == false
-        && getAfter(/databases/$(database)/documents/licenses/$(request.resource.data.license)).data.biz == b
-        && request.resource.data.expires == get(/databases/$(database)/documents/licenses/$(request.resource.data.license)).data.get('expires', 0);
-      allow update: if owner();
+        && request.resource.data.owner == b
+        && shortStr(request.resource.data.name, 100)
+        && request.resource.data.license is string
+        && exists(licPath(request.resource.data.license))
+        && get(licPath(request.resource.data.license)).data.used == false
+        && getAfter(licPath(request.resource.data.license)).data.used == true
+        && getAfter(licPath(request.resource.data.license)).data.biz == b
+        && request.resource.data.expires == get(licPath(request.resource.data.license)).data.get('expires', 0);
+      // Bloquear, desbloquear o cambiar el vencimiento: solo el dueño del sistema.
+      allow update, delete: if owner();
 
       match /members/{uid} {
+        function validMember() {
+          let d = request.resource.data;
+          return validRole(d.role) && shortStr(d.get('name', ''), 100) && shortStr(d.get('email', ''), 200);
+        }
         allow read: if member(b);
-        allow create: if (signed() && b == request.auth.uid && uid == request.auth.uid && request.resource.data.role == 'admin') || admin(b);
-        allow update, delete: if admin(b);
+        allow create: if validMember() && (
+          (signed() && b == request.auth.uid && uid == request.auth.uid && request.resource.data.role == 'admin' && licensedAfter(b)) ||
+          admin(b));
+        allow update: if validMember() && admin(b);
+        allow delete: if admin(b);
       }
       match /config/{d} {
         allow read: if member(b);
@@ -76,7 +107,8 @@ service cloud.firestore {
       // Registro de actividad: todos escriben, solo el administrador lo lee.
       match /log/{d} { allow create: if member(b) && request.resource.data.uid == request.auth.uid; allow read, delete: if admin(b); }
       // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
-      match /{col}/{d} { allow read, write: if admin(b); }
+      // (Los miembros quedan fuera: su rol solo se cambia con las reglas de members, que lo validan.)
+      match /{col}/{d} { allow read, write: if col != 'members' && admin(b); }
     }
   }
 }

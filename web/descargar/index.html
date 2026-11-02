@@ -9,7 +9,7 @@
 <link rel="icon" href="../icon.png">
 <meta property="og:title" content="Sistema de Ventas">
 <meta property="og:description" content="Inventario, ventas y caja en dólares y bolívares, con la tasa BCV del día.">
-<meta property="og:image" content="https://webvzla.github.io/sistema-ventas/descargar/app-vender.png">
+<meta property="og:image" content="https://stocksoft.web.app/app-vender.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -170,7 +170,7 @@ footer a{color:var(--ink);font-weight:600}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
             Descargar Sistema de Ventas
           </a>
-          <a class="btn btn-line" href="https://webvzla.github.io/sistema-ventas/">Usar en el navegador</a>
+          <a class="btn btn-line" href="https://stocksoft.web.app/app/">Usar en el navegador</a>
         </div>
         <p class="hero-note">Para Windows 10 y 11, y en cualquier móvil desde el navegador. Necesitas un código de activación.</p>
       </div>
@@ -248,7 +248,7 @@ footer a{color:var(--ink);font-weight:600}
           Descargar Sistema de Ventas
         </a>
         <p class="dl-note">Si Windows muestra "Windows protegió su PC", pulsa "Más información" y luego "Ejecutar de todos modos". Una vez instalado, el programa se actualiza solo.</p>
-        <p class="dl-alt">¿Desde el móvil? <a href="https://webvzla.github.io/sistema-ventas/">Ábrelo en el navegador</a> y añádelo a tu pantalla de inicio.</p>
+        <p class="dl-alt">¿Desde el móvil? <a href="https://stocksoft.web.app/app/">Ábrelo en el navegador</a> y añádelo a tu pantalla de inicio.</p>
       </div>
       <div class="req">
         <h3>Requisitos</h3>
@@ -291,7 +291,7 @@ footer a{color:var(--ink);font-weight:600}
   const total = 10.40;
   const nf = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
   try {
-    const r = await fetch('https://webvzla.github.io/sistema-ventas/tasas.json?t=' + Date.now(), {cache:'no-store'});
+    const r = await fetch('https://stocksoft.web.app/app/tasas.json?t=' + Date.now(), {cache:'no-store'});
     const j = await r.json();
     if (!(j.usd > 0)) return;
     document.getElementById('tBs').textContent = nf.format(total * j.usd);

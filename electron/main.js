@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const REMOTE = 'https://webvzla.github.io/sistema-ventas/';
+const REMOTE = 'https://stocksoft.web.app/app/';
 let autoUpdater = null; try { autoUpdater = require('electron-updater').autoUpdater; } catch (e) {}
 
 let win = null;

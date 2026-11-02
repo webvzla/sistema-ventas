@@ -6,5 +6,5 @@ cp -r web/. public/app/
 rm -rf public/app/descargar
 cp web/descargar/index.html public/index.html
 cp web/descargar/app-vender.png web/icon.png public/
-sed -i 's#\.\./icon\.png#icon.png#g; s#https://webvzla\.github\.io/sistema-ventas/descargar/#https://stocksoft.web.app/#g; s#https://webvzla\.github\.io/sistema-ventas/"#/app/"#g' public/index.html
+sed -i 's#\.\./icon\.png#icon.png#g; s#https://stocksoft\.web\.app/app/"#/app/"#g' public/index.html
 echo "Sitio listo en public/"

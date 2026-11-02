@@ -227,6 +227,11 @@ async function putCfg(data){
 async function initData(){
   FB = fbInit();
   if (FB){ backend = 'cloud'; loaded = true; authScreen(); FB.auth.onAuthStateChanged(onFbUser); return; }
+  // La versión publicada solo funciona con la nube y un código de activación: si la nube no arranca, no hay modo sin licencia.
+  if (window.FIREBASE_CONFIG || /stocksoft\.web\.app$|github\.io$/.test(location.hostname) || window.desktop){
+    document.body.innerHTML = '<div style="max-width:420px;margin:15vh auto;padding:24px;text-align:center;font-family:system-ui;color:#e5e7eb"><h2>No se pudo conectar</h2><p>Revisa tu conexión a internet y vuelve a intentarlo.</p><button onclick="location.reload()" style="padding:10px 18px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-size:16px">Reintentar</button></div>';
+    return;
+  }
   let db = null;
   try { if (window.claude && typeof claude.use === 'function') db = await claude.use('db'); } catch(e){ db = null; }
   try { if (window.claude && typeof claude.use === 'function') DL = await claude.use('downloads'); } catch(e){ DL = null; }
@@ -332,7 +337,7 @@ function fbMsg(e){
   if (/too-many-requests/.test(c)) return 'Demasiados intentos. Espera unos minutos';
   if (/network-request-failed|unavailable/.test(c)) return 'Sin conexión a internet';
   if (/email-already-in-use/.test(c)) return 'Ese correo ya tiene una cuenta';
-  if (/weak-password/.test(c)) return 'La contraseña debe tener al menos 6 caracteres';
+  if (/weak-password|password-does-not-meet-requirements/.test(c)) return 'La contraseña debe tener al menos 8 caracteres, con letras y números';
   if (/invalid-email/.test(c)) return 'El correo no es válido';
   if (/permission-denied/.test(c)) return 'No tienes permiso para hacer eso';
   if (/requires-recent-login/.test(c)) return 'Por seguridad, cierra sesión y vuelve a entrar';
@@ -366,8 +371,9 @@ async function onFbUser(u){
   if (!prof || !prof.biz){ ui.authMsg = 'Esta cuenta no pertenece a ningún negocio. Pide al administrador que te añada.'; await FB.auth.signOut(); return; }
   try {
     const bd = await FB.fs.doc('biz/' + prof.biz).get(); const b = bd.exists ? bd.data() : null;
-    if (b && b.blocked){ ui.authMsg = 'El acceso de este negocio está suspendido.' + contactTxt(); await FB.auth.signOut(); return; }
-    if (b && num(b.expires) && num(b.expires) < Date.now()){ ui.authMsg = 'La licencia de este negocio venció el ' + fmtDay(b.expires) + '.' + contactTxt(); await FB.auth.signOut(); return; }
+    if (!b){ ui.authMsg = 'Esta cuenta no tiene un negocio activado con un código válido.' + contactTxt(); await FB.auth.signOut(); return; }
+    if (b.blocked){ ui.authMsg = 'El acceso de este negocio está suspendido.' + contactTxt(); await FB.auth.signOut(); return; }
+    if (num(b.expires) && num(b.expires) < Date.now()){ ui.authMsg = 'La licencia de este negocio venció el ' + fmtDay(b.expires) + '.' + contactTxt(); await FB.auth.signOut(); return; }
   } catch(e){ console.warn('biz', e); }
   bizId = prof.biz; DB = fbWrap(FB.fs, bizId);
   me = {u:u.uid, name:prof.name || u.email, role:prof.role === 'admin' ? 'admin' : 'vendedor', email:u.email};
@@ -389,7 +395,7 @@ async function fbCreateMember(email, pass, name, role){
 }
 
 /* ============ Programa de PC: tasa BCV automática y copias diarias ============ */
-const RATES_URL = location.protocol === 'https:' && /github\.io$/.test(location.hostname) ? 'tasas.json' : 'https://webvzla.github.io/sistema-ventas/tasas.json';
+const RATES_URL = location.protocol === 'https:' ? 'tasas.json' : 'https://stocksoft.web.app/app/tasas.json';
 async function fetchRates(){
   if (window.desktop){ try { const r = await window.desktop.bcv(); if (r && r.usd) return {...r, src:'bcv.org.ve'}; } catch(e){ console.warn('BCV', e); } }
   try {
@@ -483,7 +489,7 @@ async function saveLic(){
   const d = {used:false, note:$('#lcN').value.trim(), createdAt:Date.now(), expires:m ? addMonths(Date.now(), m) : 0, months:m};
   try { await FB.fs.doc('licenses/' + code).set(d); showLic(code, d); } catch(e){ toast(fbMsg(e)); }
 }
-function licMsg(code){ return `Tu código de activación del Sistema de Ventas es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o https://webvzla.github.io/sistema-ventas/\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
+function licMsg(code){ return `Tu código de activación del Sistema de Ventas es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o entra en https://stocksoft.web.app/ y toca "Usar en el navegador"\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
 function showLic(code, d){
   d = d || lic.list[code] || {};
   openSheet(`<h2>Código de activación</h2>
@@ -548,7 +554,7 @@ async function doSetup(ev){
   const biz = $('#suB').value.trim(), an = $('#suN').value.trim(), au = $('#suU').value.trim().toLowerCase(), ap = $('#suP').value;
   const wantE = $('#suE').checked, en = $('#seN').value.trim(), eu = $('#seU').value.trim().toLowerCase(), ep = $('#seP').value;
   const okU = u => CLOUD() ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u) : /^[a-z0-9._-]{2,30}$/.test(u);
-  const minP = CLOUD() ? 6 : 4;
+  const minP = CLOUD() ? 8 : 4;
   if (!biz) return msg('Pon el nombre del negocio');
   if (!an || !okU(au)) return msg(CLOUD() ? 'Pon tu nombre y un correo válido' : 'Pon tu nombre y un usuario (solo letras, números, punto o guion)');
   if (ap.length < minP) return msg('Tu contraseña debe tener al menos ' + minP + ' caracteres');
@@ -672,7 +678,7 @@ function passForm(u){
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="savePass('${u}')">Guardar</button></div>`);
 }
 async function savePass(u){
-  const p1 = $('#pw1').value, p2 = $('#pw2').value, minP = CLOUD() ? 6 : 4;
+  const p1 = $('#pw1').value, p2 = $('#pw2').value, minP = CLOUD() ? 8 : 4;
   if (p1.length < minP){ toast('Usa al menos ' + minP + ' caracteres'); return; }
   if (p1 !== p2){ toast('Las contraseñas no coinciden'); return; }
   if (CLOUD()){
@@ -706,7 +712,7 @@ async function saveUser(){
   const name = $('#nuN').value.trim(), u = $('#nuU').value.trim().toLowerCase(), p = $('#nuP').value;
   if (CLOUD()){
     if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u)){ toast('Pon nombre y un correo válido'); return; }
-    if (p.length < 6){ toast('La contraseña debe tener al menos 6 caracteres'); return; }
+    if (p.length < 8){ toast('La contraseña debe tener al menos 8 caracteres'); return; }
     $('#nuBtn').disabled = true;
     try { await fbCreateMember(u, p, name, $('#nuR').value); logA('admin', 'Usuario creado', name + ' · ' + u + ' · ' + $('#nuR').value); closeSheet(); toast('Usuario creado. Ya puede entrar con ' + u); }
     catch(e){ toast(fbMsg(e)); $('#nuBtn').disabled = false; }
