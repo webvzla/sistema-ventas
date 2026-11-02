@@ -1,6 +1,6 @@
 {
-  "name": "Sistema de Ventas",
-  "short_name": "Ventas",
+  "name": "StockSoft",
+  "short_name": "StockSoft",
   "description": "Inventario, ventas, clientes, proveedores y tasas BCV",
   "start_url": "./",
   "scope": "./",

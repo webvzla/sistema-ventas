@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sistema de Ventas</title>
+<title>StockSoft</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.webmanifest">
@@ -552,7 +552,7 @@ async function saveLic(){
   const d = {used:false, note:$('#lcN').value.trim(), createdAt:Date.now(), expires:m ? addMonths(Date.now(), m) : 0, months:m};
   try { await FB.fs.doc('licenses/' + code).set(d); showLic(code, d); } catch(e){ toast(fbMsg(e)); }
 }
-function licMsg(code){ return `Tu código de activación del Sistema de Ventas es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o entra en https://stocksoft.web.app/ y toca "Usar en el navegador"\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
+function licMsg(code){ return `Tu código de activación de StockSoft es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o entra en https://stocksoft.web.app/ y toca "Usar en el navegador"\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
 function showLic(code, d){
   d = d || lic.list[code] || {};
   openSheet(`<h2>Código de activación</h2>
@@ -610,7 +610,7 @@ function authScreen(){
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
   $('#suLw').style.display = c ? 'block' : 'none';
-  if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación del Sistema de Ventas para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
+  if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
 async function doSetup(ev){
@@ -698,7 +698,7 @@ function renewSheet(){
   openSheet(`<h2>Activar licencia</h2><p class="note" style="margin-top:0">Escribe el código de activación que te dieron. Tus datos se mantienen.</p>
   <label>Código de activación</label><input id="rsL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px" autofocus>
   <div id="rsMsg" class="note" style="color:var(--warn)"></div>
-  ${window.APP_WA ? `<a class="btn wa full" style="margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, quiero un código de activación del Sistema de Ventas para mi negocio.')}">Pedir un código por WhatsApp</a>` : ''}
+  ${window.APP_WA ? `<a class="btn wa full" style="margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.')}">Pedir un código por WhatsApp</a>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="rsBtn" onclick="(async()=>{$('#rsBtn').disabled=true;const e=await activateCode($('#rsL').value);$('#rsBtn').disabled=false;if(e){$('#rsMsg').textContent=e;return;}closeSheet();const d=await FB.fs.doc('biz/'+bizId).get();bizInfo=d.data();render();toast('¡Licencia activada!');})()">Activar</button></div>`);
 }
 // Aviso de la prueba gratis (o de una licencia que vence pronto) para el administrador que creó el negocio.

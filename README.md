@@ -1,4 +1,4 @@
-# Sistema de Ventas
+# StockSoft
 
 Inventario, ventas con escáner de códigos de barras, factura fiscal o nota de entrega, clientes y fiados, proveedores y compras, gastos, dashboard con gráficos y tasas BCV (dólar y euro).
 

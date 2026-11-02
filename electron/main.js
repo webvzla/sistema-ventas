@@ -1,4 +1,4 @@
-// Programa de escritorio (Windows) del Sistema de Ventas.
+// Programa de escritorio (Windows) de StockSoft.
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -20,7 +20,7 @@ function backupDir() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1280, height: 860, minWidth: 380, minHeight: 600,
-    backgroundColor: '#0b1220', title: 'Sistema de Ventas',
+    backgroundColor: '#0b1220', title: 'StockSoft',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, spellcheck: false }
@@ -109,7 +109,7 @@ else {
     if (autoUpdater && app.isPackaged) {
       autoUpdater.autoDownload = true;
       autoUpdater.on('update-downloaded', async info => {
-        const r = await dialog.showMessageBox(win, { type: 'info', buttons: ['Reiniciar ahora', 'Más tarde'], defaultId: 0, title: 'Actualización lista', message: 'Hay una nueva versión del Sistema de Ventas (' + info.version + ').', detail: 'Se instalará al reiniciar el programa.' });
+        const r = await dialog.showMessageBox(win, { type: 'info', buttons: ['Reiniciar ahora', 'Más tarde'], defaultId: 0, title: 'Actualización lista', message: 'Hay una nueva versión de StockSoft (' + info.version + ').', detail: 'Se instalará al reiniciar el programa.' });
         if (r.response === 0) autoUpdater.quitAndInstall();
       });
       autoUpdater.on('error', e => console.warn('Actualización:', e && e.message));
