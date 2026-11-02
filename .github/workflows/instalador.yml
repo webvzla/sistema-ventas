@@ -2,8 +2,6 @@ name: Instalador de Windows
 
 # Solo se genera una versión nueva del programa de PC (y los clientes ven "Hay una nueva versión")
 # cuando cambia el propio programa: electron/, package.json o el icono. También se puede lanzar a mano.
-# El instalador se guarda como release de este repositorio (puede ser privado) y se publica en
-# https://stocksoft.web.app/updates/, de donde la app descarga sus actualizaciones.
 on:
   push:
     branches: [main]
@@ -12,7 +10,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: instalador
@@ -22,8 +19,6 @@ jobs:
   windows:
     name: Instalador de Windows (.exe)
     runs-on: windows-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,16 +27,13 @@ jobs:
       - run: npm install --no-audit --no-fund
       # 1.1.x: este flujo empieza a contar de nuevo, y debe quedar por encima de las 1.0.x publicadas.
       - name: Versión
-        id: ver
         shell: bash
-        run: |
-          npm version 1.1.${{ github.run_number }} --no-git-tag-version --allow-same-version
-          echo "v=1.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
-      - name: Construir instalador
+        run: npm version 1.1.${{ github.run_number }} --no-git-tag-version --allow-same-version
+      - name: Construir y publicar (con actualización automática)
         run: npm run release
-      - name: Guardar como release
-        shell: bash
-        run: gh release create "v${{ steps.ver.outputs.v }}" dist/*.exe dist/latest.yml dist/*.blockmap --title "StockSoft ${{ steps.ver.outputs.v }}" --notes "Programa de Windows de StockSoft ${{ steps.ver.outputs.v }}" --latest
-      - name: Publicar en stocksoft.web.app/updates
-        shell: bash
-        run: gh workflow run construir.yml --ref main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: dist/*.exe

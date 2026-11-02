@@ -11,7 +11,7 @@
     "vendor": "node scripts/vendor.js",
     "start": "npm run vendor && electron .",
     "dist": "npm run vendor && electron-builder --win --x64 --publish never",
-    "release": "npm run vendor && electron-builder --win --x64 --publish never"
+    "release": "npm run vendor && electron-builder --win --x64 --publish always"
   },
   "devDependencies": {
     "@zxing/library": "^0.21.3",
@@ -58,8 +58,10 @@
       "shortcutName": "StockSoft"
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://stocksoft.web.app/updates"
+      "provider": "github",
+      "owner": "webvzla",
+      "repo": "sistema-ventas",
+      "releaseType": "release"
     }
   },
   "dependencies": {

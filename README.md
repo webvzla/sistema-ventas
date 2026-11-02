@@ -33,11 +33,11 @@ Sin este paso el sistema funciona igual, pero los datos se quedan solo en ese di
 2. **Real**: tras aprobarlo, pasar a `main` publica https://stocksoft.web.app con el código ofuscado.
    La app de PC carga esta web desde internet, así que los cambios llegan sin aviso de actualización.
 3. **Instalador de Windows**: solo se genera si cambian `electron/`, `package.json` o `build/`
-   (o lanzando a mano "Instalador de Windows"). Se guarda como release del repositorio y se publica en
-   https://stocksoft.web.app/updates/, de donde la app descarga sus actualizaciones.
+   (o lanzando a mano "Instalador de Windows"). Se publica en GitHub Releases, de donde la app
+   descarga sus actualizaciones. (El plan gratuito de Firebase no admite alojar archivos .exe.)
 
-`scripts/publicar-sitio.sh` arma `public/`: página en la raíz, app en `/app/`, código ofuscado
-(`scripts/minify.js`) e instalador en `/updates/`. Las reglas de Firestore se publican a mano en la consola.
+`scripts/publicar-sitio.sh` arma `public/`: página en la raíz, app en `/app/` y código ofuscado
+(`scripts/minify.js`). Las reglas de Firestore se publican a mano en la consola.
 
 En un ordenador propio (requiere Node.js 20):
 
