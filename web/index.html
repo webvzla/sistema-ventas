@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#060d1d">
-<link rel="icon" href="icon.png"><link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png?v=2"><link rel="apple-touch-icon" href="icon.png?v=2">
 <script>window.LIBS = {chart:'vendor/chart.umd.js', zxing:'vendor/zxing.min.js', xlsx:'vendor/xlsx.full.min.js'};</script>
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/JsBarcode.all.min.js"></script>
@@ -46,7 +46,7 @@ body{font-family:var(--font);color:var(--tx);font-size:15px;-webkit-font-smoothi
 header{position:sticky;top:0;z-index:5;background:rgba(6,13,29,.8);backdrop-filter:saturate(1.5) blur(14px);-webkit-backdrop-filter:saturate(1.5) blur(14px);border-bottom:1px solid var(--line);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 header::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--org));opacity:.85}
 .brand{display:flex;align-items:center;gap:10px;font:800 17px/1.1 var(--brandf);letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.brand::before{content:'';flex:none;width:30px;height:30px;border-radius:9px;background:url(icon.png) center/cover;box-shadow:0 6px 16px -6px rgba(60,200,242,.6)}
+.brand::before{content:'';flex:none;width:30px;height:30px;border-radius:9px;background:url(icon.png?v=2) center/cover;box-shadow:0 6px 16px -6px rgba(60,200,242,.6)}
 .brand span{color:var(--acc2)}
 .chip{font:600 12px var(--font);font-variant-numeric:tabular-nums;background:var(--card);border:1px solid var(--line);padding:6px 11px;border-radius:10px;color:var(--mut);white-space:nowrap;cursor:pointer}
 .chip b{color:var(--org2);font-weight:700}
