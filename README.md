@@ -26,12 +26,18 @@ Con la nube (Firebase) activada, el PC y los móviles comparten los mismos datos
 
 Sin este paso el sistema funciona igual, pero los datos se quedan solo en ese dispositivo.
 
-## Construir
+## Publicar (en dos pasos)
 
-Cada vez que se sube un cambio a la rama `main`, GitHub Actions:
+1. **Pruebas**: subir a la rama `pruebas` publica en la vista previa
+   https://stocksoft--pruebas-hx0q1cm0.web.app/app/ (los clientes no la ven).
+2. **Real**: tras aprobarlo, pasar a `main` publica https://stocksoft.web.app con el código ofuscado.
+   La app de PC carga esta web desde internet, así que los cambios llegan sin aviso de actualización.
+3. **Instalador de Windows**: solo se genera si cambian `electron/`, `package.json` o `build/`
+   (o lanzando a mano "Instalador de Windows"). Se guarda como release del repositorio y se publica en
+   https://stocksoft.web.app/updates/, de donde la app descarga sus actualizaciones.
 
-- genera el instalador `Sistema-de-Ventas-Setup-x.y.z.exe` y lo publica en **Releases**;
-- publica la versión web en GitHub Pages.
+`scripts/publicar-sitio.sh` arma `public/`: página en la raíz, app en `/app/`, código ofuscado
+(`scripts/minify.js`) e instalador en `/updates/`. Las reglas de Firestore se publican a mano en la consola.
 
 En un ordenador propio (requiere Node.js 20):
 
@@ -45,3 +51,7 @@ npm run dist   # generar el instalador en dist/
 
 - **Administrador**: todo (inventario, precios, costos, proveedores, gastos, reportes, usuarios, ajustes).
 - **Vendedor**: vender, consultar precios y tasas, ver inventario y cobrar a clientes. Con la nube activada, las reglas de Firestore impiden en el servidor que modifique productos, precios, proveedores, gastos o usuarios.
+
+## Licencia
+
+© 2026 StockSoft. Todos los derechos reservados. Software propietario: ver [LICENSE](LICENSE).

@@ -4,14 +4,14 @@
   "version": "1.0.0",
   "description": "Inventario, ventas, clientes, proveedores, gastos y tasas BCV",
   "main": "electron/main.js",
-  "author": "Sistema de Ventas",
-  "license": "UNLICENSED",
+  "author": "StockSoft",
+  "license": "SEE LICENSE IN LICENSE",
   "private": true,
   "scripts": {
     "vendor": "node scripts/vendor.js",
     "start": "npm run vendor && electron .",
     "dist": "npm run vendor && electron-builder --win --x64 --publish never",
-    "release": "npm run vendor && electron-builder --win --x64 --publish always"
+    "release": "npm run vendor && electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "@zxing/library": "^0.21.3",
@@ -21,10 +21,12 @@
     "firebase": "^10.14.1",
     "jsbarcode": "^3.11.6",
     "jspdf": "^2.5.2",
+    "terser": "^5.51.2",
     "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "com.sistemaventas.app",
+    "copyright": "© 2026 StockSoft. Todos los derechos reservados.",
     "productName": "Sistema de Ventas",
     "artifactName": "Sistema-de-Ventas-Setup.${ext}",
     "directories": {
@@ -56,10 +58,8 @@
       "shortcutName": "StockSoft"
     },
     "publish": {
-      "provider": "github",
-      "owner": "webvzla",
-      "repo": "sistema-ventas",
-      "releaseType": "release"
+      "provider": "generic",
+      "url": "https://stocksoft.web.app/updates"
     }
   },
   "dependencies": {

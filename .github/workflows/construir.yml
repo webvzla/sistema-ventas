@@ -1,8 +1,8 @@
 name: Publicar web (versión real)
 
-# Publica la web real (stocksoft.web.app y GitHub Pages) al subir a main.
-# La app de PC carga esta web desde internet, así que estos cambios les llegan a los clientes
-# sin ningún aviso de actualización. El instalador de Windows va aparte (instalador.yml).
+# Publica la web real (stocksoft.web.app) al subir a main, con el código ofuscado y el último
+# instalador en /updates/. La app de PC carga esta web desde internet, así que estos cambios les
+# llegan a los clientes sin ningún aviso de actualización. El instalador va aparte (instalador.yml).
 on:
   push:
     branches: [main]
@@ -10,56 +10,26 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
   group: construir
   cancel-in-progress: true
 
 jobs:
-  web:
-    name: Versión web (móvil)
+  firebase:
+    name: Sitio stocksoft.web.app
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm install --no-audit --no-fund --ignore-scripts
-      - run: npm run vendor
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-      - id: deploy
-        uses: actions/deploy-pages@v4
-
-  firebase:
-    name: Sitio stocksoft.web.app
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: ¿Está configurada la clave de Firebase?
-        id: key
-        env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          if [ -n "$SA" ]; then echo "ok=true" >> $GITHUB_OUTPUT; else echo "ok=false" >> $GITHUB_OUTPUT; echo "Falta el secreto FIREBASE_SERVICE_ACCOUNT, no se publica en stocksoft.web.app"; fi
-      - if: steps.key.outputs.ok == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - if: steps.key.outputs.ok == 'true'
-        run: npm install --no-audit --no-fund --ignore-scripts
-      - if: steps.key.outputs.ok == 'true'
-        run: npm run vendor && bash scripts/build-site.sh
-      - if: steps.key.outputs.ok == 'true'
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - run: npm run vendor && bash scripts/publicar-sitio.sh
+      - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

@@ -7,20 +7,17 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: tasas
   cancel-in-progress: false
 
 jobs:
   tasas:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
     env:
       SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,21 +35,9 @@ jobs:
           git commit -m "Tasa BCV $(date -u +%Y-%m-%dT%H:%M)"
           git push
           echo "changed=true" >> $GITHUB_OUTPUT
-      - if: steps.commit.outputs.changed == 'true'
-        run: npm install --no-audit --no-fund --ignore-scripts
-      - if: steps.commit.outputs.changed == 'true'
-        run: npm run vendor
-      - if: steps.commit.outputs.changed == 'true'
-        uses: actions/configure-pages@v5
-      - if: steps.commit.outputs.changed == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-      - if: steps.commit.outputs.changed == 'true'
-        uses: actions/deploy-pages@v4
-      # La misma tasa en stocksoft.web.app (la app la lee de /app/tasas.json).
+      # La tasa nueva en stocksoft.web.app (la app la lee de /app/tasas.json).
       - if: steps.commit.outputs.changed == 'true' && env.SA != ''
-        run: bash scripts/build-site.sh
+        run: npm install --no-audit --no-fund --ignore-scripts && npm run vendor && bash scripts/publicar-sitio.sh
       - if: steps.commit.outputs.changed == 'true' && env.SA != ''
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:

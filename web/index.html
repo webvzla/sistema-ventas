@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. Software propietario: prohibida su copia, modificación o distribución sin autorización (ver LICENSE). -->
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -192,6 +193,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="lgBtn" style="margin-top:16px">Entrar</button>
   <div id="lgMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div style="text-align:center;margin-top:10px"><a href="#" id="lgReset" style="display:none;font-size:13px" onclick="resetPass();return false">¿Olvidaste tu contraseña?</a></div>
+  <div class="sub" style="text-align:center;margin-top:12px;font-size:11.5px">© 2026 StockSoft · <a href="legal/terminos.html" target="_blank" rel="noopener">Términos</a> · <a href="legal/privacidad.html" target="_blank" rel="noopener">Privacidad</a></div>
   <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Pruébalo <b>gratis 7 días</b>, sin código.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button><a id="lgWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a></div>
 </form>
 <form class="lg-card" id="setupForm" style="display:none;max-height:92vh;overflow:auto" onsubmit="doSetup(event)" autocomplete="off">
@@ -207,6 +209,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <div id="suEw"><p class="note">El empleado puede vender, consultar precios y tasas y cobrar a clientes. No puede modificar el inventario ni los precios, ni ver costos, ganancias, proveedores o reportes.</p>
   <label>Nombre del empleado</label><input id="seN" placeholder="Ej: María">
   <div class="grid2"><div><label id="seUl">Usuario</label><input id="seU" autocapitalize="none" autocorrect="off" placeholder="maria"></div><div><label>Contraseña</label><input id="seP" type="password" autocomplete="new-password"></div></div></div>
+  <label class="row" id="suTw" style="gap:8px;margin-top:16px;align-items:flex-start;font-size:13.5px"><input type="checkbox" id="suT" class="chk" style="margin-top:2px"> <span>Acepto los <a href="legal/terminos.html" target="_blank" rel="noopener">Términos de uso</a> y la <a href="legal/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></span></label>
   <button class="btn full" id="suBtn" style="margin-top:18px">Crear y entrar</button>
   <div id="suMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div id="suBack" style="display:none;text-align:center;margin-top:10px"><a href="#" onclick="ui.setupMode=false;authScreen();return false">Ya tengo cuenta → Entrar</a></div>
@@ -654,7 +657,7 @@ function authScreen(){
   $('#suU').type = $('#seU').type = c ? 'email' : 'text';
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
-  $('#suLw').style.display = c ? 'block' : 'none';
+  $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none';
   if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
@@ -666,6 +669,7 @@ async function doSetup(ev){
   const wantE = $('#suE').checked, en = $('#seN').value.trim(), eu = $('#seU').value.trim().toLowerCase(), ep = $('#seP').value;
   const okU = u => CLOUD() ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u) : /^[a-z0-9._-]{2,30}$/.test(u);
   const minP = CLOUD() ? 8 : 4;
+  if (CLOUD() && !$('#suT').checked) return msg('Para crear la cuenta acepta los Términos de uso y la Política de privacidad');
   if (!biz) return msg('Pon el nombre del negocio');
   if (!an || !okU(au)) return msg(CLOUD() ? 'Pon tu nombre y un correo válido' : 'Pon tu nombre y un usuario (solo letras, números, punto o guion)');
   if (ap.length < minP) return msg('Tu contraseña debe tener al menos ' + minP + ' caracteres');
@@ -700,7 +704,7 @@ async function doSetup(ev){
       b.set(FB.fs.doc('biz/' + id + '/members/' + id), {name:an, role:'admin', email:au, created:now});
       b.set(FB.fs.doc('users/' + id), {biz:id, role:'admin', name:an, email:au});
       try { await b.commit(); } catch(e){ try { await cred.user.delete(); } catch(e2){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg('No se pudo activar con ese código.' + contactTxt()); }
-      await FB.fs.doc('biz/' + id + '/config/main').set({...DEF_CFG, name:biz});
+      await FB.fs.doc('biz/' + id + '/config/main').set({...DEF_CFG, name:biz, termsV:1, termsAt:Date.now()});
       if (wantE){ msg('Creando el usuario del empleado…'); try { await fbCreateMember(eu, ep, en, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
@@ -1843,7 +1847,7 @@ VIEWS.mas = {
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
       <div class="item tap row" onclick="passForm(me.u)"><div class="grow"><div class="name">Cambiar mi contraseña</div><div class="sub">${CLOUD() ? esc(me && me.email || '') : 'Usuario: ' + esc(me ? me.u : '')}</div></div><span style="color:var(--mut)">›</span></div>
       <div class="item tap row" onclick="logout()"><div class="grow"><div class="name" style="color:var(--bad)">Cerrar sesión</div></div></div>
-      </div><div class="status" id="stat"></div>`;
+      </div><div class="status" id="stat"></div><div class="status" style="margin-top:6px">© 2026 StockSoft. Todos los derechos reservados. · <a href="legal/terminos.html" target="_blank" rel="noopener">Términos de uso</a> · <a href="legal/privacidad.html" target="_blank" rel="noopener">Privacidad</a></div>`;
   },
   fill(){
     if (!sub){ $('#stat').textContent = backend === 'cloud' ? 'Datos en la nube' + (navigator.onLine ? '' : ' · sin conexión: se sincroniza al volver') + (window.desktop ? ' · App de PC' : '') : backend === 'db' ? 'Datos guardados en la nube' + (readOnly ? ' · solo lectura' : '') : backend === 'local' ? (window.desktop ? 'Datos guardados solo en este ordenador' : 'Datos guardados solo en este navegador') : 'Conectando…'; return; }

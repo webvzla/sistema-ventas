@@ -1,4 +1,5 @@
 // Programa de escritorio (Windows) de StockSoft.
+// © 2026 StockSoft. Todos los derechos reservados. Software propietario (ver LICENSE).
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
