@@ -83,13 +83,3 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: sistema-ventas-e085f
           channelId: live
-      # Reglas de seguridad de Firestore (firestore.rules) publicadas con la misma clave.
-      - name: Publicar reglas de Firestore
-        if: steps.key.outputs.ok == 'true'
-        env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          npx --yes firebase-tools@13 deploy --only firestore:rules --project sistema-ventas-e085f --non-interactive
-          rm -f "$RUNNER_TEMP/sa.json"
