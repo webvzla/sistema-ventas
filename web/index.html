@@ -84,8 +84,26 @@ h3::before{content:'';width:22px;height:12px;flex:none;background:var(--trend) c
 .price{font:800 15.5px var(--brandf);color:var(--tx);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .neg{color:var(--warn)}
 .btn{background:linear-gradient(180deg,#f6ead0,#e6cf9a);color:#1a1408;border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:11px 19px;font:600 14px var(--font);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;white-space:nowrap;box-shadow:0 10px 28px -12px rgba(230,207,154,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .12s,filter .2s,box-shadow .2s}
-@media (hover:hover){.btn:hover{filter:brightness(1.08)}}
-.btn:active{transform:translateY(1px) scale(.98)}
+/* Efectos al pasar el ratón: destello que cruza el botón, se eleva y brilla; al pulsar se hunde */
+.btn{position:relative;overflow:hidden;isolation:isolate;transition:transform .22s cubic-bezier(.22,1,.36,1),box-shadow .3s,filter .2s,border-color .2s,background-color .2s}
+.btn::after{content:'';position:absolute;top:0;bottom:0;left:-60%;width:45%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.65),transparent);transform:skewX(-20deg) translateX(0);opacity:0;pointer-events:none;z-index:1}
+@media (hover:hover){
+  .btn:not(:disabled):hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 18px 36px -14px rgba(230,207,154,.85),0 0 0 4px rgba(230,207,154,.14),inset 0 1px 0 rgba(255,255,255,.6)}
+  .btn:not(:disabled):hover::after{opacity:1;animation:shine .75s cubic-bezier(.22,1,.36,1) forwards}
+  .btn.sec:not(:disabled):hover{border-color:var(--acc2);background:#16294f;box-shadow:0 12px 28px -14px rgba(60,200,242,.75),0 0 0 4px rgba(60,200,242,.12)}
+  .btn.sec:not(:disabled):hover::after{background:linear-gradient(105deg,transparent,rgba(60,200,242,.28),transparent)}
+  .btn.wa:not(:disabled):hover{box-shadow:0 16px 32px -12px rgba(37,211,102,.85),0 0 0 4px rgba(37,211,102,.16)}
+  .btn.bad:not(:disabled):hover{background:rgba(255,93,108,.14);box-shadow:0 12px 26px -14px rgba(255,93,108,.7)}
+  .btn.bad:not(:disabled):hover::after{background:linear-gradient(105deg,transparent,rgba(255,93,108,.25),transparent)}
+  .seg button:not(.on):hover{color:var(--tx);border-color:var(--line2);background:var(--card2)}
+  .chip:hover{border-color:var(--acc2);color:var(--tx)}
+  .item.tap:hover{transform:translateY(-1px);box-shadow:0 14px 30px -20px rgba(60,200,242,.55)}
+  nav button:not(.on):hover{color:var(--mut)}
+  .qty button:hover{border-color:var(--acc2);color:var(--acc2)}
+}
+@keyframes shine{from{transform:skewX(-20deg) translateX(0)}to{transform:skewX(-20deg) translateX(420%)}}
+.btn:not(:disabled):active{transform:translateY(1px) scale(.97);box-shadow:0 4px 12px -6px rgba(0,0,0,.6);transition-duration:.08s}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--acc2)}
 .btn.sec{background:var(--card2);color:var(--tx);border:1px solid var(--line2);box-shadow:none}
 .btn.sec:hover{border-color:var(--acc2)}
 .btn.bad{background:rgba(255,93,108,.08);color:var(--bad);border:1px solid rgba(255,93,108,.35);box-shadow:none}
@@ -154,7 +172,7 @@ a{color:var(--acc2)}
 .lg-card .brand::before{width:40px;height:40px;border-radius:12px}
 .lg-card h2{margin-top:18px}
 body.locked header,body.locked nav,body.locked main{visibility:hidden}
-@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}.btn::after{display:none}}
 </style>
 </head>
 <body>
@@ -329,6 +347,24 @@ const minStock = p => (p.min === '' || p.min == null) ? num(cfg.lowDefault) : nu
 function stockState(p){ const s = num(p.stock); if (s <= 0) return 'out'; if (s <= minStock(p)) return 'low'; return 'ok'; }
 const categories = () => [...new Set(products().map(p => (p.cat || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 const ratesStale = () => !cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3;
+/* Precio al mayor: desde cierta cantidad, otro precio por unidad (en la moneda del producto). */
+const hasW = p => !!p && num(p.wQty) > 0 && num(p.wPrice) > 0;
+const isW = (p, qty) => hasW(p) && num(qty) >= num(p.wQty);
+const unitUsd = (p, qty) => toUsd(isW(p, qty) ? p.wPrice : p.price, curOf(p));
+const wTxt = p => hasW(p) ? `Al mayor: ${curOf(p) === 'eur' ? eurF(num(p.wPrice)) : usd(num(p.wPrice))} desde ${nfq.format(num(p.wQty))} ${unitLbl(p.unit)}` : '';
+/* Vencimientos por lote: cada entrada guarda su fecha; lo vendido sale primero del lote que vence antes,
+   así que los lotes que siguen en el estante son los más nuevos hasta completar el stock actual. */
+const EXP_DAYS = () => num(cfg.expDays) || 30;
+function activeLots(p){
+  let left = Math.max(0, num(p.stock)); const out = [];
+  for (const l of [...(p.lots || [])].filter(l => l && l.exp).sort((a, b) => b.exp.localeCompare(a.exp))){ if (left <= 0) break; const q = Math.min(num(l.qty), left); if (q > 0){ out.push({exp:l.exp, qty:r3(q)}); left -= q; } }
+  return out.reverse();
+}
+const daysTo = iso => Math.floor((new Date(iso + 'T23:59:59').getTime() - Date.now()) / 864e5);
+function expInfo(p){ const l = activeLots(p)[0]; if (!l) return null; const d = daysTo(l.exp); return {exp:l.exp, qty:l.qty, days:d, state:d < 0 ? 'out' : d <= EXP_DAYS() ? 'low' : 'ok'}; }
+const fmtExp = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-VE', {day:'2-digit', month:'short', year:'numeric'});
+const expPill = e => !e || e.state === 'ok' ? '' : ` <span class="pill ${e.state}">${e.days < 0 ? 'Vencido' : e.days === 0 ? 'Vence hoy' : 'Vence en ' + e.days + ' d'}</span>`;
+const expiring = () => products().filter(p => { const e = expInfo(p); return e && e.state !== 'ok'; });
 
 /* ============ Navegación / render ============ */
 const NAV_ICONS = {
@@ -710,6 +746,12 @@ function renewSheet(){
   ${window.APP_WA ? `<a class="btn wa full" style="margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.')}">Pedir un código por WhatsApp</a>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="rsBtn" onclick="(async()=>{$('#rsBtn').disabled=true;const e=await activateCode($('#rsL').value);$('#rsBtn').disabled=false;if(e){$('#rsMsg').textContent=e;return;}closeSheet();const d=await FB.fs.doc('biz/'+bizId).get();bizInfo=d.data();render();toast('¡Licencia activada!');})()">Activar</button></div>`);
 }
+// Aviso de productos vencidos o que vencen pronto (lotes).
+function expBox(){
+  const xs = expiring(); if (!xs.length) return '';
+  const out = xs.filter(p => expInfo(p).days < 0).length;
+  return `<div class="warnbox">${out ? `<b>${out} producto${out === 1 ? '' : 's'} con lotes vencidos</b>${xs.length > out ? ' y ' + (xs.length - out) + ' que vencen en los próximos ' + EXP_DAYS() + ' días' : ''}` : `${xs.length} producto${xs.length === 1 ? '' : 's'} vencen en los próximos ${EXP_DAYS()} días`}. <a href="#" onclick="ui.invF='vence';go('inventario');return false">Ver cuáles →</a></div>`;
+}
 // Aviso de la prueba gratis (o de una licencia que vence pronto) para el administrador que creó el negocio.
 function trialBox(){
   if (!CLOUD() || !bizInfo || !me || me.u !== bizId) return '';
@@ -884,7 +926,7 @@ VIEWS.inicio = {
     if (isAdmin() && S.users[me.u] && S.users[me.u].def) h += `<div class="warnbox">Estás usando la contraseña inicial (admin/admin). <a href="#" onclick="passForm('${me.u}');return false">Cámbiala ahora →</a></div>`;
     if (ratesStale()) h += `<div class="warnbox">${cfg.bcv ? 'La tasa no se ha actualizado en más de un día.' : 'Aún no hay tasa del dólar.'} <a href="#" onclick="go('tasas');return false">Actualizar tasa →</a></div>`;
     if (backend === 'local') h += `<div class="warnbox">${LOCAL_TXT()}</div>`;
-    h += trialBox();
+    h += trialBox() + expBox();
     if (readOnly) h += `<div class="warnbox">Estás en modo solo lectura: puedes ver los datos pero no cambiarlos.</div>`;
     h += `<h2>Hoy</h2>
     <div class="grid2">
@@ -1043,13 +1085,15 @@ function priceBlock(p, big){
   return `<div class="total pricebox"><div class="sub" style="color:var(--tot-mut);font-size:12px;font-weight:600">PRECIO</div>
     <div class="v" style="font-size:${big ? 38 : 30}px">${pMain(p)}</div>
     <div class="bsline" style="font-size:${big ? 26 : 21}px">${b ? bsF(b) : '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>'}</div>
-    <div class="s">${[curOf(p) === 'eur' ? 'Tasa euro BCV ' + (cfg.eur ? nf2.format(cfg.eur) : '—') : 'Tasa dólar BCV ' + (cfg.bcv ? nf2.format(cfg.bcv) : '—'), pAlt(p)].filter(Boolean).join(' · ')}</div></div>`;
+    <div class="s">${[curOf(p) === 'eur' ? 'Tasa euro BCV ' + (cfg.eur ? nf2.format(cfg.eur) : '—') : 'Tasa dólar BCV ' + (cfg.bcv ? nf2.format(cfg.bcv) : '—'), pAlt(p)].filter(Boolean).join(' · ')}</div>
+    ${hasW(p) ? `<div class="s" style="margin-top:6px;font-weight:700;color:#fff">${wTxt(p)}${cfg.bcv ? ' · ' + bsF(num(p.wPrice) * (curOf(p) === 'eur' ? (cfg.eur || 0) : cfg.bcv)) : ''}</div>` : ''}</div>`;
 }
 function priceSheet(id){
   const p = S.products[id]; if (!p) return;
   openSheet(`<div class="sub">${esc([p.cat, p.brand].filter(Boolean).join(' · '))}</div><h2 style="margin-top:2px">${esc(p.name)}</h2>
   ${priceBlock(p, true)}
   <div class="sub" style="margin-top:10px">${p.track === false ? '' : 'En stock: ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit) + ' · '}Código: ${esc(p.code || '—')}${p.warranty ? ' · Garantía: ' + esc(p.warranty) : ''}</div>
+  ${(() => { const e = expInfo(p); return e ? `<div class="sub">Próximo vencimiento: <b>${fmtExp(e.exp)}</b> (${nfq.format(e.qty)} ${unitLbl(p.unit)})${expPill(e)}</div>` : ''; })()}
   <div class="sheet-actions">${isAdmin() ? `<button class="btn sec" onclick="editProduct('${id}')">Editar</button>` : ''}<button class="btn" onclick="closeSheet();go('vender');addToCart('${id}',true);lastScan='${id}';renderLastScan()">Vender</button></div>
   <button class="btn sec full" style="margin-top:8px" onclick="openScanner()">Escanear otro</button>`);
 }
@@ -1080,7 +1124,7 @@ VIEWS.vender = {
 function prodRow(p){
   const st = stockState(p);
   return `<div class="item tap row" onclick="addToCart('${p.id}')">
-    <div class="grow"><div class="name">${esc(p.name)}</div><div class="sub">${p.track === false ? (p.cat ? esc(p.cat) : '') : `Stock: ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}`}${p.track !== false && st !== 'ok' ? ` <span class="pill ${st}">${st === 'out' ? 'Agotado' : 'Bajo'}</span>` : ''}</div></div>
+    <div class="grow"><div class="name">${esc(p.name)}</div><div class="sub">${p.track === false ? (p.cat ? esc(p.cat) : '') : `Stock: ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}`}${p.track !== false && st !== 'ok' ? ` <span class="pill ${st}">${st === 'out' ? 'Agotado' : 'Bajo'}</span>` : ''}${expPill(expInfo(p))}</div>${hasW(p) ? `<div class="sub">${wTxt(p)}</div>` : ''}</div>
     <div><div class="price">${pMain(p)}</div>${pBs(p) ? `<div class="sub" style="text-align:right">${bsF(pBs(p))}</div>` : ''}</div></div>`;
 }
 function renderLastScan(){
@@ -1092,12 +1136,16 @@ function addToCart(pid, quiet){
   const p = S.products[pid]; if (!p) return;
   const price = pUsd(p);
   if (!isFinite(price)){ toast('Este producto está en euros: falta la tasa del euro (pestaña Tasas)'); return; }
+  const e = expInfo(p);
   if (p.track !== false && num(p.stock) <= 0) toast('Ojo: ' + p.name + ' figura agotado');
+  else if (e && e.days < 0){ toast('Ojo: ' + p.name + ' tiene un lote vencido (' + fmtExp(e.exp) + ')'); quiet = true; }
   const ex = cart.find(c => c.pid === pid);
-  if (ex) ex.qty = r3(ex.qty + 1); else cart.push({pid, name:p.name, price:r2(price), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? 16 : num(p.iva)});
+  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? 16 : num(p.iva)}; reprice(c); cart.push(c); }
   if (!quiet) toast('+1 ' + p.name + ' · ' + pMain(p) + (pBs(p) ? ' · ' + bsF(pBs(p)) : ''));
   renderCart();
 }
+/* Aplica el precio al mayor (o lo quita) según la cantidad de la línea. */
+function reprice(c){ const p = c.pid && S.products[c.pid]; if (!hasW(p)){ c.mayor = false; return; } const u = unitUsd(p, c.qty); if (isFinite(u)){ c.price = r2(u); c.mayor = isW(p, c.qty); } }
 function freeItem(){
   openSheet(`<h2>Artículo libre</h2><p class="note">Para vender algo que no está en el inventario (un servicio, una reparación…).</p>
   <label>Descripción</label><input id="fiN" placeholder="Ej: Envío a domicilio" autofocus>
@@ -1106,7 +1154,7 @@ function freeItem(){
     const n=$('#fiN').value.trim()||'Artículo',p=num($('#fiP').value);if(p<=0){toast('Pon un precio');return}
     cart.push({pid:'',name:n,price:r2(p),cost:0,unit:'unidad',qty:1,iva:16});closeSheet();renderCart()">Añadir</button></div>`);
 }
-function setQty(i, v){ v = r3(num(v)); if (v <= 0) cart.splice(i, 1); else cart[i].qty = v; renderCart(); }
+function setQty(i, v){ v = r3(num(v)); if (v <= 0) cart.splice(i, 1); else { cart[i].qty = v; reprice(cart[i]); } renderCart(); }
 /* ---- Impuestos, descuentos y pagos ---- */
 const DIVISAS = ['efectivo_usd', 'efectivo_eur', 'zelle'];
 const METHOD_CUR = {efectivo_usd:'usd', zelle:'usd', efectivo_eur:'eur', efectivo_bs:'bs', pago_movil:'bs', punto:'bs', transferencia:'bs', fiado:'usd'};
@@ -1193,7 +1241,7 @@ function renderCart(){
   const methodOpts = (sel, withF = true) => Object.entries(METHODS).filter(([k]) => withF || k !== 'fiado').map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
   el.innerHTML = (ui.editQuote && S.quotes[ui.editQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Editando la cotización ${esc(S.quotes[ui.editQuote].no)}. Cuando termines pulsa <b>Cotización</b> para guardarla. <a href="#" onclick="ui.editQuote=null;renderCart();return false">cancelar edición</a></div>` : '') + (ui.fromQuote && S.quotes[ui.fromQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Vendiendo la cotización ${esc(S.quotes[ui.fromQuote].no || '')}. <a href="#" onclick="ui.fromQuote=null;renderCart();return false">quitar vínculo</a></div>` : '')
     + `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
-      <div class="grow"><div class="name">${esc(c.name)}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}${num(c.iva ?? 16) === 0 ? ' · exento' : num(c.iva) === 8 ? ' · IVA 8%' : ''}</div></div>
+      <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}${num(c.iva ?? 16) === 0 ? ' · exento' : num(c.iva) === 8 ? ' · IVA 8%' : ''}</div></div>
       <div class="qty"><button onclick="setQty(${i},${c.qty}-1)">−</button><input inputmode="decimal" value="${nfq.format(c.qty)}" onchange="setQty(${i},this.value)"><button onclick="setQty(${i},${c.qty}+1)">+</button></div>
     </div></div>`).join('') + `</div>
     <div class="row" style="margin-top:10px;gap:8px"><span class="sub" style="margin:0;white-space:nowrap">Descuento</span><input inputmode="decimal" value="${esc(ui.disc.v)}" placeholder="0" style="width:90px;padding:8px" onchange="ui.disc.v=this.value;renderCart()"><select style="width:80px;padding:8px" onchange="ui.disc.type=this.value;renderCart()"><option value="pct" ${ui.disc.type === 'pct' ? 'selected' : ''}>%</option><option value="usd" ${ui.disc.type === 'usd' ? 'selected' : ''}>$</option></select>${t.disc ? `<span class="sub" style="margin:0">−${usd(t.disc)}</span>` : ''}${!isAdmin() ? `<span class="sub" style="margin:0">máx. ${nf0.format(num(cfg.maxDisc ?? 10))}%</span>` : ''}</div>
@@ -1480,12 +1528,14 @@ VIEWS.inventario = {
     ${isAdmin() ? `<button class="btn fab" onclick="editProduct()" aria-label="Añadir producto">+</button>` : ''}`,
   fill(){
     const all = products();
-    const counts = {todos: all.length, bajo: all.filter(p => p.track !== false && stockState(p) !== 'ok').length, sincod: all.filter(p => !p.code).length};
-    $('#invSeg').innerHTML = [['todos', 'Todos (' + counts.todos + ')'], ['bajo', 'Bajo stock (' + counts.bajo + ')'], ...(counts.sincod ? [['sincod', 'Sin código (' + counts.sincod + ')']] : []), ...categories().map(c => ['cat:' + c, c])]
+    const counts = {todos: all.length, bajo: all.filter(p => p.track !== false && stockState(p) !== 'ok').length, sincod: all.filter(p => !p.code).length, vence: expiring().length};
+    if (ui.invF === 'vence' && !counts.vence) ui.invF = 'todos';
+    $('#invSeg').innerHTML = [['todos', 'Todos (' + counts.todos + ')'], ['bajo', 'Bajo stock (' + counts.bajo + ')'], ...(counts.vence ? [['vence', 'Por vencer (' + counts.vence + ')']] : []), ...(counts.sincod ? [['sincod', 'Sin código (' + counts.sincod + ')']] : []), ...categories().map(c => ['cat:' + c, c])]
       .map(([k, l]) => `<button class="${ui.invF === k ? 'on' : ''}" data-k="${esc(k)}" onclick="ui.invF=this.dataset.k;VIEWS.inventario.fill()">${esc(l)}</button>`).join('');
     const q = ui.invQ.trim().toLowerCase();
     const ps = all.filter(p => (!q || (p.name || '').toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q) || String(p.code || '').includes(q))
-      && (ui.invF === 'todos' || (ui.invF === 'bajo' ? p.track !== false && stockState(p) !== 'ok' : ui.invF === 'sincod' ? !p.code : (p.cat || '') === ui.invF.slice(4))));
+      && (ui.invF === 'todos' || (ui.invF === 'bajo' ? p.track !== false && stockState(p) !== 'ok' : ui.invF === 'vence' ? (() => { const e = expInfo(p); return e && e.state !== 'ok'; })() : ui.invF === 'sincod' ? !p.code : (p.cat || '') === ui.invF.slice(4))));
+    if (ui.invF === 'vence') ps.sort((a, b) => expInfo(a).exp.localeCompare(expInfo(b).exp));
     const nNoCode = [...ui.selLabels].filter(id => S.products[id] && !S.products[id].code).length;
     $('#labelBar').innerHTML = ui.labelMode ? `<div class="card" style="margin-bottom:10px">
       <div class="row between"><div class="name" style="font-size:14px">Etiquetas con código de barras</div><a href="#" class="sub" onclick="labelHelp();return false">¿Cómo se usan?</a></div>
@@ -1502,7 +1552,7 @@ VIEWS.inventario = {
         ${ui.labelMode ? `<input type="checkbox" class="chk" ${ui.selLabels.has(p.id) ? 'checked' : ''} onchange="this.checked?ui.selLabels.add('${p.id}'):ui.selLabels.delete('${p.id}');VIEWS.inventario.fill()">` : ''}
         <div class="grow"><div class="name">${esc(p.name)}</div>
         <div class="sub">${esc([p.cat, p.brand].filter(Boolean).join(' · '))}${p.cat || p.brand ? ' · ' : ''}${p.track === false ? 'Sin control de stock' : 'Stock: ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit)}</div>
-        <div class="sub">${pLine(p)}${p.code ? '' : ' <span class="pill">sin código</span>'}</div></div>
+        <div class="sub">${pLine(p)}${p.code ? '' : ' <span class="pill">sin código</span>'}${expPill(expInfo(p))}</div>${hasW(p) ? `<div class="sub">${wTxt(p)}</div>` : ''}</div>
         <div style="text-align:right"><div class="price">${pMain(p)}</div>${p.track !== false ? `<span class="pill ${st}">${st === 'out' ? 'Agotado' : st === 'low' ? 'Bajo' : 'OK'}</span>` : ''}</div>
         </div></div>`; }).join('') + `${isAdmin() ? `<p class="note" style="text-align:center">Valor del inventario (a costo): <b>${usd(val)}</b>${cfg.bcv ? ' · ' + bs(val) : ''}</p>` : ''}`);
   }
@@ -1524,6 +1574,9 @@ function editProduct(id, preset = {}){
   <div class="grid2"><div><label id="pPl">Precio de venta</label><input id="pP" inputmode="decimal" value="${ed(p.price)}" placeholder="0,00" oninput="pPrev()"></div>
   <div><label id="pKl">Costo</label><input id="pK" inputmode="decimal" value="${ed(p.cost)}" placeholder="0,00" oninput="pPrev()"></div></div>
   <div id="pPrev" class="note"></div>
+  <div class="grid2"><div><label>Precio al mayor (opcional)</label><input id="pWP" inputmode="decimal" value="${ed(p.wPrice)}" placeholder="0,00"></div>
+  <div><label>A partir de (cantidad)</label><input id="pWQ" inputmode="decimal" value="${ed(p.wQty)}" placeholder="Ej: 12"></div></div>
+  <p class="note" style="margin-top:4px">Al vender esa cantidad o más, cada unidad se cobra al precio al mayor.</p>
   <label>Código de barras</label>
   <div class="row"><input id="pB" class="grow" value="${esc(p.code || '')}" inputmode="numeric" placeholder="Escanea, escribe o genera" oninput="bcPrev()">
   <button class="btn sec" title="Foto del código" onclick="pickPhoto(c=>{$('#pB').value=c;bcPrev()})">${ICON_CAM}</button></div>
@@ -1536,11 +1589,31 @@ function editProduct(id, preset = {}){
   <div class="grid2"><div><label>Stock actual</label><input id="pS" inputmode="decimal" value="${ed(p.stock)}" placeholder="0"></div>
   <div><label>Avisar cuando queden</label><input id="pM" inputmode="decimal" value="${ed(p.min)}" placeholder="${nfq.format(num(cfg.lowDefault))}"></div></div>
   <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="pT" class="chk" ${p.track !== false ? 'checked' : ''}> Controlar stock de este producto</label>
+  <label>Vencimientos por lote (opcional)</label><div id="lotBox" class="list"></div>
+  <div class="row" style="gap:8px;margin-top:8px"><input id="lotE" type="date" style="flex:1;min-width:0"><input id="lotQ" inputmode="decimal" placeholder="Cant." style="width:84px"><button class="btn sm sec" onclick="addLot()">Añadir</button></div>
+  <p class="note" style="margin-top:6px">Al añadir un lote nuevo su cantidad se suma al stock. Lo vendido se descuenta primero del lote que vence antes.</p>
   ${id ? `<div class="gap" style="margin-top:14px"><button class="btn sm sec" onclick="restock('${id}')">+ Reponer stock</button><button class="btn sm sec" onclick="ui.selLabels=new Set(['${id}']);makeLabels()">Etiqueta</button>
     <a class="btn sm wa" href="${waLink('', productMsg(p))}" target="_blank" rel="noopener">WhatsApp</a></div>` : ''}
   <div class="sheet-actions">${id ? `<button class="btn bad" onclick="delProduct('${id}')">Eliminar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}
   <button class="btn" onclick="saveProduct(${id ? `'${id}'` : 'null'},${preset.code ? 'true' : 'false'})">Guardar</button></div>`);
-  pPrev(); bcPrev();
+  ui.lotsEdit = activeLots(p).map(l => ({...l}));
+  pPrev(); bcPrev(); renderLots();
+}
+/* Lotes del formulario de producto */
+function renderLots(){
+  const box = $('#lotBox'); if (!box) return;
+  const ls = (ui.lotsEdit || []).slice().sort((a, b) => a.exp.localeCompare(b.exp));
+  box.innerHTML = ls.length ? ls.map(l => { const d = daysTo(l.exp), st = d < 0 ? 'out' : d <= EXP_DAYS() ? 'low' : 'ok';
+    return `<div class="item row" style="padding:9px 12px"><div class="grow"><div class="name" style="font-size:14px">Vence ${fmtExp(l.exp)}</div><div class="sub">${nfq.format(num(l.qty))} ${unitLbl($('#pU') ? $('#pU').value : 'unidad')}</div></div>${st !== 'ok' ? `<span class="pill ${st}">${d < 0 ? 'Vencido' : 'En ' + d + ' d'}</span>` : ''}<button class="btn sm sec" aria-label="Quitar lote" onclick="ui.lotsEdit=ui.lotsEdit.filter(x=>!(x.exp==='${l.exp}'&&x.qty==${num(l.qty)}));renderLots()">✕</button></div>`; }).join('')
+    : '<div class="sub">Sin fechas de vencimiento.</div>';
+}
+function addLot(){
+  const exp = $('#lotE').value, q = r3(num($('#lotQ').value));
+  if (!exp){ toast('Elige la fecha de vencimiento'); return; }
+  if (!(q > 0)){ toast('Pon la cantidad del lote'); return; }
+  (ui.lotsEdit = ui.lotsEdit || []).push({exp, qty:q});
+  const s = $('#pS'); if (s && $('#pT').checked) s.value = String(r3(num(s.value) + q)).replace('.', ',');
+  $('#lotE').value = ''; $('#lotQ').value = ''; renderLots();
 }
 function setCur(c){ $('#pCur').value = c; $('#curU').classList.toggle('on', c === 'usd'); $('#curE').classList.toggle('on', c === 'eur'); pPrev(); }
 function pPrev(){
@@ -1563,7 +1636,7 @@ function bcPrev(){
   const other = findByCode(c, editingId ? editingId[1] : undefined);
   if (other) box.insertAdjacentHTML('beforeend', `<div class="note" style="color:var(--warn)">Este código ya lo usa “${esc(other.name)}”.</div>`);
 }
-function productMsg(p){ const b = pBs(p); return `*${p.name}*${p.brand ? '\n' + p.brand : ''}\nPrecio: ${pMain(p)}${b ? '\n' + bsF(b) + ' (tasa ' + (curOf(p) === 'eur' ? 'euro' : 'dólar') + ' BCV)' : ''}\n— ${cfg.name}`; }
+function productMsg(p){ const b = pBs(p); return `*${p.name}*${p.brand ? '\n' + p.brand : ''}\nPrecio: ${pMain(p)}${b ? '\n' + bsF(b) + ' (tasa ' + (curOf(p) === 'eur' ? 'euro' : 'dólar') + ' BCV)' : ''}${hasW(p) ? '\n' + wTxt(p) : ''}\n— ${cfg.name}`; }
 async function saveProduct(id, fromScan){
   const name = $('#pN').value.trim(); if (!name){ toast('Ponle un nombre'); return; }
   const price = num($('#pP').value); if (price <= 0){ toast('Pon el precio de venta'); return; }
@@ -1571,8 +1644,14 @@ async function saveProduct(id, fromScan){
   const other = code && findByCode(code, id || undefined);
   if (other){ toast('Ese código ya lo tiene “' + other.name + '”'); return; }
   const minV = $('#pM').value.trim();
+  const wP = num($('#pWP').value), wQ = num($('#pWQ').value);
+  if ((wP > 0) !== (wQ > 0)){ toast('Para el precio al mayor pon el precio y la cantidad'); return; }
+  if (wP > 0 && wP >= price){ toast('El precio al mayor debe ser menor que el precio normal'); return; }
   const old = id ? S.products[id] : {created:Date.now()};
-  const d = {...old, name, cat:$('#pC').value.trim(), brand:$('#pBr').value.trim(), cur:$('#pCur').value, unit:$('#pU').value, price:r2(price), cost:r2(num($('#pK').value)), stock:r3(num($('#pS').value)), min: minV === '' ? '' : r3(num(minV)), code, warranty:$('#pW').value.trim(), iva:num($('#pI').value), supplierId:$('#pSup').value, track:$('#pT').checked, updated:Date.now()};
+  const d = {...old, name, cat:$('#pC').value.trim(), brand:$('#pBr').value.trim(), cur:$('#pCur').value, unit:$('#pU').value, price:r2(price), cost:r2(num($('#pK').value)), stock:r3(num($('#pS').value)), min: minV === '' ? '' : r3(num(minV)), code, warranty:$('#pW').value.trim(), iva:num($('#pI').value), supplierId:$('#pSup').value, track:$('#pT').checked, updated:Date.now(),
+    wPrice: wP > 0 ? r2(wP) : '', wQty: wQ > 0 ? r3(wQ) : ''};
+  // Solo se guardan los lotes que siguen en el estante (los vendidos se descartan solos).
+  d.lots = activeLots({stock:d.stock, lots:ui.lotsEdit || []});
   const nid = id || uid();
   closeSheet();
   if (await put('products', nid, d)){
@@ -1588,13 +1667,16 @@ function restock(id){
   openSheet(`<h2>Reponer stock</h2><div class="sub">${esc(p.name)} · hay ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}</div>
   <label>Cantidad que llegó</label><input id="rq" inputmode="decimal" autofocus placeholder="0">
   <label>Nuevo costo por ${unitLbl(p.unit)} en ${curOf(p) === 'eur' ? '€' : '$'} (opcional)</label><input id="rc" inputmode="decimal" placeholder="${nf2.format(num(p.cost))}">
+  <label>Fecha de vencimiento de este lote (opcional)</label><input id="re" type="date">
   <div class="sheet-actions"><button class="btn sec" onclick="editProduct('${id}')">Volver</button><button class="btn" onclick="doRestock('${id}')">Sumar al stock</button></div>`);
 }
 async function doRestock(id){
   const q = num($('#rq').value); if (q <= 0){ toast('Pon la cantidad'); return; }
-  const c = $('#rc').value.trim(); const p = {...S.products[id]};
+  const c = $('#rc').value.trim(), exp = $('#re').value; const p = {...S.products[id]};
+  const lots = activeLots(p);
   p.stock = r3(num(p.stock) + q); if (c) p.cost = r2(num(c)); p.updated = Date.now();
-  closeSheet(); if (await put('products', id, p)){ logA('inventario', 'Stock repuesto', p.name + ' · +' + nfq.format(q) + ' (queda ' + nfq.format(p.stock) + ')'); toast('Stock actualizado: ' + nfq.format(p.stock)); }
+  if (exp) p.lots = [...lots, {exp, qty:r3(q)}]; else if (p.lots) p.lots = lots;
+  closeSheet(); if (await put('products', id, p)){ logA('inventario', 'Stock repuesto', p.name + ' · +' + nfq.format(q) + (exp ? ' · vence ' + fmtExp(exp) : '') + ' (queda ' + nfq.format(p.stock) + ')'); toast('Stock actualizado: ' + nfq.format(p.stock)); }
 }
 
 /* ---- Etiquetas PDF con código de barras ---- */
@@ -2091,7 +2173,7 @@ VIEWS.panel = {
     if (S.users[me.u] && S.users[me.u].def) al += `<div class="warnbox">Estás usando la contraseña inicial (admin/admin). <a href="#" onclick="passForm('${me.u}');return false">Cámbiala ahora →</a></div>`;
     if (ratesStale()) al += `<div class="warnbox">La tasa lleva más de un día sin actualizarse. <a href="#" onclick="go('tasas');return false">Ver tasas →</a></div>`;
     if (backend === 'local') al += `<div class="warnbox">${LOCAL_TXT()}</div>`;
-    al += trialBox();
+    al += trialBox() + expBox();
     $('#dAlerts').innerHTML = al;
     const tile = (k, v, s, cls = '', click = '') => `<div class="card stat" ${click ? `style="cursor:pointer" onclick="${click}"` : ''}><div class="k">${k}</div><div class="v ${cls}" style="font-size:20px">${v}</div><div class="s">${s}</div></div>`;
     const debt = totalDebt(), pay = totalPayable(), low = products().filter(p => p.track !== false && stockState(p) !== 'ok').length;

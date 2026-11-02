@@ -58,6 +58,18 @@ mark{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background
 .btn-line{background:rgba(47,140,240,.08);color:var(--ink);border-color:var(--line2)}
 .btn-line:hover{border-color:var(--acc2);background:rgba(60,200,242,.1)}
 .btn-sm{padding:8px 16px;font-size:13.5px}
+/* Efectos al pasar el ratón: destello, elevación y brillo */
+.btn{position:relative;overflow:hidden;isolation:isolate;transition:transform .25s cubic-bezier(.22,1,.36,1),box-shadow .3s,border-color .2s,background .2s}
+.btn::after{content:'';position:absolute;top:0;bottom:0;left:-60%;width:45%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.65),transparent);transform:skewX(-20deg);opacity:0;pointer-events:none;z-index:1}
+@media (hover:hover){
+  .btn:hover{transform:translateY(-3px)}
+  .btn:hover::after{opacity:1;animation:shine .8s cubic-bezier(.22,1,.36,1) forwards}
+  .btn-blue:hover,.btn-hi:hover,.btn-big:hover{box-shadow:0 22px 44px -16px rgba(230,207,154,.9),0 0 0 5px rgba(230,207,154,.14),inset 0 1px 0 rgba(255,255,255,.6)}
+  .btn-line:hover{box-shadow:0 14px 30px -14px rgba(60,200,242,.7),0 0 0 4px rgba(60,200,242,.12)}
+  .btn-line:hover::after{background:linear-gradient(105deg,transparent,rgba(60,200,242,.3),transparent)}
+}
+@keyframes shine{from{transform:skewX(-20deg) translateX(0)}to{transform:skewX(-20deg) translateX(420%)}}
+.btn:active{transform:translateY(1px) scale(.97);transition-duration:.08s}
 .btn svg{width:19px;height:19px;flex:none}
 
 /* Portada: resplandor azul/naranja sobre la cuadrícula isométrica */

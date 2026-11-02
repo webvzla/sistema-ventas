@@ -6,7 +6,8 @@
     "cleanUrls": true,
     "headers": [
       { "source": "**", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-      { "source": "**/*.@(png|jpg|svg|woff2)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] }
+      { "source": "**/*.@(png|jpg|svg|woff2)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }] },
+      { "source": "**/tasas.json", "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }] }
     ]
   }
 }

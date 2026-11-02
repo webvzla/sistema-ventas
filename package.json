@@ -53,7 +53,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Sistema de Ventas"
+      "shortcutName": "StockSoft"
     },
     "publish": {
       "provider": "github",
