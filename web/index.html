@@ -1013,7 +1013,7 @@ function payBill(i){
 /* ---- Ranking de ventas por producto (más y menos vendidos) ---- */
 function rankProducts(from, to = Infinity){
   const q = {}, t = {}, g = {};
-  for (const s of Object.values(S.sales)) if (s.ts >= from && s.ts < to) for (const i of (s.items || [])) if (i.pid){ const sign = s.doc === 'devolucion' ? -1 : 1; q[i.pid] = (q[i.pid] || 0) + num(i.qty); t[i.pid] = (t[i.pid] || 0) + num(i.price) * num(i.qty); g[i.pid] = (g[i.pid] || 0) + (num(i.price) - num(i.cost)) * num(i.qty); }
+  for (const s of Object.values(S.sales)) if (s.ts >= from && s.ts < to) for (const i of (s.items || [])) if (i.pid){ q[i.pid] = (q[i.pid] || 0) + num(i.qty); t[i.pid] = (t[i.pid] || 0) + num(i.price) * num(i.qty); g[i.pid] = (g[i.pid] || 0) + (num(i.price) - num(i.cost)) * num(i.qty); }
   const all = products().filter(p => p.track !== false || q[p.id]).map(p => ({p, q:Math.max(0, q[p.id] || 0), t:r2(t[p.id] || 0), g:r2(g[p.id] || 0), stockV:r2(num(p.stock) * (num(costUsdOf(p)) || 0))}));
   const most = all.filter(x => x.q > 0).sort((a, b) => b.q - a.q || b.t - a.t);
   const least = all.filter(x => num(x.p.stock) > 0 && (!x.p.created || x.p.created < from)).sort((a, b) => a.q - b.q || b.stockV - a.stockV);
@@ -1798,7 +1798,8 @@ async function notaPDF(id){
   const center = (t, size, bold) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.splitTextToSize(String(t), 70).forEach(l => { doc.text(l, c, y, {align:'center'}); y += size * 0.42; }); };
   const lr = (a, b, bold, size = 8.5) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.text(String(a), L, y); doc.text(String(b), R, y, {align:'right'}); y += size * 0.45; };
   const hr = () => { doc.setDrawColor(150); doc.setLineDashPattern([0.8, 0.8], 0); doc.line(L, y, R, y); y += 3.5; };
-  if (showLogo()){ const d = await imgSize(cfg.logo); if (d){ const k = Math.min(30 / d.w, 18 / d.h); try { doc.addImage(cfg.logo, cfg.logo.includes('image/jpeg') ? 'JPEG' : 'PNG', c - d.w * k / 2, y - 4, d.w * k, d.h * k); y += d.h * k + 1; } catch(e){} } }
+  const LG = showLogo() ? await getLogo() : '';
+  if (LG){ const d = await imgSize(LG); if (d){ const k = Math.min(30 / d.w, 18 / d.h); try { doc.addImage(LG, LG.includes('image/jpeg') ? 'JPEG' : 'PNG', c - d.w * k / 2, y - 4, d.w * k, d.h * k); y += d.h * k + 1; } catch(e){} } }
   center(cfg.name || '', 12, true); y += 0.5;
   if (cfg.rif) center('RIF: ' + cfg.rif, 8);
   if (cfg.addr) center(cfg.addr, 7.5);
@@ -1837,12 +1838,29 @@ function uploadLogo(file){
     let url = cv.toDataURL('image/png');
     if (url.length > 160000){ const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; const x2 = c2.getContext('2d'); x2.fillStyle = '#fff'; x2.fillRect(0, 0, w, h); x2.drawImage(img, 0, 0, w, h); url = c2.toDataURL('image/jpeg', 0.85); }
     if (url.length > 300000){ toast('La imagen es demasiado grande'); return; }
-    if (await putCfg({logo:url})){ const pv = $('#logoPrev'); if (pv) pv.innerHTML = `<img src="${url}" alt="Logo">`; const d = $('#logoDel'); if (d) d.style.display = ''; logA('admin', 'Ajustes modificados', 'Logo del negocio'); toast('Logo guardado'); }
+    if (await saveLogo(url)){ const pv = $('#logoPrev'); if (pv) pv.innerHTML = `<img src="${url}" alt="Logo">`; const d = $('#logoDel'); if (d) d.style.display = ''; logA('admin', 'Ajustes modificados', 'Logo del negocio'); toast('Logo guardado'); }
   }; img.onerror = () => toast('No se pudo leer la imagen'); img.src = fr.result; };
   fr.readAsDataURL(file);
 }
-async function removeLogo(){ if (await putCfg({logo:''})){ const pv = $('#logoPrev'); if (pv) pv.innerHTML = '<span>Sin logo</span>'; const d = $('#logoDel'); if (d) d.style.display = 'none'; toast('Logo quitado'); } }
-const showLogo = () => !!(cfg.logo && cfg.logoOn !== false);
+async function removeLogo(){ if (await saveLogo('')){ const pv = $('#logoPrev'); if (pv) pv.innerHTML = '<span>Sin logo</span>'; const d = $('#logoDel'); if (d) d.style.display = 'none'; toast('Logo quitado'); } }
+// El logo pesa (hasta ~200 KB): en la nube va en su propio documento (config/logo) y se descarga solo al hacer una factura,
+// así no viaja cada vez que cambia la tasa. En la configuración queda solo logoV (versión) para saber si hay logo.
+const remoteDB = () => backend === 'cloud' || backend === 'db';
+let _logo = {v:null, url:''};
+async function saveLogo(url){
+  const v = url ? Date.now() : 0;
+  if (remoteDB()){ try { await DB.doc('config/logo').set({data:url || ''}); } catch(e){ dbErr(e); return false; } _logo = {v, url}; return putCfg({logoV:v, logo:''}); }
+  _logo = {v, url}; return putCfg({logoV:v, logo:url});
+}
+async function getLogo(){
+  if (!cfg.logoV && !cfg.logo) return '';
+  if (cfg.logo) return cfg.logo;
+  if (_logo.v === cfg.logoV) return _logo.url;
+  try { const k = 'ssLogo:' + (bizId || '') + ':' + cfg.logoV, c = localStorage.getItem(k); if (c){ _logo = {v:cfg.logoV, url:c}; return c; } } catch(e){}
+  if (!remoteDB()) return '';
+  try { const d = await DB.doc('config/logo').get(); const url = (d.exists && d.data().data) || ''; _logo = {v:cfg.logoV, url}; try { localStorage.setItem('ssLogo:' + (bizId || '') + ':' + cfg.logoV, url); } catch(e){} return url; } catch(e){ return ''; }
+}
+const showLogo = () => !!((cfg.logoV || cfg.logo) && cfg.logoOn !== false);
 function imgSize(url){ return new Promise(r => { const i = new Image(); i.onload = () => r({w:i.width, h:i.height}); i.onerror = () => r(null); i.src = url; }); }
 const payCond = s => salePayments(s).some(p => p.m === 'fiado') ? 'Crédito' : 'Contado';
 
@@ -1869,7 +1887,7 @@ function facturaHTML(s){
   }
   if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
   return `<div class="fv">
-    <div class="fv-top"><div class="fv-biz">${showLogo() ? `<img src="${cfg.logo}" alt="">` : ''}<div><b>${esc(cfg.name || 'Mi Negocio')}</b>
+    <div class="fv-top"><div class="fv-biz">${showLogo() ? `<img class="fvLogo" alt="" style="visibility:hidden">` : ''}<div><b>${esc(cfg.name || 'Mi Negocio')}</b>
       ${cfg.rif ? `<div>RIF: ${esc(cfg.rif)}</div>` : ''}${cfg.addr ? `<div>${esc(cfg.addr)}</div>` : ''}<div>${[cfg.phone && 'Tlf: ' + esc(cfg.phone), cfg.email && esc(cfg.email)].filter(Boolean).join(' · ')}</div></div></div>
       <div class="fv-box"><b class="${fiscal ? 'red' : ''}">${fiscal ? 'FACTURA' : 'NOTA DE ENTREGA'}</b><div class="no">${fiscal ? (s.fiscalNo ? 'Nº ' + esc(s.fiscalNo) : 'Nº ______') : 'Nº ' + esc(s.noteNo || '')}</div><small>Fecha de emisión</small><div>${dt.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'})}</div></div></div>
     <div class="fv-cli"><div class="w2"><small>Nombre o razón social</small><b>${esc(cl.name || '—')}</b></div><div><small>RIF / C.I.</small><b>${esc(cl.rif || '—')}</b></div>
@@ -1882,12 +1900,13 @@ function facturaHTML(s){
     <div class="fv-foot">${fiscal ? 'Copia de control interno. La factura legal es la de tu máquina fiscal o forma libre autorizada.' : 'Documento no fiscal.'}</div>
   </div>`;
 }
+async function fillLogos(){ const u = await getLogo(); document.querySelectorAll('.fvLogo').forEach(i => { if (u){ i.src = u; i.style.visibility = ''; } else i.remove(); }); }
 function viewFactura(id){
   const s = S.sales[id]; if (!s) return;
   const fiscal = s.doc === 'fiscal', cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
   openSheet(`<h2>${fiscal ? 'Factura' : 'Nota de entrega'}</h2>
   ${!cfg.rif || !cfg.addr ? `<div class="warnbox">Faltan datos de tu negocio (${[!cfg.rif && 'RIF', !cfg.addr && 'dirección'].filter(Boolean).join(' y ')}). ${isAdmin() ? `<a href="#" onclick="closeSheet();go('mas','ajustes');return false">Complétalos en Ajustes</a>` : 'Pídele al administrador que los complete en Ajustes.'}</div>` : ''}
-  <div class="fv-wrap">${facturaHTML(s)}</div>
+  <div class="fv-wrap">${facturaHTML(s)}</div>${showLogo() ? `<img style="display:none" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onload="fillLogos()">` : ''}
   <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}')">Descargar PDF</button>${s.doc === 'nota' ? `<button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
   <a class="btn wa full" style="margin-top:8px" href="${waLink(cl.phone || '', receiptText(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
@@ -1903,7 +1922,8 @@ async function facturaPDF(id){
   const txt = (t, x, yy, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.s || 9); Array.isArray(o.c) ? doc.setTextColor(...o.c) : doc.setTextColor(o.c || 0); doc.text(String(t), x, yy, o.a ? {align:o.a} : undefined); };
   // Encabezado: logo + datos del negocio
   let x0 = L;
-  if (showLogo()){ const d = await imgSize(cfg.logo); if (d){ const k = Math.min(28 / d.w, 24 / d.h); const w = d.w * k, h = d.h * k; try { doc.addImage(cfg.logo, cfg.logo.includes('image/jpeg') ? 'JPEG' : 'PNG', L, y - 2, w, h); x0 = L + w + 5; } catch(e){} } }
+  const LG = showLogo() ? await getLogo() : '';
+  if (LG){ const d = await imgSize(LG); if (d){ const k = Math.min(28 / d.w, 24 / d.h); const w = d.w * k, h = d.h * k; try { doc.addImage(LG, LG.includes('image/jpeg') ? 'JPEG' : 'PNG', L, y - 2, w, h); x0 = L + w + 5; } catch(e){} } }
   const nmW = 136 - x0; doc.setFont('helvetica', 'bold'); let nmS = 15; doc.setFontSize(nmS); let nm = doc.splitTextToSize(cfg.name || 'Mi Negocio', nmW);
   if (nm.length > 1){ nmS = 12.5; doc.setFontSize(nmS); nm = doc.splitTextToSize(cfg.name || 'Mi Negocio', nmW); }
   nm.slice(0, 2).forEach((l, k) => txt(l, x0, y + 3 + k * nmS * 0.42, {b:1, s:nmS}));
@@ -2451,8 +2471,8 @@ VIEWS.mas = {
         <label>Dirección del local</label><input id="aD" value="${esc(cfg.addr)}" placeholder="Ej: Av. Principal, C.C. Plaza, Local 12, Caracas">
         <label>Correo de contacto</label><input id="aE" type="email" value="${esc(cfg.email || '')}" placeholder="ventas@minegocio.com" autocapitalize="none">
         <label>Logo del negocio</label>
-        <div class="row" style="gap:14px;align-items:center"><div id="logoPrev" class="logoprev">${cfg.logo ? `<img src="${cfg.logo}" alt="Logo">` : '<span>Sin logo</span>'}</div>
-          <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${cfg.logo ? 'Cambiar logo' : 'Subir logo'}<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this.files[0])"></label><button type="button" class="btn sm sec" id="logoDel" style="${cfg.logo ? '' : 'display:none'}" onclick="removeLogo()">Quitar</button></div></div>
+        <div class="row" style="gap:14px;align-items:center"><div id="logoPrev" class="logoprev">${cfg.logoV || cfg.logo ? `<img class="fvLogo" alt="Logo" style="visibility:hidden">` : '<span>Sin logo</span>'}</div>${cfg.logoV || cfg.logo ? `<img style="display:none" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onload="fillLogos()">` : ''}
+          <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${cfg.logoV || cfg.logo ? 'Cambiar logo' : 'Subir logo'}<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this.files[0])"></label><button type="button" class="btn sm sec" id="logoDel" style="${cfg.logoV || cfg.logo ? '' : 'display:none'}" onclick="removeLogo()">Quitar</button></div></div>
         <label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="aLg" class="chk" ${cfg.logoOn !== false ? 'checked' : ''}> Mostrar el logo en facturas y notas de entrega</label>
         <p class="note">Nombre, RIF, dirección, teléfono, correo y logo salen arriba en todas tus facturas y notas. Se guardan aquí una sola vez.</p>
         <label>Próximo número de factura</label><input id="aF" inputmode="numeric" value="${esc(nextInvNo())}" placeholder="000001">
@@ -3129,7 +3149,8 @@ setInterval(() => { if (view === 'tasas') VIEWS.tasas.fill(); render.chipOnly &&
 async function saveRates(){
   const b = num($('#tB').value), e = num($('#tE').value);
   if (b <= 0){ toast('Pon la tasa del dólar'); return; }
-  const now = Date.now(), d = new Date(), id = d.toISOString().slice(0, 10);
+  // Fecha local (no UTC): de noche en Venezuela el UTC ya es el día siguiente y frenaba la tasa automática.
+  const now = Date.now(), d = new Date(), id = todayISO();
   const data = {bcv:r2(b), eur:e > 0 ? r2(e) : (cfg.eur || 0), ratesAt:now, checkedAt:now, ratesSrc:'manual', ratesDate:d.toLocaleDateString('es-VE', {weekday:'long', day:'numeric', month:'long'})};
   if (await putCfg(data)){
     await put('rates', id, {bcv:data.bcv, eur:data.eur, ts:now, date:fmtDay(now), src:'manual'});

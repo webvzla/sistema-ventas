@@ -460,7 +460,7 @@ footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
   const total = 10.40;
   const nf = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
   try {
-    const r = await fetch('https://stocksoft.web.app/app/tasas.json?t=' + Date.now(), {cache:'no-store'});
+    const r = await fetch((location.protocol === 'file:' ? 'https://stocksoft.app' : '') + '/app/tasas.json?t=' + Date.now(), {cache:'no-store'});
     const j = await r.json();
     if (!(j.usd > 0)) return;
     document.getElementById('tBs').textContent = nf.format(total * j.usd);
