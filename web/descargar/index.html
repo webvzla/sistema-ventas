@@ -177,15 +177,65 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;
 footer a{color:var(--ink);font-weight:600}
 footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
 @media (max-width:480px){.brand{font-size:17px}.brand img{width:28px;height:28px}.nav .btn-sm{padding:7px 13px;font-size:13px}.top .wrap{padding:0 16px}}
+
+/* Barra superior con la tasa BCV del día (lleva a la calculadora gratis) */
+.ratebar{display:block;text-decoration:none;color:var(--ink);background:linear-gradient(90deg,#0a1a3a,#0d2350 50%,#1a1a2e);border-bottom:1px solid var(--line);font-size:13.5px}
+.ratebar .wrap{display:flex;align-items:center;justify-content:center;gap:10px 16px;flex-wrap:wrap;min-height:40px;padding-top:6px;padding-bottom:6px;text-align:center}
+.ratebar b{font:800 14.5px var(--brandf);color:var(--org2);font-variant-numeric:tabular-nums}
+.ratebar .go{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#1a1408;background:linear-gradient(180deg,var(--gold1),var(--gold2));border-radius:999px;padding:3px 12px;font-size:12.5px;white-space:nowrap}
+.ratebar:hover .go{box-shadow:0 0 0 4px rgba(230,207,154,.18)}
+@media (max-width:520px){.ratebar .hide-s{display:none}}
+.nav .free{position:relative}
+.nav .free::after{content:'GRATIS';position:absolute;top:-11px;right:-14px;font:800 8.5px var(--font);letter-spacing:.06em;color:#1a1408;background:var(--org2);border-radius:6px;padding:2px 5px}
+
+/* Calculadoras gratis en la portada */
+.calcs{padding:72px 0 80px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:radial-gradient(50% 60% at 0% 0%,rgba(255,138,31,.10),transparent 70%),radial-gradient(50% 60% at 100% 100%,rgba(60,200,242,.12),transparent 70%),var(--bg2)}
+.calcs .pill{display:inline-flex;align-items:center;gap:8px;font:700 12.5px var(--font);letter-spacing:.05em;text-transform:uppercase;color:var(--org2);background:rgba(255,138,31,.1);border:1px solid rgba(255,138,31,.35);border-radius:999px;padding:6px 12px;margin-bottom:18px}
+.c-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:28px;margin-top:38px;align-items:stretch}
+@media (max-width:900px){.c-grid{grid-template-columns:1fr}}
+.conv{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--line2);border-radius:24px;padding:26px;box-shadow:0 40px 80px -40px rgba(0,0,0,.9),0 0 80px -40px rgba(60,200,242,.45)}
+.conv::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--org))}
+.conv h3{font:800 21px var(--brandf);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.conv h3 small{font:600 12px var(--font);color:var(--ok);background:rgba(61,220,151,.1);border:1px solid rgba(61,220,151,.3);border-radius:999px;padding:3px 10px}
+.conv .cin{display:flex;gap:10px;margin-top:18px}
+.conv input{flex:1;min-width:0;background:#081227;border:1px solid var(--line2);color:var(--ink);border-radius:14px;padding:14px 16px;font:700 24px var(--brandf);outline:none;font-variant-numeric:tabular-nums}
+.conv input:focus{border-color:var(--acc2);box-shadow:0 0 0 4px rgba(60,200,242,.16)}
+.cseg{display:flex;background:#081227;border:1px solid var(--line2);border-radius:14px;padding:4px;gap:4px}
+.cseg button{border:0;background:none;color:var(--mut);font:700 16px var(--brandf);border-radius:10px;padding:0 14px;cursor:pointer;min-width:46px}
+.cseg button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff}
+.cres{margin-top:16px;border-radius:18px;padding:18px 20px;background:linear-gradient(135deg,var(--blue),var(--acc) 55%,var(--acc2));color:#fff;box-shadow:0 20px 40px -22px rgba(47,140,240,.9)}
+.cres .k{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.85}
+.cres .v{font:800 clamp(30px,5.5vw,42px)/1.1 var(--brandf);font-variant-numeric:tabular-nums;margin-top:4px;word-break:break-word}
+.cres .s{font-size:14px;opacity:.9;margin-top:4px}
+.cquick{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.cquick button{background:var(--bg2);border:1px solid var(--line);color:var(--mut);border-radius:999px;padding:6px 13px;font:600 13.5px var(--font);cursor:pointer}
+.cquick button:hover{border-color:var(--acc2);color:var(--ink)}
+.cfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;font-size:13px;color:var(--faint)}
+.cfoot a{color:var(--acc2);font-weight:700;text-decoration:none}
+.cfoot .wa{display:inline-flex;align-items:center;gap:6px;color:#3ddc97}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:520px){.tiles{grid-template-columns:1fr}}
+.tile{position:relative;display:flex;flex-direction:column;text-decoration:none;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;transition:border-color .2s,transform .25s cubic-bezier(.22,1,.36,1),box-shadow .3s}
+.tile:hover{border-color:var(--acc2);transform:translateY(-4px);box-shadow:0 24px 40px -24px rgba(60,200,242,.5)}
+.tile .ti{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;color:#fff;font:800 18px var(--brandf);background:linear-gradient(135deg,var(--blue),var(--acc2));margin-bottom:12px}
+.tile:nth-child(even) .ti{background:linear-gradient(135deg,var(--org),var(--org2))}
+.tile b{font:800 16.5px/1.25 var(--brandf)}
+.tile p{color:var(--mut);font-size:14px;margin-top:5px;flex:1}
+.tile .open{margin-top:12px;font-weight:700;font-size:14px;color:var(--acc2)}
+.tile.all{background:linear-gradient(135deg,rgba(47,140,240,.14),rgba(255,138,31,.10));border-color:var(--line2);justify-content:center}
 </style>
 </head>
 <body>
+
+<a class="ratebar" href="/herramientas/dolar-bcv/" aria-label="Dólar BCV hoy: abrir la calculadora gratis">
+  <div class="wrap"><span><span class="live" aria-hidden="true"></span>Dólar BCV hoy <b id="rbUsd">—</b> Bs<span class="hide-s"> · Euro <b id="rbEur">—</b> Bs</span></span><span class="go">Calcular gratis →</span></div>
+</a>
 
 <header class="top">
   <div class="wrap">
     <a class="brand" href="#"><img src="../icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
     <nav class="nav" aria-label="Principal">
-      <a href="/herramientas/">Herramientas gratis</a>
+      <a class="free" href="#calculadoras">Calculadoras</a>
       <a href="#funciones">Funciones</a>
       <a href="#empezar">Cómo empezar</a>
       <a href="#preguntas">Preguntas</a>
@@ -225,6 +275,32 @@ footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
           <div class="t-rate"><span class="live" aria-hidden="true"></span>Tasa BCV <span id="tRate">889,58</span> Bs/$ · <span id="tDate">fecha valor</span></div>
         </div>
         <p class="scribble"><svg viewBox="0 0 52 44" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M48 40C34 38 18 30 10 10"/><path d="M4 16l6-8 8 5"/></svg>calculado ahora con la tasa de hoy</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="calcs" id="calculadoras">
+    <div class="wrap">
+      <span class="pill">Gratis · sin registrarte</span>
+      <h2>Calculadoras gratis <mark>para tu negocio.</mark></h2>
+      <p class="intro">Úsalas ahora mismo, desde el móvil o el ordenador. Con la tasa oficial del BCV de hoy, actualizada sola.</p>
+      <div class="c-grid">
+        <div class="conv">
+          <h3>Dólar BCV a bolívares <small><span class="live" aria-hidden="true"></span>tasa de hoy</small></h3>
+          <div class="cin">
+            <input id="cAmt" inputmode="decimal" value="1" autocomplete="off" aria-label="Monto">
+            <div class="cseg" role="group" aria-label="Moneda"><button data-c="usd" class="on">$</button><button data-c="eur">€</button><button data-c="bs">Bs</button></div>
+          </div>
+          <div class="cres" aria-live="polite"><div class="k" id="cK">En bolívares</div><div class="v" id="cV">—</div><div class="s" id="cS">Cargando la tasa del BCV…</div></div>
+          <div class="cquick"><button data-n="5">5</button><button data-n="10">10</button><button data-n="20">20</button><button data-n="50">50</button><button data-n="100">100</button></div>
+          <div class="cfoot"><span id="cDate">Tasa oficial del BCV</span><a class="wa" id="cWa" href="#" target="_blank" rel="noopener">Compartir por WhatsApp</a></div>
+        </div>
+        <div class="tiles">
+          <a class="tile" href="/herramientas/precio-en-bolivares/"><span class="ti">Bs</span><b>Precio de venta en bolívares</b><p>Del costo en $ a tu precio en $ y Bs con el margen que quieras.</p><span class="open">Calcular →</span></a>
+          <a class="tile" href="/herramientas/iva-igtf/"><span class="ti">%</span><b>IVA e IGTF</b><p>IVA 16 % u 8 % e IGTF 3 % por pago en divisas.</p><span class="open">Calcular →</span></a>
+          <a class="tile" href="/herramientas/margen-ganancia/"><span class="ti">↗</span><b>Margen de ganancia</b><p>Cuánto ganas de verdad en cada producto.</p><span class="open">Calcular →</span></a>
+          <a class="tile" href="/herramientas/codigo-de-barras/"><span class="ti">▥</span><b>Códigos de barras</b><p>Crea EAN-13 o Code 128 y descárgalos para imprimir.</p><span class="open">Crear →</span></a>
+        </div>
       </div>
     </div>
   </section>
@@ -336,8 +412,43 @@ footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
     document.getElementById('tRate').textContent = nf.format(j.usd);
     if (j.eur > 0) document.getElementById('tEur').textContent = '€' + nf.format(total * j.usd / j.eur);
     if (j.dateText) document.getElementById('tDate').textContent = 'fecha valor ' + j.dateText;
-  } catch (e) {}
+    document.getElementById('rbUsd').textContent = nf.format(j.usd);
+    if (j.eur > 0) document.getElementById('rbEur').textContent = nf.format(j.eur);
+    window.RATE = j; calcConv();
+  } catch (e) { document.getElementById('cS').textContent = 'No se pudo cargar la tasa. Revisa tu conexión.'; }
 })();
+
+// Calculadora rápida de la portada (dólar / euro / bolívares).
+let cCur = 'usd';
+function cNum(v){
+  let s = String(v || '').trim().replace(/\s/g, ''); if (!s) return 0;
+  if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (s.includes(',')) s = s.replace(',', '.');
+  const n = parseFloat(s); return isFinite(n) ? n : 0;
+}
+function calcConv(){
+  const R = window.RATE; if (!R) return;
+  const nf = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const a = cNum(document.getElementById('cAmt').value), u = R.usd, e = R.eur || 0;
+  const inUsd = cCur === 'usd' ? a : cCur === 'eur' ? (e ? a * e / u : 0) : a / u;
+  const vBs = inUsd * u, vEur = e ? vBs / e : 0;
+  let k, v, sub;
+  if (cCur === 'bs'){ k = 'En dólares'; v = '$' + nf.format(inUsd); sub = e ? 'o €' + nf.format(vEur) : ''; }
+  else { k = 'En bolívares'; v = 'Bs ' + nf.format(vBs); sub = cCur === 'usd' ? (e ? 'o €' + nf.format(vEur) : '') : 'o $' + nf.format(inUsd); }
+  document.getElementById('cK').textContent = k;
+  document.getElementById('cV').textContent = v;
+  document.getElementById('cS').textContent = sub;
+  document.getElementById('cDate').textContent = 'Tasa BCV ' + nf.format(u) + ' Bs/$' + (R.dateText ? ' · ' + R.dateText : '');
+  const sym = cCur === 'usd' ? '$' : cCur === 'eur' ? '€' : 'Bs ';
+  const msg = (cCur === 'bs' ? sym + nf.format(a) : sym + nf.format(a)) + ' = ' + v + ' (tasa BCV ' + nf.format(u) + '). Calcula gratis: https://stocksoft.web.app/herramientas/dolar-bcv/';
+  document.getElementById('cWa').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+}
+document.getElementById('cAmt').addEventListener('input', calcConv);
+document.querySelectorAll('.cseg button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.cseg button').forEach(x => x.classList.toggle('on', x === b));
+  cCur = b.dataset.c; calcConv();
+}));
+document.querySelectorAll('.cquick button').forEach(b => b.addEventListener('click', () => { document.getElementById('cAmt').value = b.dataset.n; calcConv(); }));
 </script>
 </body>
 </html>

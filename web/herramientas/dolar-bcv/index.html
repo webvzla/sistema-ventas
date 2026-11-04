@@ -37,7 +37,7 @@
         <div class="result"><div class="k" id="rk">En bolívares</div><div class="v" id="rv">—</div><div class="s" id="rs"></div></div>
         <div class="lines" id="tbl"></div>
         <div class="rate" data-rate>Cargando la tasa del BCV…</div>
-        <button class="btn sec sm copy" id="cp">Copiar resultado</button>
+        <div class="qfoot"><button class="btn sec sm" id="cp">Copiar resultado</button><a class="btn sm wa" id="wa" target="_blank" rel="noopener" href="#">Enviar por WhatsApp</a></div>
       </div>
       <div class="ad" data-slot=""></div>
       <section class="info">
@@ -70,6 +70,7 @@ function calc(){
   const main = c === 'bs' ? ['En dólares', usd(inUsd), e ? 'Equivale a ' + eur(vEur) : ''] : ['En bolívares', bs(vBs), c === 'usd' ? (e ? 'Equivale a ' + eur(vEur) : '') : 'Equivale a ' + usd(inUsd)];
   $('#rk').textContent = main[0]; $('#rv').textContent = main[1]; $('#rs').textContent = main[2];
   const sym = c === 'usd' ? '$' : c === 'eur' ? '€' : 'Bs';
+  $('#wa').href = shareWa(sym + ' ' + nf2.format(a) + ' = ' + main[1] + ' (tasa BCV ' + nf2.format(u) + ')');
   $('#tbl').innerHTML = [1, 5, 10, 20, 50, 100].map(n => { const x = c === 'usd' ? n * u : c === 'eur' ? n * e : n / u; return `<div><span>${sym} ${nf2.format(n)}</span><b>${c === 'bs' ? usd(x) : bs(x)}</b></div>`; }).join('');
 }
 $('#amt').addEventListener('input', calc); $('#cur').addEventListener('change', calc);

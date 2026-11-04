@@ -21,18 +21,34 @@
 </div></header>
 
 <main class="wrap">
-  <section class="hero">
-    <h1>Herramientas <em>gratis</em> para tu negocio</h1>
-    <p class="lead">Calculadoras pensadas para comercios en Venezuela: convierte con la tasa oficial del BCV del día, calcula precios en bolívares, IVA, IGTF y márgenes, y crea códigos de barras para tus productos. Sin registrarte y sin instalar nada.</p>
-    <div class="rate" data-rate>Cargando la tasa del BCV…</div>
+  <section class="hub">
+    <div>
+      <span class="badge-free">100 % gratis · sin registrarte</span>
+      <h1>Calculadoras <em>gratis</em> para comercios en Venezuela</h1>
+      <p class="lead">Dólar BCV a bolívares, precios en Bs, IVA e IGTF, margen y códigos de barras. Con la tasa oficial del día, actualizada sola.</p>
+      <div class="bigrate">
+        <div><span class="k">Dólar BCV hoy</span><b id="hUsd">—</b><span class="u">Bs</span></div>
+        <div><span class="k">Euro BCV hoy</span><b id="hEur">—</b><span class="u">Bs</span></div>
+      </div>
+      <div class="rate" data-rate>Cargando la tasa del BCV…</div>
+    </div>
+    <div class="tool qconv">
+      <b class="qt">Convierte ahora</b>
+      <div class="qin"><input id="amt" inputmode="decimal" value="1" autocomplete="off" aria-label="Monto">
+        <div class="qseg" role="group" aria-label="Moneda"><button data-c="usd" class="on">$</button><button data-c="eur">€</button><button data-c="bs">Bs</button></div></div>
+      <div class="result"><div class="k" id="rk">En bolívares</div><div class="v" id="rv">—</div><div class="s" id="rs"></div></div>
+      <div class="qfoot"><button class="btn sec sm" id="cp">Copiar</button><a class="btn sm wa" id="wa" target="_blank" rel="noopener" href="#">Enviar por WhatsApp</a></div>
+    </div>
   </section>
 
-  <div class="grid">
-    <a class="card" href="/herramientas/dolar-bcv/"><div class="ico">$</div><b>Dólar BCV a bolívares</b><p>Convierte dólares, euros y bolívares con la tasa oficial del día.</p></a>
-    <a class="card" href="/herramientas/precio-en-bolivares/"><div class="ico">Bs</div><b>Precio de venta en bolívares</b><p>Del costo en $ al precio de venta en $ y Bs con tu margen.</p></a>
-    <a class="card" href="/herramientas/iva-igtf/"><div class="ico">%</div><b>Calculadora de IVA e IGTF</b><p>Base imponible, IVA 16 % u 8 % e IGTF 3 % por pago en divisas.</p></a>
-    <a class="card" href="/herramientas/margen-ganancia/"><div class="ico">↗</div><b>Margen de ganancia</b><p>Cuánto ganas por producto: margen sobre venta y recargo sobre costo.</p></a>
-    <a class="card" href="/herramientas/codigo-de-barras/"><div class="ico">▥</div><b>Generador de códigos de barras</b><p>Crea códigos EAN-13 o Code 128 y descárgalos para imprimir.</p></a>
+  <h2 class="sec-t">Todas las herramientas</h2>
+  <div class="grid big">
+    <a class="card hot" href="/herramientas/dolar-bcv/"><span class="tag">Más usada</span><div class="ico">$</div><b>Dólar BCV a bolívares</b><p>Convierte dólares, euros y bolívares con la tasa oficial del día, con tabla de montos rápidos.</p><span class="open">Abrir →</span></a>
+    <a class="card" href="/herramientas/precio-en-bolivares/"><div class="ico">Bs</div><b>Precio de venta en bolívares</b><p>Del costo en $ al precio de venta en $ y Bs con tu margen.</p><span class="open">Abrir →</span></a>
+    <a class="card" href="/herramientas/iva-igtf/"><div class="ico">%</div><b>Calculadora de IVA e IGTF</b><p>Base imponible, IVA 16 % u 8 % e IGTF 3 % por pago en divisas.</p><span class="open">Abrir →</span></a>
+    <a class="card" href="/herramientas/margen-ganancia/"><div class="ico">↗</div><b>Margen de ganancia</b><p>Cuánto ganas por producto: margen sobre venta y recargo sobre costo.</p><span class="open">Abrir →</span></a>
+    <a class="card" href="/herramientas/codigo-de-barras/"><div class="ico">▥</div><b>Generador de códigos de barras</b><p>Crea códigos EAN-13 o Code 128 y descárgalos para imprimir.</p><span class="open">Abrir →</span></a>
+    <a class="card promo-card" href="/"><div class="ico">★</div><b>¿Haces esto todo el día?</b><p>StockSoft lo calcula solo en cada venta: inventario, caja y fiados con la tasa del día.</p><span class="open">Probar gratis 7 días →</span></a>
   </div>
 
   <div class="ad" data-slot=""></div>
@@ -46,6 +62,22 @@
 
 <footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a> · <a href="/">StockSoft</a></span></div></footer>
 <script src="/herramientas/comun.js"></script>
-<script>loadRate();</script>
+<script>
+let cur = 'usd';
+function calc(){
+  if (!RATE) return;
+  const a = num($('#amt').value), u = RATE.usd, e = RATE.eur || 0;
+  const inUsd = cur === 'usd' ? a : cur === 'eur' ? (e ? a * e / u : 0) : a / u;
+  const vBs = inUsd * u, vEur = e ? vBs / e : 0;
+  const m = cur === 'bs' ? ['En dólares', usd(inUsd), e ? 'o ' + eur(vEur) : ''] : ['En bolívares', bs(vBs), cur === 'usd' ? (e ? 'o ' + eur(vEur) : '') : 'o ' + usd(inUsd)];
+  $('#rk').textContent = m[0]; $('#rv').textContent = m[1]; $('#rs').textContent = m[2];
+  const sym = cur === 'usd' ? '$' : cur === 'eur' ? '€' : 'Bs ';
+  $('#wa').href = shareWa(sym + nf2.format(a) + ' = ' + m[1] + ' (tasa BCV ' + nf2.format(u) + ')', '/herramientas/dolar-bcv/');
+}
+document.querySelectorAll('.qseg button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.qseg button').forEach(x => x.classList.toggle('on', x === b)); cur = b.dataset.c; calc(); }));
+$('#amt').addEventListener('input', calc);
+$('#cp').addEventListener('click', e => copyText($('#amt').value + ' ' + cur.toUpperCase() + ' = ' + $('#rv').textContent, e.target));
+loadRate().then(R => { if (R){ $('#hUsd').textContent = nf2.format(R.usd); if (R.eur) $('#hEur').textContent = nf2.format(R.eur); } calc(); });
+</script>
 </body>
 </html>

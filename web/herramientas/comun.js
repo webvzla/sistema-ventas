@@ -36,6 +36,27 @@ function copyText(t, btn){
   navigator.clipboard.writeText(t).then(() => { if (btn){ const o = btn.textContent; btn.textContent = '¡Copiado!'; setTimeout(() => btn.textContent = o, 1400); } }, () => {});
 }
 
+// Enlace para compartir un resultado por WhatsApp (con el enlace a la herramienta).
+function shareWa(text, path){
+  return 'https://wa.me/?text=' + encodeURIComponent(text + '. Calcula gratis: https://stocksoft.web.app' + (path || location.pathname));
+}
+
+// "Otras herramientas" al final de cada calculadora (más visitas entre herramientas).
+const TOOLS = [
+  ['/herramientas/dolar-bcv/', '$', 'Dólar BCV a bolívares'],
+  ['/herramientas/precio-en-bolivares/', 'Bs', 'Precio de venta en Bs'],
+  ['/herramientas/iva-igtf/', '%', 'IVA e IGTF'],
+  ['/herramientas/margen-ganancia/', '↗', 'Margen de ganancia'],
+  ['/herramientas/codigo-de-barras/', '▥', 'Códigos de barras'],
+];
+function moreTools(){
+  const main = document.querySelector('main .layout'); if (!main) return;
+  const here = location.pathname.replace(/index\.html$/, '').replace(/([^/])$/, '$1/');
+  const sec = document.createElement('section'); sec.className = 'more noprint';
+  sec.innerHTML = '<h2>Otras calculadoras gratis</h2><div class="more-grid">' + TOOLS.filter(t => t[0] !== here).map(t => `<a href="${t[0]}"><span class="ico">${t[1]}</span>${t[2]}<i>→</i></a>`).join('') + '</div>';
+  main.after(sec);
+}
+
 // Anuncios: <div class="ad" data-slot="1234567890"></div>
 function initAds(){
   const slots = [...document.querySelectorAll('.ad')];
@@ -50,4 +71,4 @@ function initAds(){
     try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e){}
   });
 }
-document.addEventListener('DOMContentLoaded', () => { initAds(); const y = $('#year'); if (y) y.textContent = new Date().getFullYear(); });
+document.addEventListener('DOMContentLoaded', () => { moreTools(); initAds(); const y = $('#year'); if (y) y.textContent = new Date().getFullYear(); });
