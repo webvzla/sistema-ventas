@@ -60,7 +60,7 @@ const table = rows => `<table style="width:100%;border-collapse:collapse;font-si
 
 async function send(to, subject, html){
   if (DRY){ console.log('  [dry] →', to, '·', subject); return true; }
-  try { await mailer.sendMail({from: FROM, to, subject, html}); console.log('  ✓ enviado →', to, '·', subject); return true; }
+  try { await mailer.sendMail({from: FROM, replyTo: process.env.SMTP_REPLY_TO || 'soporte@stocksoft.app', to, subject, html}); console.log('  ✓ enviado →', to, '·', subject); return true; }
   catch(e){ console.error('  ✗ no se pudo enviar a', to, e.message); return false; }
 }
 
