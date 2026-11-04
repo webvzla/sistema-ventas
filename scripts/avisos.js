@@ -12,6 +12,8 @@ const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
 const DRY = process.argv.includes('--dry');
+// Los secretos a veces se pegan con espacios o saltos de línea: se limpian (la contraseña de Gmail va sin espacios).
+const SMTP_USER = String(process.env.SMTP_USER || '').trim(), SMTP_PASS = String(process.env.SMTP_PASS || '').replace(/\s+/g, '');
 const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || process.env.SA || '{}');
 if (!sa.project_id){ console.error('Falta FIREBASE_SERVICE_ACCOUNT'); process.exit(1); }
 admin.initializeApp({credential: admin.credential.cert(sa)});
@@ -44,9 +46,9 @@ function bizActive(b){
 
 const mailer = DRY ? null : nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com', port: 465, secure: true,
-  auth: {user: process.env.SMTP_USER, pass: process.env.SMTP_PASS}
+  auth: {user: SMTP_USER, pass: SMTP_PASS}
 });
-const FROM = process.env.SMTP_FROM || ('StockSoft <' + (process.env.SMTP_USER || 'avisos@stocksoft.app') + '>');
+const FROM = (process.env.SMTP_FROM || '').trim() || ('StockSoft <' + (SMTP_USER || 'avisos@stocksoft.app') + '>');
 
 function page(title, bizName, inner){
   return `<!doctype html><html><body style="margin:0;background:#f2f5fa;font-family:Arial,Helvetica,sans-serif;color:#111">
