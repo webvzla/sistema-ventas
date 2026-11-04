@@ -124,6 +124,21 @@ label.row{display:flex;font-size:14px;color:var(--tx)}
 .ph-box{width:84px;height:84px;border-radius:16px;border:1.5px dashed var(--line2);display:grid;place-items:center;color:var(--faint);font-size:28px;overflow:hidden;flex:none;background:var(--card2)}
 .ph-box img{width:100%;height:100%;object-fit:cover}
 .ph-big{width:100%;max-height:340px;object-fit:contain;border-radius:16px;background:#fff;margin:8px 0 12px;cursor:zoom-in}
+.fv-wrap{background:#e9edf3;border-radius:14px;padding:10px;overflow:auto;max-height:62vh}
+.fv{background:#fff;color:#111;border-radius:6px;padding:16px;font:12px/1.35 'Inter',system-ui,sans-serif;min-width:300px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.fv small{display:block;font-size:9.5px;color:#777}.fv b{font-weight:700}.fv .mut{color:#777;font-size:10.5px}
+.fv-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.fv-biz{display:flex;gap:10px;align-items:flex-start;font-size:11px;color:#333}.fv-biz b{display:block;font-size:15px;color:#000;line-height:1.2;margin-bottom:2px}
+.fv-biz img{width:54px;height:54px;object-fit:contain;flex:none}
+.fv-box{border:1.5px solid #222;border-radius:7px;padding:7px 10px;text-align:center;min-width:110px;flex:none}.fv-box b{font-size:13px}.fv-box .red{color:#c8202a}.fv-box .no{font-weight:700;margin:2px 0 4px}
+.fv-cli{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 12px;border:1.5px solid #222;border-radius:7px;padding:8px 10px;margin-top:12px}.fv-cli .w2{grid-column:span 1}
+.fv-cli>div:nth-child(1){grid-column:1/3}.fv-cli>div:nth-child(3){grid-column:1/2}.fv-cli>div:nth-child(2) b,.fv-cli>div:nth-child(4) b,.fv-cli>div:nth-child(5) b{white-space:nowrap}
+.fv-t{width:100%;border-collapse:collapse;margin-top:12px}.fv-t th{background:#ebf0f8;border:1px solid #222;font-size:10px;padding:5px;text-transform:uppercase}
+.fv-t td{border-bottom:1px solid #ddd;padding:5px;vertical-align:top}.fv-t td:first-child{text-align:center;width:40px}.fv-t td:nth-child(3),.fv-t td:nth-child(4){text-align:right;white-space:nowrap}
+.fv-bot{display:flex;justify-content:space-between;gap:14px;margin-top:12px;flex-wrap:wrap}.fv-pay{font-size:11px}
+.fv-tot{min-width:200px;flex:1;max-width:280px;margin-left:auto}.fv-tot>div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+.fv-tot .big{background:#ebf0f8;border:1px solid #222;padding:6px 8px;margin-top:4px;font-weight:800;font-size:13px}
+.fv-foot{margin-top:14px;text-align:center;font-size:9.5px;color:#888}
 .logoprev{width:84px;height:84px;border-radius:14px;border:1px dashed var(--line2, var(--line));display:grid;place-items:center;background:#fff;overflow:hidden;flex:none}
 .logoprev img{max-width:100%;max-height:100%;object-fit:contain}.logoprev span{font-size:11px;color:#667}
 .svchip{display:inline-flex;align-items:center;border:1px solid var(--line2, var(--line));border-radius:999px;background:var(--card2);overflow:hidden}
@@ -1658,8 +1673,8 @@ function showSale(id, justDone){
   ${fiscal ? `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">${s.fiscalNo ? 'Factura Nº ' + esc(s.fiscalNo) : 'Emite la factura en tu máquina fiscal'}</div>
     <p class="note">${s.fiscalNo ? 'Puedes corregir el número si hace falta.' : 'Usa estos datos en la máquina fiscal y anota aquí el número de factura que imprime, para tenerlo registrado.'}</p>
     <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>
-    <button class="btn sec full" style="margin-top:10px" onclick="facturaPDF('${id}')">Descargar factura tamaño carta (PDF)</button>`
-  : s.doc === 'nota' ? `<div class="grid2" style="margin-top:10px"><button class="btn sec" onclick="facturaPDF('${id}')">Nota tamaño carta (PDF)</button><button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm (PDF)</button></div>` : ''}
+    <button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver factura</button>`
+  : s.doc === 'nota' ? `<button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver nota de entrega</button>` : ''}
   <a class="btn wa full" style="margin-top:8px" href="${waLink(phone, receiptText(s))}" target="_blank" rel="noopener">Enviar recibo por WhatsApp</a>
   ${isAdmin() ? `<div class="card" style="margin-top:12px;padding:10px 12px"><div class="sub" style="font-weight:600;margin:0 0 8px">¿Hubo un error? (solo administrador)</div><div class="gap">
     ${!isRet ? `<button class="btn sm sec" onclick="correctSale('${id}')">Corregir venta</button>` : ''}
@@ -1759,6 +1774,42 @@ const showLogo = () => !!(cfg.logo && cfg.logoOn !== false);
 function imgSize(url){ return new Promise(r => { const i = new Image(); i.onload = () => r({w:i.width, h:i.height}); i.onerror = () => r(null); i.src = url; }); }
 const payCond = s => salePayments(s).some(p => p.m === 'fiado') ? 'Crédito' : 'Contado';
 
+/* ---- Vista previa de la factura / nota (antes de descargarla) ---- */
+function facturaHTML(s){
+  const fiscal = s.doc === 'fiscal', rate = num(s.rate), inBs = rate > 0;
+  const m = v => inBs ? 'Bs ' + nf2.format(r2(v * rate)) : usd(v);
+  const cl = s.customer || (s.clientId && S.clients[s.clientId]) || {}, t = s.tax || {}, dt = new Date(s.ts);
+  const tl = [['Sub-total', num(s.sub ?? s.total)]];
+  if (fiscal || num(t.i16) || num(t.i8)){
+    if (num(t.b16)) tl.push(['Base imponible 16%', num(t.b16)], ['I.V.A. 16%', num(t.i16)]);
+    if (num(t.b8)) tl.push(['Base imponible 8%', num(t.b8)], ['I.V.A. 8%', num(t.i8)]);
+    if (num(t.ex)) tl.push(['Exento', num(t.ex)]);
+  }
+  if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
+  return `<div class="fv">
+    <div class="fv-top"><div class="fv-biz">${showLogo() ? `<img src="${cfg.logo}" alt="">` : ''}<div><b>${esc(cfg.name || 'Mi Negocio')}</b>
+      ${cfg.rif ? `<div>RIF: ${esc(cfg.rif)}</div>` : ''}${cfg.addr ? `<div>${esc(cfg.addr)}</div>` : ''}<div>${[cfg.phone && 'Tlf: ' + esc(cfg.phone), cfg.email && esc(cfg.email)].filter(Boolean).join(' · ')}</div></div></div>
+      <div class="fv-box"><b class="${fiscal ? 'red' : ''}">${fiscal ? 'FACTURA' : 'NOTA DE ENTREGA'}</b><div class="no">${fiscal ? (s.fiscalNo ? 'Nº ' + esc(s.fiscalNo) : 'Nº ______') : 'Nº ' + esc(s.noteNo || '')}</div><small>Fecha de emisión</small><div>${dt.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'})}</div></div></div>
+    <div class="fv-cli"><div class="w2"><small>Nombre o razón social</small><b>${esc(cl.name || '—')}</b></div><div><small>RIF / C.I.</small><b>${esc(cl.rif || '—')}</b></div>
+      <div class="w2"><small>Domicilio fiscal</small><b>${esc(cl.addr || '—')}</b></div><div><small>Teléfono</small><b>${esc(cl.phone || '—')}</b></div><div><small>Condiciones de pago</small><b>${payCond(s)}</b></div></div>
+    <table class="fv-t"><thead><tr><th>Cant.</th><th>Descripción</th><th>P. unitario</th><th>Total</th></tr></thead><tbody>
+      ${(s.items || []).map(i => `<tr><td>${nfq.format(num(i.qty))}</td><td>${esc(i.name)}${num(i.iva ?? 16) === 0 && fiscal ? ' (E)' : num(i.iva ?? 16) === 8 ? ' (8%)' : ''}</td><td>${m(num(i.price))}</td><td>${m(r2(num(i.price) * num(i.qty)))}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="fv-bot"><div class="fv-pay"><small>Forma de pago</small>${salePayments(s).map(p => `<div>${METHODS[p.m] || p.m}: ${fmtCur(p.raw, p.cur)}</div>`).join('')}${s.userName ? `<div class="mut">Atendido por ${esc(s.userName)}</div>` : ''}</div>
+      <div class="fv-tot">${tl.map(([k, v]) => `<div><span>${k}</span><span>${m(v)}</span></div>`).join('')}<div class="big"><span>TOTAL A PAGAR${inBs ? ' Bs' : ''}</span><span>${inBs ? nf2.format(r2(num(s.total) * rate)) : usd(num(s.total))}</span></div>${inBs ? `<div class="mut" style="justify-content:flex-end">Equivale a ${usd(num(s.total))} · tasa ${nf2.format(rate)}</div>` : ''}</div></div>
+    <div class="fv-foot">${fiscal ? 'Copia de control interno. La factura legal es la de tu máquina fiscal o forma libre autorizada.' : 'Documento no fiscal.'}</div>
+  </div>`;
+}
+function viewFactura(id){
+  const s = S.sales[id]; if (!s) return;
+  const fiscal = s.doc === 'fiscal', cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
+  openSheet(`<h2>${fiscal ? 'Factura' : 'Nota de entrega'}</h2>
+  ${!cfg.rif || !cfg.addr ? `<div class="warnbox">Faltan datos de tu negocio (${[!cfg.rif && 'RIF', !cfg.addr && 'dirección'].filter(Boolean).join(' y ')}). ${isAdmin() ? `<a href="#" onclick="closeSheet();go('mas','ajustes');return false">Complétalos en Ajustes</a>` : 'Pídele al administrador que los complete en Ajustes.'}</div>` : ''}
+  <div class="fv-wrap">${facturaHTML(s)}</div>
+  <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}')">Descargar PDF</button>${s.doc === 'nota' ? `<button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
+  <a class="btn wa full" style="margin-top:8px" href="${waLink(cl.phone || '', receiptText(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
 /* ---- Factura / nota tamaño carta, con el formato de un talonario ---- */
 async function facturaPDF(id){
   const s = S.sales[id]; if (!s) return;
