@@ -518,7 +518,7 @@ async function createPinMember(name, pin, role){
   }
 }
 function empCredSheet(x){
-  ui.empTxt = 'Tu acceso a StockSoft (' + (cfg.name || 'el negocio') + '):\nUsuario: ' + x.user + '\nPIN: ' + x.pin + '\nEntra en https://stocksoft.web.app/app/ o en la app de PC y escribe el usuario en "Correo o usuario".';
+  ui.empTxt = 'Tu acceso a StockSoft (' + (cfg.name || 'el negocio') + '):\nUsuario: ' + x.user + '\nPIN: ' + x.pin + '\nEntra en https://stocksoft.app/app/ o en la app de PC y escribe el usuario en "Correo o usuario".';
   openSheet(`<h2>Empleado creado</h2><p class="note" style="margin-top:0">Dale estos datos a <b>${esc(x.name)}</b>. Entra escribiendo el usuario en "Correo o usuario" y su PIN.</p>
   <div class="card" style="margin-top:10px"><div class="mv"><span>Usuario</span><b>${esc(x.user)}</b></div><div class="mv"><span>PIN</span><b>${esc(x.pin)}</b></div></div>
   <div class="gap" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="navigator.clipboard.writeText(ui.empTxt).then(()=>toast('Copiado'),()=>toast('Cópialo a mano'))">Copiar</button><a class="btn wa" style="flex:1" href="${waLink('', ui.empTxt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>
@@ -637,7 +637,7 @@ async function saveLic(){
   const d = {used:false, note:$('#lcN').value.trim(), createdAt:Date.now(), expires:m ? addMonths(Date.now(), m) : 0, months:m};
   try { await FB.fs.doc('licenses/' + code).set(d); showLic(code, d); } catch(e){ toast(fbMsg(e)); }
 }
-function licMsg(code){ return `Tu código de activación de StockSoft es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o entra en https://stocksoft.web.app/ y toca "Usar en el navegador"\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
+function licMsg(code){ return `Tu código de activación de StockSoft es:\n\n*${fmtCode(code)}*\n\n1. Abre la app (PC) o entra en https://stocksoft.app/ y toca "Usar en el navegador"\n2. Toca "Crear cuenta de negocio"\n3. Escribe este código, el nombre de tu negocio, tu correo y una contraseña.`; }
 function showLic(code, d){
   d = d || lic.list[code] || {};
   openSheet(`<h2>Código de activación</h2>
