@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dólar BCV hoy a bolívares: convertidor con la tasa oficial · StockSoft</title>
+<meta name="description" content="Convierte dólares, euros y bolívares con la tasa oficial del BCV de hoy, actualizada automáticamente. Calculadora gratis y rápida, también desde el móvil.">
+<link rel="canonical" href="https://stocksoft.web.app/herramientas/dolar-bcv/">
+<meta property="og:title" content="Dólar BCV hoy a bolívares · StockSoft">
+<meta property="og:description" content="Convertidor gratis con la tasa oficial del BCV del día.">
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/herramientas/">Herramientas</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/herramientas/">Herramientas</a> › Dólar BCV</div>
+    <h1>Dólar BCV hoy a <em>bolívares</em></h1>
+    <p class="lead">Escribe un monto y conviértelo al instante entre dólares, euros y bolívares con la tasa oficial del Banco Central de Venezuela.</p>
+  </section>
+
+  <div class="layout">
+    <div>
+      <div class="tool">
+        <div class="row">
+          <div><label for="amt">Monto</label><input id="amt" inputmode="decimal" value="1" autocomplete="off"></div>
+          <div><label for="cur">Moneda</label><select id="cur"><option value="usd">Dólares ($)</option><option value="eur">Euros (€)</option><option value="bs">Bolívares (Bs)</option></select></div>
+        </div>
+        <div class="result"><div class="k" id="rk">En bolívares</div><div class="v" id="rv">—</div><div class="s" id="rs"></div></div>
+        <div class="lines" id="tbl"></div>
+        <div class="rate" data-rate>Cargando la tasa del BCV…</div>
+        <button class="btn sec sm copy" id="cp">Copiar resultado</button>
+      </div>
+      <div class="ad" data-slot=""></div>
+      <section class="info">
+        <h2>¿Cómo se calcula?</h2>
+        <p>Se multiplica el monto en dólares por la tasa oficial del dólar del BCV (o en euros por la del euro). Para pasar de bolívares a divisas se divide entre la tasa. Por ejemplo, con una tasa de 100 Bs por dólar, 5 $ son 500 Bs.</p>
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq">
+          <details><summary>¿De dónde sale la tasa?</summary><p>De la tasa oficial publicada por el Banco Central de Venezuela (bcv.org.ve). Se consulta automáticamente varias veces al día; si el BCV publica una tasa nueva, aparece aquí sin que tengas que hacer nada.</p></details>
+          <details><summary>¿Sirve para cobrar en mi negocio?</summary><p>Sí, como referencia rápida. Si cobras todo el día en dos monedas, <a href="/">StockSoft</a> convierte cada precio de tu inventario y cada venta a bolívares automáticamente.</p></details>
+          <details><summary>¿La tasa cambia los fines de semana?</summary><p>El BCV no suele publicar tasas nuevas los fines de semana ni los feriados: se mantiene la última publicada, con su "fecha valor".</p></details>
+        </div>
+      </section>
+    </div>
+    <aside class="side">
+      <div class="promo"><b>Cobra en Bs sin calculadora</b><p>StockSoft convierte cada venta con la tasa del BCV, controla tu inventario, caja y fiados.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/herramientas/">Todas las herramientas</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+<script>
+function calc(){
+  const a = num($('#amt').value), c = $('#cur').value;
+  if (!RATE){ $('#rv').textContent = '—'; return; }
+  const u = RATE.usd, e = RATE.eur || 0;
+  const inUsd = c === 'usd' ? a : c === 'eur' ? (e ? a * e / u : 0) : a / u;
+  const vBs = inUsd * u, vEur = e ? vBs / e : 0;
+  const main = c === 'bs' ? ['En dólares', usd(inUsd), e ? 'Equivale a ' + eur(vEur) : ''] : ['En bolívares', bs(vBs), c === 'usd' ? (e ? 'Equivale a ' + eur(vEur) : '') : 'Equivale a ' + usd(inUsd)];
+  $('#rk').textContent = main[0]; $('#rv').textContent = main[1]; $('#rs').textContent = main[2];
+  const sym = c === 'usd' ? '$' : c === 'eur' ? '€' : 'Bs';
+  $('#tbl').innerHTML = [1, 5, 10, 20, 50, 100].map(n => { const x = c === 'usd' ? n * u : c === 'eur' ? n * e : n / u; return `<div><span>${sym} ${nf2.format(n)}</span><b>${c === 'bs' ? usd(x) : bs(x)}</b></div>`; }).join('');
+}
+$('#amt').addEventListener('input', calc); $('#cur').addEventListener('change', calc);
+$('#cp').addEventListener('click', e => copyText($('#amt').value + ' ' + $('#cur').selectedOptions[0].text + ' = ' + $('#rv').textContent + ' (tasa BCV ' + (RATE ? nf4.format(RATE.usd) : '') + ')', e.target));
+loadRate().then(calc);
+</script>
+</body>
+</html>

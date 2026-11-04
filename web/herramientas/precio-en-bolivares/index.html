@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de precio de venta en bolívares (costo en $ + margen) · StockSoft</title>
+<meta name="description" content="Calcula el precio de venta de tus productos en dólares y en bolívares a partir del costo y el margen de ganancia, con la tasa oficial del BCV de hoy.">
+<link rel="canonical" href="https://stocksoft.web.app/herramientas/precio-en-bolivares/">
+<meta property="og:title" content="Precio de venta en bolívares · StockSoft">
+<meta property="og:description" content="Del costo en dólares al precio de venta en $ y Bs, con tu margen.">
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/herramientas/">Herramientas</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/herramientas/">Herramientas</a> › Precio en bolívares</div>
+    <h1>Precio de venta en <em>bolívares</em></h1>
+    <p class="lead">Pon lo que te cuesta el producto y cuánto quieres ganar. Te damos el precio de venta en dólares y en bolívares con la tasa del BCV de hoy.</p>
+  </section>
+
+  <div class="layout">
+    <div>
+      <div class="tool">
+        <div class="row">
+          <div><label for="cost">Costo del producto</label><input id="cost" inputmode="decimal" placeholder="Ej: 2,50" autocomplete="off"></div>
+          <div><label for="cur">Moneda del costo</label><select id="cur"><option value="usd">Dólares ($)</option><option value="eur">Euros (€)</option></select></div>
+        </div>
+        <label>Margen que quieres ganar</label>
+        <div class="row">
+          <div><input id="pct" inputmode="decimal" value="30" autocomplete="off"></div>
+          <div class="seg" id="mode"><button data-m="markup" class="on" type="button">% sobre el costo</button><button data-m="margin" type="button">% sobre la venta</button></div>
+        </div>
+        <label for="iva">IVA incluido en el precio</label>
+        <select id="iva"><option value="0">Sin IVA (o ya incluido en el costo)</option><option value="16">Sumar IVA 16 %</option><option value="8">Sumar IVA 8 %</option></select>
+        <div class="result"><div class="k">Precio de venta</div><div class="v" id="pv">—</div><div class="s" id="ps"></div></div>
+        <div class="lines" id="det"></div>
+        <div class="rate" data-rate>Cargando la tasa del BCV…</div>
+        <button class="btn sec sm copy" id="cp">Copiar precio</button>
+      </div>
+      <div class="ad" data-slot=""></div>
+      <section class="info">
+        <h2>¿“% sobre el costo” o “% sobre la venta”?</h2>
+        <p><b>Sobre el costo (recargo):</b> si un producto te cuesta 10 $ y le pones un 30 %, lo vendes en 13 $. <b>Sobre la venta (margen):</b> quieres que el 30 % del precio final sea ganancia, así que lo vendes en 14,29 $. El segundo deja más ganancia con el mismo porcentaje.</p>
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq">
+          <details><summary>¿Debo actualizar el precio en Bs cada día?</summary><p>Si fijas tus precios en dólares, el precio en bolívares cambia cada vez que el BCV publica una tasa nueva. Esta calculadora siempre usa la tasa del día.</p></details>
+          <details><summary>¿Cómo hago esto con todo mi inventario?</summary><p>En <a href="/">StockSoft</a> cada producto tiene su costo y su precio en dólares; el precio en bolívares se recalcula solo con la tasa del día en todo el inventario y en cada venta.</p></details>
+          <details><summary>¿Y el IGTF?</summary><p>El IGTF (3 %) se aplica al cobrar en divisas, no al fijar el precio. Usa la <a href="/herramientas/iva-igtf/">calculadora de IVA e IGTF</a>.</p></details>
+        </div>
+      </section>
+    </div>
+    <aside class="side">
+      <div class="promo"><b>Precios en Bs al día, solos</b><p>StockSoft recalcula todo tu inventario con la tasa del BCV y te avisa cuando un producto se acaba.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/herramientas/">Todas las herramientas</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+<script>
+let mode = 'markup';
+document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => { mode = b.dataset.m; document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x === b)); calc(); }));
+function calc(){
+  const c = num($('#cost').value), p = num($('#pct').value), cur = $('#cur').value, iva = num($('#iva').value);
+  if (!(c > 0)){ $('#pv').textContent = '—'; $('#ps').textContent = 'Escribe el costo'; $('#det').innerHTML = ''; return; }
+  if (mode === 'margin' && p >= 100){ $('#pv').textContent = '—'; $('#ps').textContent = 'El margen sobre la venta debe ser menor que 100 %'; $('#det').innerHTML = ''; return; }
+  let sale = mode === 'markup' ? c * (1 + p / 100) : c / (1 - p / 100);
+  const gain = sale - c; sale = sale * (1 + iva / 100);
+  const fx = cur === 'eur' ? (RATE && RATE.eur) : (RATE && RATE.usd);
+  const sym = cur === 'eur' ? eur : usd;
+  $('#pv').textContent = sym(sale); $('#ps').textContent = fx ? bs(sale * fx) : 'Cargando la tasa…';
+  $('#det').innerHTML = `<div><span>Costo</span><b>${sym(c)}</b></div><div><span>Ganancia por unidad</span><b>${sym(gain)}${fx ? ' · ' + bs(gain * fx) : ''}</b></div>${iva ? `<div><span>IVA ${iva} %</span><b>${sym(sale - c - gain)}</b></div>` : ''}<div><span>Margen sobre la venta</span><b>${nf2.format(gain / (c + gain) * 100)} %</b></div>`;
+}
+['cost', 'pct'].forEach(id => $('#' + id).addEventListener('input', calc)); ['cur', 'iva'].forEach(id => $('#' + id).addEventListener('change', calc));
+$('#cp').addEventListener('click', e => copyText('Precio: ' + $('#pv').textContent + ' · ' + $('#ps').textContent, e.target));
+loadRate().then(calc); calc();
+</script>
+</body>
+</html>

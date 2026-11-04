@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de IVA (16 % y 8 %) e IGTF 3 % en Venezuela · StockSoft</title>
+<meta name="description" content="Calcula la base imponible, el IVA al 16 % u 8 % y el IGTF del 3 % por pago en divisas, en dólares y en bolívares con la tasa del BCV. Gratis.">
+<link rel="canonical" href="https://stocksoft.web.app/herramientas/iva-igtf/">
+<meta property="og:title" content="Calculadora de IVA e IGTF · StockSoft">
+<meta property="og:description" content="Base imponible, IVA 16 % u 8 % e IGTF 3 %, en $ y Bs.">
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/herramientas/">Herramientas</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/herramientas/">Herramientas</a> › IVA e IGTF</div>
+    <h1>Calculadora de <em>IVA e IGTF</em></h1>
+    <p class="lead">Separa la base imponible y el IVA de un precio, o súmaselos, y calcula el IGTF del 3 % cuando el cliente paga en divisas.</p>
+  </section>
+
+  <div class="layout">
+    <div>
+      <div class="tool">
+        <div class="row">
+          <div><label for="amt">Monto</label><input id="amt" inputmode="decimal" placeholder="Ej: 116" autocomplete="off"></div>
+          <div><label for="cur">Moneda</label><select id="cur"><option value="usd">Dólares ($)</option><option value="bs">Bolívares (Bs)</option></select></div>
+        </div>
+        <label>El monto…</label>
+        <div class="seg" id="mode"><button data-m="inc" class="on" type="button">ya incluye IVA</button><button data-m="exc" type="button">no incluye IVA</button></div>
+        <div class="row">
+          <div><label for="rate">Alícuota de IVA</label><select id="rate"><option value="16">General 16 %</option><option value="8">Reducida 8 %</option><option value="0">Exento 0 %</option></select></div>
+          <div><label for="igtf">Pago</label><select id="igtf"><option value="0">En bolívares (sin IGTF)</option><option value="1">En divisas (IGTF 3 %)</option></select></div>
+        </div>
+        <div class="result"><div class="k">Total a cobrar</div><div class="v" id="tv">—</div><div class="s" id="ts"></div></div>
+        <div class="lines" id="det"></div>
+        <div class="rate" data-rate>Cargando la tasa del BCV…</div>
+      </div>
+      <div class="ad" data-slot=""></div>
+      <section class="info">
+        <h2>Cómo se calcula</h2>
+        <ul>
+          <li><b>Precio con IVA incluido:</b> base = precio ÷ 1,16 (o ÷ 1,08). IVA = precio − base.</li>
+          <li><b>Precio sin IVA:</b> IVA = base × 16 % (u 8 %). Total = base + IVA.</li>
+          <li><b>IGTF:</b> 3 % sobre el monto pagado en divisas, que se suma al total.</li>
+        </ul>
+        <p class="mut">Esta calculadora es orientativa. Las reglas fiscales pueden cambiar y dependen de tu tipo de contribuyente: consulta con tu contador.</p>
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq">
+          <details><summary>¿Qué es el IGTF?</summary><p>El Impuesto a las Grandes Transacciones Financieras grava con un 3 % los pagos realizados en divisas (efectivo en dólares o euros, Zelle, etc.) cuando el comercio es contribuyente especial o según lo que establezca la normativa vigente.</p></details>
+          <details><summary>¿Qué productos van al 8 %?</summary><p>La alícuota reducida se aplica a ciertos bienes y servicios definidos por la ley. La mayoría de productos van al 16 % y algunos están exentos.</p></details>
+          <details><summary>¿Puedo llevar esto en cada venta?</summary><p><a href="/">StockSoft</a> desglosa IVA e IGTF en cada venta y factura, con la tasa del día y pagos mixtos (parte en divisas y parte en bolívares).</p></details>
+        </div>
+      </section>
+    </div>
+    <aside class="side">
+      <div class="promo"><b>IVA e IGTF en cada venta</b><p>StockSoft calcula los impuestos, el vuelto y los pagos mixtos automáticamente.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/herramientas/">Todas las herramientas</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+<script>
+let mode = 'inc';
+document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => { mode = b.dataset.m; document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x === b)); calc(); }));
+function calc(){
+  const a = num($('#amt').value), r = num($('#rate').value) / 100, cur = $('#cur').value, igtf = $('#igtf').value === '1';
+  if (!(a > 0)){ $('#tv').textContent = '—'; $('#ts').textContent = 'Escribe un monto'; $('#det').innerHTML = ''; return; }
+  const base = mode === 'inc' ? a / (1 + r) : a, iva = base * r, sub = base + iva, ig = igtf ? sub * 0.03 : 0, tot = sub + ig;
+  const f = cur === 'usd' ? usd : bs;
+  const other = n => RATE ? (cur === 'usd' ? bs(n * RATE.usd) : usd(n / RATE.usd)) : '';
+  $('#tv').textContent = f(tot); $('#ts').textContent = other(tot);
+  $('#det').innerHTML = [['Base imponible', base], ['IVA ' + (r * 100) + ' %', iva], ['Subtotal', sub], ...(igtf ? [['IGTF 3 %', ig]] : [])].map(([k, v]) => `<div><span>${k}</span><b>${f(v)}${RATE ? ' · <span>' + other(v) + '</span>' : ''}</b></div>`).join('');
+}
+$('#amt').addEventListener('input', calc); ['cur', 'rate', 'igtf'].forEach(id => $('#' + id).addEventListener('change', calc));
+loadRate().then(calc); calc();
+</script>
+</body>
+</html>

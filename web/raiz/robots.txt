@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /app/
+Allow: /app/legal/
+Sitemap: https://stocksoft.web.app/sitemap.xml
