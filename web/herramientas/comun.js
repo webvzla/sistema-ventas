@@ -83,7 +83,7 @@ function copyText(t, btn){
 
 // Enlace para compartir un resultado por WhatsApp (con el enlace a la herramienta).
 function shareWa(text, path){
-  return 'https://wa.me/?text=' + encodeURIComponent(text + '. Calcula gratis: https://stocksoft.web.app' + (path || location.pathname));
+  return 'https://wa.me/?text=' + encodeURIComponent(text + '. Calcula gratis: https://stocksoft.app' + (path || location.pathname));
 }
 
 // "Otras herramientas" al final de cada calculadora (más visitas entre herramientas).

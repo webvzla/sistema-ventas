@@ -6,11 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>StockSoft · Inventario y ventas en dólares y bolívares</title>
 <meta name="description" content="Programa de inventario y ventas para negocios en Venezuela: precios en $ y €, conversión automática a Bs con la tasa BCV, caja, clientes, fiados, proveedores y reportes. Para Windows y móvil. Prueba gratis 7 días.">
+<link rel="canonical" href="https://stocksoft.app/">
 <meta name="theme-color" content="#060d1d">
 <link rel="icon" href="../icon.png?v=2">
 <meta property="og:title" content="StockSoft">
 <meta property="og:description" content="Inventario, ventas y caja en dólares y bolívares, con la tasa BCV del día. Prueba gratis 7 días.">
-<meta property="og:image" content="https://stocksoft.web.app/app-vender.png">
+<meta property="og:image" content="https://stocksoft.app/app-vender.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -518,7 +519,7 @@ function calcConv(){
   document.getElementById('cS').textContent = sub;
   document.getElementById('cDate').textContent = (R.manual ? 'Tu tasa ' : 'Tasa BCV ') + nf.format(u) + ' Bs/$' + (R.manual ? ' (manual)' : (R.dateText ? ' · ' + R.dateText : ''));
   const sym = cCur === 'usd' ? '$' : cCur === 'eur' ? '€' : 'Bs ';
-  const msg = (cCur === 'bs' ? sym + nf.format(a) : sym + nf.format(a)) + ' = ' + v + ' (tasa ' + (R.manual ? '' : 'BCV ') + nf.format(u) + '). Calcula gratis: https://stocksoft.web.app/herramientas/dolar-bcv/';
+  const msg = (cCur === 'bs' ? sym + nf.format(a) : sym + nf.format(a)) + ' = ' + v + ' (tasa ' + (R.manual ? '' : 'BCV ') + nf.format(u) + '). Calcula gratis: https://stocksoft.app/herramientas/dolar-bcv/';
   document.getElementById('cWa').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
 }
 document.getElementById('cAmt').addEventListener('input', calcConv);
