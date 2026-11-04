@@ -201,7 +201,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="lgBtn" style="margin-top:16px">Entrar</button>
   <div id="lgMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <div style="text-align:center;margin-top:10px"><a href="#" id="lgReset" style="display:none;font-size:13px" onclick="resetPass();return false">¿Olvidaste tu contraseña?</a></div>
-  <div class="sub" style="text-align:center;margin-top:12px;font-size:11.5px">© 2026 StockSoft · <a href="legal/terminos.html" target="_blank" rel="noopener">Términos</a> · <a href="legal/privacidad.html" target="_blank" rel="noopener">Privacidad</a></div>
+  <div class="sub" style="text-align:center;margin-top:12px;font-size:11.5px">© 2026 StockSoft · <a href="legal/terminos.html" target="_blank" rel="noopener">Términos</a> · <a href="legal/privacidad.html" target="_blank" rel="noopener">Privacidad</a><br>Ventas: <a href="mailto:ventas@stocksoft.app">ventas@stocksoft.app</a> · Soporte: <a href="mailto:soporte@stocksoft.app">soporte@stocksoft.app</a></div>
   <div id="lgNew" style="display:none;text-align:center;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><div class="sub">¿Negocio nuevo? Pruébalo <b>gratis 7 días</b>, sin código.</div><button type="button" class="btn sec full" style="margin-top:8px" onclick="ui.setupMode=true;authScreen()">Crear cuenta de negocio</button><a id="lgWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a></div>
 </form>
 <form class="lg-card" id="setupForm" style="display:none;max-height:92vh;overflow:auto" onsubmit="doSetup(event)" autocomplete="off">
@@ -231,6 +231,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <button class="btn full" id="rnBtn" style="margin-top:16px">Activar</button>
   <div id="rnMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <a id="rnWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a>
+  <div class="sub" style="text-align:center;margin-top:8px;font-size:12.5px">o escríbenos a <a href="mailto:ventas@stocksoft.app?subject=C%C3%B3digo%20de%20activaci%C3%B3n%20StockSoft">ventas@stocksoft.app</a></div>
   <div style="text-align:center;margin-top:10px"><a href="#" onclick="ui.renew=null;FB.auth.signOut();return false">Cerrar sesión</a></div>
 </form></div>
 <div id="ov" onclick="if(event.target===this)closeSheet()"><div id="sheet"></div></div>
@@ -790,7 +791,21 @@ function renewSheet(){
   <label>Código de activación</label><input id="rsL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px" autofocus>
   <div id="rsMsg" class="note" style="color:var(--warn)"></div>
   ${window.APP_WA ? `<a class="btn wa full" style="margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.')}">Pedir un código por WhatsApp</a>` : ''}
+  <p class="note" style="text-align:center">o escríbenos a <a href="mailto:ventas@stocksoft.app?subject=C%C3%B3digo%20de%20activaci%C3%B3n%20StockSoft">ventas@stocksoft.app</a></p>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="rsBtn" onclick="(async()=>{$('#rsBtn').disabled=true;const e=await activateCode($('#rsL').value);$('#rsBtn').disabled=false;if(e){$('#rsMsg').textContent=e;return;}closeSheet();const d=await FB.fs.doc('biz/'+bizId).get();bizInfo=d.data();render();toast('¡Licencia activada!');})()">Activar</button></div>`);
+}
+/* ---- Ayuda y contacto ---- */
+const CONTACT = {ventas:'ventas@stocksoft.app', soporte:'soporte@stocksoft.app', web:'https://stocksoft.app'};
+function helpSheet(){
+  const neg = encodeURIComponent('StockSoft · ' + (cfg.name || 'mi negocio'));
+  openSheet(`<h2>Ayuda y contacto</h2><p class="note" style="margin-top:0">Estamos para ayudarte. Escríbenos y te respondemos lo antes posible.</p>
+  <div class="list">
+    <a class="item tap row" style="text-decoration:none;color:inherit" href="mailto:${CONTACT.soporte}?subject=${neg}%20-%20Soporte"><div class="grow"><div class="name">Soporte técnico</div><div class="sub">${CONTACT.soporte} · dudas, errores o ayuda con el programa</div></div><span style="color:var(--mut)">›</span></a>
+    <a class="item tap row" style="text-decoration:none;color:inherit" href="mailto:${CONTACT.ventas}?subject=${neg}%20-%20Licencia"><div class="grow"><div class="name">Ventas y licencias</div><div class="sub">${CONTACT.ventas} · códigos de activación y renovaciones</div></div><span style="color:var(--mut)">›</span></a>
+    ${window.APP_WA ? `<a class="item tap row" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, necesito ayuda con StockSoft.')}"><div class="grow"><div class="name">WhatsApp</div><div class="sub">La forma más rápida de hablar con nosotros</div></div><span style="color:var(--mut)">›</span></a>` : ''}
+    <a class="item tap row" style="text-decoration:none;color:inherit" target="_blank" rel="noopener" href="${CONTACT.web}"><div class="grow"><div class="name">Página web</div><div class="sub">stocksoft.app · calculadoras gratis y novedades</div></div><span style="color:var(--mut)">›</span></a>
+  </div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
 /* ---- Inventario inteligente (cada opción se activa o desactiva en Ajustes) ---- */
 const SMART_DEF = {alert:true, suggest:true, pay:true, fiado:true, notif:false, days:30, cover:15, soon:7, fiadoDays:15, phone:'', email:''};
@@ -2116,6 +2131,7 @@ VIEWS.mas = {
     const opts = (isOwner() ? [['licencias', '★ Licencias y clientes', 'Códigos de activación, negocios, vencimientos y bloqueos']] : []).concat([['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []));
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
+      <div class="item tap row" onclick="helpSheet()"><div class="grow"><div class="name">Ayuda y contacto</div><div class="sub">Soporte, ventas y licencias</div></div><span style="color:var(--mut)">›</span></div>
       <div class="item tap row" onclick="passForm(me.u)"><div class="grow"><div class="name">Cambiar mi contraseña</div><div class="sub">${CLOUD() ? esc(me && me.email || '') : 'Usuario: ' + esc(me ? me.u : '')}</div></div><span style="color:var(--mut)">›</span></div>
       <div class="item tap row" onclick="logout()"><div class="grow"><div class="name" style="color:var(--bad)">Cerrar sesión</div></div></div>
       </div><div class="status" id="stat"></div><div class="status" style="margin-top:6px">© 2026 StockSoft. Todos los derechos reservados. · <a href="legal/terminos.html" target="_blank" rel="noopener">Términos de uso</a> · <a href="legal/privacidad.html" target="_blank" rel="noopener">Privacidad</a></div>`;
