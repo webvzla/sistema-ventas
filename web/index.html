@@ -120,6 +120,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc2);box-shadow:0 0 
 select option{background:#0c1730;color:var(--tx)}
 label{display:block;font:600 12.5px var(--font);color:var(--mut);margin:13px 0 6px}
 label.row{display:flex;font-size:14px;color:var(--tx)}
+.pthumb{width:46px;height:46px;border-radius:11px;object-fit:cover;flex:none;background:#fff;border:1px solid var(--line2)}
+.ph-box{width:84px;height:84px;border-radius:16px;border:1.5px dashed var(--line2);display:grid;place-items:center;color:var(--faint);font-size:28px;overflow:hidden;flex:none;background:var(--card2)}
+.ph-box img{width:100%;height:100%;object-fit:cover}
+.ph-big{width:100%;max-height:340px;object-fit:contain;border-radius:16px;background:#fff;margin:8px 0 12px;cursor:zoom-in}
 .pill{display:inline-flex;align-items:center;font:700 11px var(--font);padding:3px 9px;border-radius:7px;background:var(--card2);color:var(--mut);white-space:nowrap}
 .pill.low{background:rgba(255,179,71,.14);color:var(--warn)}
 .pill.out{background:rgba(255,93,108,.15);color:var(--bad)}
@@ -205,10 +209,11 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
   <label>Tu nombre</label><input id="suN" placeholder="Ej: Carlos">
   <div class="grid2"><div><label id="suUl">Usuario</label><input id="suU" autocapitalize="none" autocorrect="off" placeholder="carlos"></div><div><label>Contraseña</label><input id="suP" type="password" autocomplete="new-password"></div></div>
-  <label class="row" style="gap:8px;margin-top:16px;color:var(--tx);font-size:14px"><input type="checkbox" id="suE" class="chk" checked onchange="$('#suEw').style.display=this.checked?'block':'none'"> Crear también un usuario de empleado</label>
-  <div id="suEw"><p class="note">El empleado puede vender, consultar precios y tasas y cobrar a clientes. No puede modificar el inventario ni los precios, ni ver costos, ganancias, proveedores o reportes.</p>
+  <label class="row" style="gap:8px;margin-top:16px;color:var(--tx);font-size:14px"><input type="checkbox" id="suE" class="chk" onchange="$('#suEw').style.display=this.checked?'block':'none'"> Crear también un usuario de empleado (opcional, puedes hacerlo luego)</label>
+  <div id="suEw" style="display:none"><p class="note">El empleado puede vender, consultar precios y tasas y cobrar a clientes. No puede modificar el inventario ni los precios, ni ver costos, ganancias, proveedores o reportes.</p>
   <label>Nombre del empleado</label><input id="seN" placeholder="Ej: María">
-  <div class="grid2"><div><label id="seUl">Usuario</label><input id="seU" autocapitalize="none" autocorrect="off" placeholder="maria"></div><div><label>Contraseña</label><input id="seP" type="password" autocomplete="new-password"></div></div></div>
+  <div class="grid2"><div id="seUw"><label id="seUl">Usuario</label><input id="seU" autocapitalize="none" autocorrect="off" placeholder="maria"></div><div><label id="sePl">Contraseña</label><input id="seP" type="password" autocomplete="new-password"></div></div>
+  <p class="note" id="sePin" style="display:none">Sin correo: entrará con un usuario que se crea solo (por ejemplo <b>maria-4821</b>) y este PIN.</p></div>
   <label class="row" id="suTw" style="gap:8px;margin-top:16px;align-items:flex-start;font-size:13.5px"><input type="checkbox" id="suT" class="chk" style="margin-top:2px"> <span>Acepto los <a href="legal/terminos.html" target="_blank" rel="noopener">Términos de uso</a> y la <a href="legal/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></span></label>
   <button class="btn full" id="suBtn" style="margin-top:18px">Crear y entrar</button>
   <div id="suMsg" class="note" style="text-align:center;color:var(--warn)"></div>
@@ -493,6 +498,25 @@ async function onFbUser(u){
   go(isAdmin() ? 'panel' : 'vender');
   setTimeout(afterLogin, 1500);
 }
+const EMP_DOMAIN = 'empleados.stocksoft.app';
+const isPinEmail = e => String(e || '').endsWith('@' + EMP_DOMAIN);
+const pinUser = e => String(e || '').split('@')[0];
+const loginEmail = u => u.includes('@') ? u : u + '@' + EMP_DOMAIN;
+const slugName = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 12) || 'empleado';
+async function createPinMember(name, pin, role){
+  for (let i = 0; i < 4; i++){
+    const user = slugName(name) + '-' + (1000 + Math.floor(Math.random() * 9000));
+    try { await fbCreateMember(loginEmail(user), pin, name, role); return {user, pin, name}; }
+    catch(e){ if (!/email-already-in-use/.test((e && e.code) || '') || i === 3) throw e; }
+  }
+}
+function empCredSheet(x){
+  ui.empTxt = 'Tu acceso a StockSoft (' + (cfg.name || 'el negocio') + '):\nUsuario: ' + x.user + '\nPIN: ' + x.pin + '\nEntra en https://stocksoft.web.app/app/ o en la app de PC y escribe el usuario en "Correo o usuario".';
+  openSheet(`<h2>Empleado creado</h2><p class="note" style="margin-top:0">Dale estos datos a <b>${esc(x.name)}</b>. Entra escribiendo el usuario en "Correo o usuario" y su PIN.</p>
+  <div class="card" style="margin-top:10px"><div class="mv"><span>Usuario</span><b>${esc(x.user)}</b></div><div class="mv"><span>PIN</span><b>${esc(x.pin)}</b></div></div>
+  <div class="gap" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="navigator.clipboard.writeText(ui.empTxt).then(()=>toast('Copiado'),()=>toast('Cópialo a mano'))">Copiar</button><a class="btn wa" style="flex:1" href="${waLink('', ui.empTxt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>
+  <div class="sheet-actions"><button class="btn" onclick="closeSheet()">Listo</button></div>`);
+}
 async function fbCreateMember(email, pass, name, role){
   const sec = firebase.initializeApp(window.FIREBASE_CONFIG, 'sec' + Date.now());
   try {
@@ -524,7 +548,9 @@ async function fetchRates(){
 }
 let ratesBusy = false;
 async function autoRates(manual){
-  if (!me || ratesBusy || backend === 'db' || !loaded || (backend === 'cloud' && !cfgLoaded)) return;
+  if (!me || ratesBusy || backend === 'db') return;
+  // Al entrar (sobre todo en una instalación nueva) los datos aún pueden estar cargando: se reintenta en 2 s.
+  if (!loaded || (backend === 'cloud' && !cfgLoaded)){ clearTimeout(autoRates.retry); autoRates.retry = setTimeout(() => autoRates(manual), 2000); return; }
   if (!navigator.onLine){ if (manual) toast('Sin conexión a internet'); return; }
   ratesBusy = true;
   try {
@@ -651,7 +677,8 @@ function authScreen(){
   document.querySelector('#login form.lg-card:not(#setupForm):not(#renewForm)').style.display = setup || renew ? 'none' : 'block';
   if (renew){ $('#rnTitle').textContent = ui.renew.title; $('#rnNote').textContent = ui.renew.note; }
   const c = CLOUD();
-  $('#lgUl').textContent = c ? 'Correo' : 'Usuario'; $('#lgU').type = c ? 'email' : 'text';
+  $('#lgUl').textContent = c ? 'Correo o usuario' : 'Usuario'; $('#lgU').type = 'text'; $('#lgU').inputMode = c ? 'email' : 'text';
+  $('#seUw').style.display = c ? 'none' : ''; $('#sePl').textContent = c ? 'PIN del empleado (6 números)' : 'Contraseña'; $('#seP').inputMode = c ? 'numeric' : 'text'; $('#sePin').style.display = c ? 'block' : 'none';
   $('#suUl').textContent = c ? 'Correo' : 'Usuario'; $('#seUl').textContent = c ? 'Correo' : 'Usuario';
   $('#suU').placeholder = c ? 'tu@correo.com' : 'carlos'; $('#seU').placeholder = c ? 'empleado@correo.com' : 'maria';
   $('#suU').type = $('#seU').type = c ? 'email' : 'text';
@@ -674,9 +701,9 @@ async function doSetup(ev){
   if (!an || !okU(au)) return msg(CLOUD() ? 'Pon tu nombre y un correo válido' : 'Pon tu nombre y un usuario (solo letras, números, punto o guion)');
   if (ap.length < minP) return msg('Tu contraseña debe tener al menos ' + minP + ' caracteres');
   if (wantE){
-    if (!en || !okU(eu)) return msg(CLOUD() ? 'Pon el nombre y el correo del empleado' : 'Pon el nombre y el usuario del empleado');
-    if (eu === au) return msg('El empleado debe tener un ' + (CLOUD() ? 'correo' : 'usuario') + ' distinto al tuyo');
-    if (ep.length < minP) return msg('La contraseña del empleado debe tener al menos ' + minP + ' caracteres');
+    if (!en || (!CLOUD() && !okU(eu))) return msg(CLOUD() ? 'Pon el nombre del empleado' : 'Pon el nombre y el usuario del empleado');
+    if (!CLOUD() && eu === au) return msg('El empleado debe tener un ' + (CLOUD() ? 'correo' : 'usuario') + ' distinto al tuyo');
+    if (CLOUD() ? !/^\d{6,12}$/.test(ep) : ep.length < minP) return msg(CLOUD() ? 'El PIN del empleado debe tener de 6 a 12 números' : 'La contraseña del empleado debe tener al menos ' + minP + ' caracteres');
   }
   $('#suBtn').disabled = true; msg('');
   if (CLOUD()){
@@ -705,10 +732,11 @@ async function doSetup(ev){
       b.set(FB.fs.doc('users/' + id), {biz:id, role:'admin', name:an, email:au});
       try { await b.commit(); } catch(e){ try { await cred.user.delete(); } catch(e2){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg('No se pudo activar con ese código.' + contactTxt()); }
       await FB.fs.doc('biz/' + id + '/config/main').set({...DEF_CFG, name:biz, termsV:1, termsAt:Date.now()});
-      if (wantE){ msg('Creando el usuario del empleado…'); try { await fbCreateMember(eu, ep, en, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
+      if (wantE){ msg('Creando el usuario del empleado…'); try { ui.newEmp = await createPinMember(en, ep, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
       toast(trial ? '¡Listo! Tienes 7 días de prueba gratis, ' + an : '¡Listo! Bienvenido, ' + an);
+      if (ui.newEmp){ const x = ui.newEmp; ui.newEmp = null; setTimeout(() => empCredSheet(x), 900); }
     } catch(e){ pendingSetup = false; msg(fbMsg(e)); }
     $('#suBtn').disabled = false;
     return;
@@ -775,7 +803,7 @@ async function doLogin(ev){
   if (CLOUD()){
     $('#lgBtn').disabled = true; $('#lgMsg').textContent = 'Entrando…';
     await applyPersistence(keep);
-    try { await FB.auth.signInWithEmailAndPassword(u, p); $('#lgMsg').textContent = ''; } catch(e){ loginErr(fbMsg(e)); }
+    try { await FB.auth.signInWithEmailAndPassword(loginEmail(u), p); $('#lgMsg').textContent = ''; } catch(e){ loginErr(fbMsg(e)); }
     $('#lgBtn').disabled = false; return;
   }
   let user = S.users[u];
@@ -786,6 +814,7 @@ async function doLogin(ev){
 async function resetPass(){
   const e = $('#lgU').value.trim();
   if (!e){ $('#lgMsg').textContent = 'Escribe tu correo arriba y vuelve a tocar "¿Olvidaste tu contraseña?"'; return; }
+  if (!e.includes('@') || isPinEmail(e)){ $('#lgMsg').textContent = 'Si entras con usuario y PIN, pide al administrador que te cree un PIN nuevo.'; return; }
   try { await FB.auth.sendPasswordResetEmail(e); $('#lgMsg').textContent = 'Te enviamos un correo para cambiar la contraseña'; } catch(err){ $('#lgMsg').textContent = fbMsg(err); }
 }
 const keepPref = () => { try { return localStorage.getItem('negocio_keep') === '1'; } catch(e){ return false; } };
@@ -833,6 +862,7 @@ function passForm(u){
   const self = me && me.u === u;
   if (CLOUD() && !self){
     const x = S.users[u] || {};
+    if (isPinEmail(x.email)){ ask('PIN de ' + (x.name || ''), 'Este empleado entra con usuario y PIN, sin correo. Para darle un PIN nuevo, elimínalo y créalo de nuevo con "+ Nuevo usuario".', 'Entendido', () => {}, false); return; }
     ask('Cambiar contraseña de ' + (x.name || ''), 'Le enviaremos un correo a ' + (x.email || '') + ' con un enlace para que ponga una contraseña nueva.', 'Enviar correo', async () => {
       try { await FB.auth.sendPasswordResetEmail(x.email); toast('Correo enviado a ' + x.email); } catch(e){ toast(fbMsg(e)); }
     }, false);
@@ -845,7 +875,7 @@ function passForm(u){
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="savePass('${u}')">Guardar</button></div>`);
 }
 async function savePass(u){
-  const p1 = $('#pw1').value, p2 = $('#pw2').value, minP = CLOUD() ? 8 : 4;
+  const p1 = $('#pw1').value, p2 = $('#pw2').value, minP = CLOUD() ? (isPinEmail(FB.auth.currentUser && FB.auth.currentUser.email) ? 6 : 8) : 4;
   if (p1.length < minP){ toast('Usa al menos ' + minP + ' caracteres'); return; }
   if (p1 !== p2){ toast('Las contraseñas no coinciden'); return; }
   if (CLOUD()){
@@ -866,17 +896,28 @@ async function savePass(u){
     closeSheet(); toast('Contraseña cambiada'); render();
   }
 }
+function nuMode(m){ ui.nuMode = m; const pin = m === 'pin'; $('#nuM1').classList.toggle('on', pin); $('#nuM2').classList.toggle('on', !pin); $('#nuMailW').style.display = pin ? 'none' : ''; $('#nuPinN').style.display = pin ? '' : 'none'; $('#nuPl').textContent = pin ? 'PIN (6 números)' : 'Contraseña (mínimo 8 caracteres)'; $('#nuP').inputMode = pin ? 'numeric' : 'text'; $('#nuP').placeholder = pin ? 'Ej: 482913' : ''; }
 function userForm(){
-  const c = CLOUD();
+  const c = CLOUD(); ui.nuMode = 'pin';
   openSheet(`<h2>Nuevo usuario</h2>
   <label>Nombre</label><input id="nuN" placeholder="Ej: María" autofocus>
-  <label>${c ? 'Correo (para entrar)' : 'Usuario (para entrar)'}</label><input id="nuU" autocapitalize="none" type="${c ? 'email' : 'text'}" placeholder="${c ? 'maria@correo.com' : 'Ej: maria'}">
-  <label>Contraseña</label><input id="nuP" type="password" autocomplete="new-password" placeholder="${c ? 'Mínimo 6 caracteres' : ''}">
+  ${c ? `<label>Cómo entra</label><div class="seg" style="margin:0"><button type="button" id="nuM1" class="on" onclick="nuMode('pin')">Usuario y PIN (sin correo)</button><button type="button" id="nuM2" onclick="nuMode('mail')">Con correo</button></div>` : ''}
+  <div id="nuMailW" style="${c ? 'display:none' : ''}"><label>${c ? 'Correo (para entrar)' : 'Usuario (para entrar)'}</label><input id="nuU" autocapitalize="none" type="${c ? 'email' : 'text'}" placeholder="${c ? 'maria@correo.com' : 'Ej: maria'}"></div>
+  <label id="nuPl">${c ? 'PIN (6 números)' : 'Contraseña'}</label><input id="nuP" type="password" autocomplete="new-password" ${c ? 'inputmode="numeric" placeholder="Ej: 482913"' : ''}>
+  ${c ? '<p class="note" id="nuPinN">El usuario se crea solo a partir del nombre (por ejemplo maria-4821). Te lo mostramos al terminar.</p>' : ''}
   <label>Rol</label><select id="nuR"><option value="vendedor">Vendedor: vende, consulta precios y tasas, cobra a clientes</option><option value="admin">Administrador: todo (inventario, costos, reportes, usuarios)</option></select>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="nuBtn" onclick="saveUser()">Crear</button></div>`);
 }
 async function saveUser(){
   const name = $('#nuN').value.trim(), u = $('#nuU').value.trim().toLowerCase(), p = $('#nuP').value;
+  if (CLOUD() && ui.nuMode !== 'mail'){
+    if (!name){ toast('Pon el nombre'); return; }
+    if (!/^\d{6,12}$/.test(p)){ toast('El PIN debe tener de 6 a 12 números'); return; }
+    $('#nuBtn').disabled = true;
+    try { const x = await createPinMember(name, p, $('#nuR').value); logA('admin', 'Usuario creado', name + ' · usuario ' + x.user + ' (sin correo) · ' + $('#nuR').value); empCredSheet(x); }
+    catch(e){ toast(fbMsg(e)); $('#nuBtn').disabled = false; }
+    return;
+  }
   if (CLOUD()){
     if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u)){ toast('Pon nombre y un correo válido'); return; }
     if (p.length < 8){ toast('La contraseña debe tener al menos 8 caracteres'); return; }
@@ -1095,11 +1136,13 @@ function priceBlock(p, big){
 function priceSheet(id){
   const p = S.products[id]; if (!p) return;
   openSheet(`<div class="sub">${esc([p.cat, p.brand].filter(Boolean).join(' · '))}</div><h2 style="margin-top:2px">${esc(p.name)}</h2>
+  ${p.img ? `<img class="ph-big" id="psImg" src="${p.img}" alt="" onclick="photoZoom(this.src)">` : ''}
   ${priceBlock(p, true)}
   <div class="sub" style="margin-top:10px">${p.track === false ? '' : 'En stock: ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit) + ' · '}Código: ${esc(p.code || '—')}${p.warranty ? ' · Garantía: ' + esc(p.warranty) : ''}</div>
   ${(() => { const e = expInfo(p); return e ? `<div class="sub">Próximo vencimiento: <b>${fmtExp(e.exp)}</b> (${nfq.format(e.qty)} ${unitLbl(p.unit)})${expPill(e)}</div>` : ''; })()}
   <div class="sheet-actions">${isAdmin() ? `<button class="btn sec" onclick="editProduct('${id}')">Editar</button>` : ''}<button class="btn" onclick="closeSheet();go('vender');addToCart('${id}',true);lastScan='${id}';renderLastScan()">Vender</button></div>
   <button class="btn sec full" style="margin-top:8px" onclick="openScanner()">Escanear otro</button>`);
+  if (p.img) loadPhoto(id).then(src => { const el = $('#psImg'); if (src && el) el.src = src; });
 }
 
 /* ---- Vender (punto de venta) ---- */
@@ -1128,6 +1171,7 @@ VIEWS.vender = {
 function prodRow(p){
   const st = stockState(p);
   return `<div class="item tap row" onclick="addToCart('${p.id}')">
+    ${p.img ? `<img class="pthumb" src="${p.img}" alt="" onclick="event.stopPropagation();showProdPhoto('${p.id}')">` : ''}
     <div class="grow"><div class="name">${esc(p.name)}</div><div class="sub">${p.track === false ? (p.cat ? esc(p.cat) : '') : `Stock: ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}`}${p.track !== false && st !== 'ok' ? ` <span class="pill ${st}">${st === 'out' ? 'Agotado' : 'Bajo'}</span>` : ''}${expPill(expInfo(p))}</div>${hasW(p) ? `<div class="sub">${wTxt(p)}</div>` : ''}</div>
     <div><div class="price">${pMain(p)}</div>${pBs(p) ? `<div class="sub" style="text-align:right">${bsF(pBs(p))}</div>` : ''}</div></div>`;
 }
@@ -1554,6 +1598,7 @@ VIEWS.inventario = {
       : (!ps.length ? `<div class="empty">Nada coincide.</div>` : ps.map(p => { const st = stockState(p);
         return `<div class="item ${ui.labelMode ? '' : 'tap'}" ${ui.labelMode ? '' : `onclick="editProduct('${p.id}')"`}><div class="row">
         ${ui.labelMode ? `<input type="checkbox" class="chk" ${ui.selLabels.has(p.id) ? 'checked' : ''} onchange="this.checked?ui.selLabels.add('${p.id}'):ui.selLabels.delete('${p.id}');VIEWS.inventario.fill()">` : ''}
+        ${p.img ? `<img class="pthumb" src="${p.img}" alt="">` : ''}
         <div class="grow"><div class="name">${esc(p.name)}</div>
         <div class="sub">${esc([p.cat, p.brand].filter(Boolean).join(' · '))}${p.cat || p.brand ? ' · ' : ''}${p.track === false ? 'Sin control de stock' : 'Stock: ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit)}</div>
         <div class="sub">${pLine(p)}${p.code ? '' : ' <span class="pill">sin código</span>'}${expPill(expInfo(p))}</div>${hasW(p) ? `<div class="sub">${wTxt(p)}</div>` : ''}</div>
@@ -1570,6 +1615,9 @@ function editProduct(id, preset = {}){
   openSheet(`<h2>${id ? 'Editar producto' : 'Nuevo producto'}</h2>
   ${preset.code ? `<div class="warnbox" style="margin-bottom:4px">El código <b>${esc(preset.code)}</b> no está en tu inventario. Ponle nombre y precio para añadirlo.</div>` : ''}
   <label>Nombre</label><input id="pN" value="${esc(p.name)}" placeholder="Ej: Harina de maíz 1 kg" ${id ? '' : 'autofocus'}>
+  <label>Foto (opcional)</label>
+  <div class="row" style="gap:14px"><div class="ph-box" id="phBox">${p.img ? `<img src="${p.img}" alt="">` : '📷'}</div>
+  <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${p.img ? 'Cambiar foto' : 'Tomar o subir foto'}<input type="file" accept="image/*" hidden onchange="pickProdPhoto(this)"></label>${p.img ? '<button class="btn sm bad" onclick="clearProdPhoto()">Quitar</button>' : ''}</div></div>
   <div class="grid2"><div><label>Categoría</label><input id="pC" list="catList" value="${esc(p.cat)}" placeholder="${cats.length ? 'Elige o escribe una nueva' : 'Escribe una categoría'}"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
   <div><label>Marca / modelo</label><input id="pBr" value="${esc(p.brand || '')}" placeholder="Opcional"></div></div>
   <label>Precio en</label>
@@ -1600,9 +1648,28 @@ function editProduct(id, preset = {}){
     <a class="btn sm wa" href="${waLink('', productMsg(p))}" target="_blank" rel="noopener">WhatsApp</a></div>` : ''}
   <div class="sheet-actions">${id ? `<button class="btn bad" onclick="delProduct('${id}')">Eliminar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}
   <button class="btn" onclick="saveProduct(${id ? `'${id}'` : 'null'},${preset.code ? 'true' : 'false'})">Guardar</button></div>`);
-  ui.lotsEdit = activeLots(p).map(l => ({...l}));
+  ui.lotsEdit = activeLots(p).map(l => ({...l})); ui.photoEdit = null;
   pPrev(); bcPrev(); renderLots();
 }
+/* Fotos de productos: miniatura ligera dentro del producto (para las listas) y foto grande aparte,
+   en photos/{id}, que solo se descarga al abrir el producto. Se reducen al elegirlas. */
+function shrinkImage(img, max, q){ const s = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', q); }
+function pickProdPhoto(input){
+  const file = input.files && input.files[0]; if (!file) return;
+  if (!/^image\//.test(file.type)){ toast('Elige una imagen'); return; }
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => { ui.photoEdit = {thumb:shrinkImage(img, 160, .72), full:shrinkImage(img, 720, .78)}; URL.revokeObjectURL(url); $('#phBox').innerHTML = `<img src="${ui.photoEdit.thumb}" alt="">`; };
+  img.onerror = () => toast('No se pudo leer esa imagen');
+  img.src = url;
+}
+function clearProdPhoto(){ ui.photoEdit = 'del'; $('#phBox').innerHTML = '📷'; }
+async function savePhoto(id, full){
+  if (!(backend === 'cloud' || backend === 'db')) return;
+  try { if (full) await DB.collection('photos').doc(id).set({src:full, ts:Date.now()}); else await DB.collection('photos').doc(id).delete(); } catch(e){ console.warn('foto', e); }
+}
+async function loadPhoto(id){ if (!(backend === 'cloud' || backend === 'db')) return null; try { const d = await DB.doc('photos/' + id).get(); return d.exists ? d.data().src : null; } catch(e){ return null; } }
+function showProdPhoto(id){ const p = S.products[id]; if (!p || !p.img) return; photoZoom(p.img); loadPhoto(id).then(src => { const el = $('#sheet img'); if (src && el) el.src = src; }); }
+function photoZoom(src){ openSheet(`<img src="${src}" alt="" style="width:100%;border-radius:16px;background:#fff"><div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`); }
 /* Lotes del formulario de producto */
 function renderLots(){
   const box = $('#lotBox'); if (!box) return;
@@ -1656,16 +1723,18 @@ async function saveProduct(id, fromScan){
     wPrice: wP > 0 ? r2(wP) : '', wQty: wQ > 0 ? r3(wQ) : ''};
   // Solo se guardan los lotes que siguen en el estante (los vendidos se descartan solos).
   d.lots = activeLots({stock:d.stock, lots:ui.lotsEdit || []});
+  const ph = ui.photoEdit; if (ph === 'del') d.img = ''; else if (ph) d.img = ph.thumb;
   const nid = id || uid();
   closeSheet();
   if (await put('products', nid, d)){
+    if (ph) savePhoto(nid, ph === 'del' ? null : ph.full);
     if (!id) logA('inventario', 'Producto creado', name + ' · ' + (d.cur === 'eur' ? '€' : '$') + nf2.format(d.price) + ' · stock ' + nfq.format(d.stock));
     else { const ch = []; if (num(old.price) !== d.price) ch.push('precio ' + nf2.format(num(old.price)) + ' → ' + nf2.format(d.price)); if (num(old.cost) !== d.cost) ch.push('costo ' + nf2.format(num(old.cost)) + ' → ' + nf2.format(d.cost)); if (num(old.stock) !== d.stock) ch.push('stock ' + nfq.format(num(old.stock)) + ' → ' + nfq.format(d.stock)); if (old.name !== d.name) ch.push('nombre antes: ' + old.name); if (ch.length) logA('inventario', 'Producto modificado', name + ' · ' + ch.join(' · ')); }
     toast(id ? 'Producto actualizado' : 'Producto añadido');
     if (fromScan && view === 'vender'){ addToCart(nid, true); lastScan = nid; renderLastScan(); }
   }
 }
-function delProduct(id){ ask('¿Eliminar producto?', 'Se borrará “' + (S.products[id] || {}).name + '” del inventario. Las ventas pasadas se mantienen.', 'Eliminar', async () => { logA('inventario', 'Producto eliminado', (S.products[id] || {}).name + ' · stock ' + nfq.format(num((S.products[id] || {}).stock))); await del('products', id); toast('Producto eliminado'); }); }
+function delProduct(id){ ask('¿Eliminar producto?', 'Se borrará “' + (S.products[id] || {}).name + '” del inventario. Las ventas pasadas se mantienen.', 'Eliminar', async () => { logA('inventario', 'Producto eliminado', (S.products[id] || {}).name + ' · stock ' + nfq.format(num((S.products[id] || {}).stock))); await del('products', id); savePhoto(id, null); toast('Producto eliminado'); }); }
 function restock(id){
   const p = S.products[id];
   openSheet(`<h2>Reponer stock</h2><div class="sub">${esc(p.name)} · hay ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}</div>
@@ -1859,7 +1928,7 @@ VIEWS.mas = {
     if (sub === 'cotizaciones') return fillQuotes();
     if (sub === 'usuarios'){
       const us = Object.entries(S.users).sort((a, b) => (a[1].role === 'admin' ? 0 : 1) - (b[1].role === 'admin' ? 0 : 1) || a[0].localeCompare(b[0]));
-      $('#mx').innerHTML = `<div class="list">${us.map(([u, x]) => `<div class="item"><div class="row"><div class="grow"><div class="name">${esc(x.name || u)}${me && me.u === u ? ' <span class="pill ok">tú</span>' : ''}</div><div class="sub">${CLOUD() ? esc(x.email || '') : 'Usuario: <b>' + esc(u) + '</b>'} · ${x.role === 'admin' ? 'Administrador' : 'Vendedor'}${x.def ? ' · <span style="color:var(--warn)">contraseña inicial</span>' : ''}</div></div></div>
+      $('#mx').innerHTML = `<div class="list">${us.map(([u, x]) => `<div class="item"><div class="row"><div class="grow"><div class="name">${esc(x.name || u)}${me && me.u === u ? ' <span class="pill ok">tú</span>' : ''}</div><div class="sub">${CLOUD() ? (isPinEmail(x.email) ? 'Usuario: <b>' + esc(pinUser(x.email)) + '</b> (sin correo)' : esc(x.email || '')) : 'Usuario: <b>' + esc(u) + '</b>'} · ${x.role === 'admin' ? 'Administrador' : 'Vendedor'}${x.def ? ' · <span style="color:var(--warn)">contraseña inicial</span>' : ''}</div></div></div>
         <div class="gap" style="margin-top:10px"><button class="btn sm sec" onclick="passForm('${u}')">Contraseña</button>${me && me.u !== u ? `<button class="btn sm sec" onclick="toggleRole('${u}')">Hacer ${x.role === 'admin' ? 'vendedor' : 'admin'}</button><button class="btn sm bad" onclick="delUser('${u}')">Eliminar</button>` : ''}</div></div>`).join('')}</div>
         <p class="note"><b>Vendedor:</b> vende, consulta precios y tasas, ve el inventario y cobra fiados. No ve costos ni ganancias, ni puede editar productos, anular ventas o cambiar ajustes.<br><b>Administrador:</b> puede hacer todo.</p>
         ${CLOUD() ? `<p class="note">El empleado entra con su correo y contraseña desde la app de PC o desde la versión web en el móvil (puede instalarla como app desde el navegador).</p>` : backend === 'db' ? `<p class="note">Para que un empleado entre desde su móvil, invítalo a esta página con su correo (como Editor, desde el botón Compartir) y dale su usuario y contraseña. Un enlace público no sirve: con él no se pueden guardar ventas.</p>` : `<p class="note">Sin conexión a la nube, los usuarios solo funcionan en este dispositivo.</p>`}`;

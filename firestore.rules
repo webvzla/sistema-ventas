@@ -109,6 +109,8 @@ service cloud.firestore {
         allow update: if admin(b) || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']));
       }
       match /rates/{d} { allow read, write: if member(b); }
+      // Fotos de productos: las ven todos los del negocio; solo el administrador las sube o borra.
+      match /photos/{d} { allow read: if member(b); allow write: if admin(b); }
       match /products/{d} {
         allow read: if member(b);
         allow create, delete: if admin(b);
