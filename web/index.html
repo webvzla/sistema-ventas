@@ -209,6 +209,8 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
   <label>Tu nombre</label><input id="suN" placeholder="Ej: Carlos">
   <div class="grid2"><div><label id="suUl">Usuario</label><input id="suU" autocapitalize="none" autocorrect="off" placeholder="carlos"></div><div><label>Contraseña</label><input id="suP" type="password" autocomplete="new-password"></div></div>
+  <div id="suU2w" style="display:none"><label>Repite tu correo</label><input id="suU2" autocapitalize="none" autocorrect="off" type="email" placeholder="Escríbelo otra vez" autocomplete="off" onpaste="return false">
+  <p class="note" style="margin-top:6px">Lo usarás para entrar y para <b>recuperar tu contraseña</b> si la olvidas. Te enviaremos un correo para confirmarlo.</p></div>
   <label class="row" style="gap:8px;margin-top:16px;color:var(--tx);font-size:14px"><input type="checkbox" id="suE" class="chk" onchange="$('#suEw').style.display=this.checked?'block':'none'"> Crear también un usuario de empleado (opcional, puedes hacerlo luego)</label>
   <div id="suEw" style="display:none"><p class="note">El empleado puede vender, consultar precios y tasas y cobrar a clientes. No puede modificar el inventario ni los precios, ni ver costos, ganancias, proveedores o reportes.</p>
   <label>Nombre del empleado</label><input id="seN" placeholder="Ej: María">
@@ -431,7 +433,8 @@ function fbInit(){
     const fs = firebase.firestore();
     fs.settings({ignoreUndefinedProperties:true});
     fs.enablePersistence({synchronizeTabs:true}).catch(() => {});
-    return {app, auth:firebase.auth(), fs};
+    const auth = firebase.auth(); auth.languageCode = 'es'; // correos de verificación y de recuperar contraseña en español
+    return {app, auth, fs};
   } catch(e){ console.error('Firebase', e); return null; }
 }
 function fbWrap(fs, b){ const map = c => c === 'users' ? 'members' : c; return {collection:c => fs.collection('biz/' + b + '/' + map(c)), doc:p => fs.doc('biz/' + b + '/' + p)}; }
@@ -684,7 +687,7 @@ function authScreen(){
   $('#suU').type = $('#seU').type = c ? 'email' : 'text';
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
-  $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none';
+  $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none'; $('#suU2w').style.display = c ? 'block' : 'none';
   if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
@@ -699,6 +702,7 @@ async function doSetup(ev){
   if (CLOUD() && !$('#suT').checked) return msg('Para crear la cuenta acepta los Términos de uso y la Política de privacidad');
   if (!biz) return msg('Pon el nombre del negocio');
   if (!an || !okU(au)) return msg(CLOUD() ? 'Pon tu nombre y un correo válido' : 'Pon tu nombre y un usuario (solo letras, números, punto o guion)');
+  if (CLOUD() && au !== $('#suU2').value.trim().toLowerCase()) return msg('Los dos correos no coinciden. Revísalo bien: lo necesitarás para recuperar tu contraseña.');
   if (ap.length < minP) return msg('Tu contraseña debe tener al menos ' + minP + ' caracteres');
   if (wantE){
     if (!en || (!CLOUD() && !okU(eu))) return msg(CLOUD() ? 'Pon el nombre del empleado' : 'Pon el nombre y el usuario del empleado');
@@ -736,6 +740,8 @@ async function doSetup(ev){
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
       toast(trial ? '¡Listo! Tienes 7 días de prueba gratis, ' + an : '¡Listo! Bienvenido, ' + an);
+      // Correo para confirmar la dirección (así sabemos que podrá recuperar su contraseña).
+      try { await FB.auth.currentUser.sendEmailVerification(); setTimeout(() => toast('Te enviamos un correo a ' + au + ' para confirmarlo (revisa también spam)'), 3200); } catch(e){ console.warn('verificación', e); }
       if (ui.newEmp){ const x = ui.newEmp; ui.newEmp = null; setTimeout(() => empCredSheet(x), 900); }
     } catch(e){ pendingSetup = false; msg(fbMsg(e)); }
     $('#suBtn').disabled = false;
