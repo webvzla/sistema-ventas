@@ -3,7 +3,7 @@
 
 // Identificador de Google AdSense (ca-pub-XXXXXXXXXXXXXXXX). Vacío hasta que la cuenta esté aprobada:
 // mientras tanto no se carga ningún anuncio (en la versión de pruebas se ve dónde irán).
-const ADSENSE_CLIENT = '';
+const ADSENSE_CLIENT = 'ca-pub-9769351537955799';
 
 const nf2 = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
 const nf4 = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:4});
@@ -106,13 +106,16 @@ function moreTools(){
 function initAds(){
   const slots = [...document.querySelectorAll('.ad')];
   const preview = /localhost|127\.0\.0\.1|--pruebas/.test(location.hostname);
-  if (!ADSENSE_CLIENT){ if (preview) slots.forEach(s => { s.classList.add('preview'); s.textContent = 'Espacio para anuncio (Google AdSense)'; }); return; }
-  const sc = document.createElement('script');
-  sc.async = true; sc.crossOrigin = 'anonymous';
-  sc.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ADSENSE_CLIENT;
-  document.head.appendChild(sc);
+  if (!ADSENSE_CLIENT || preview){ if (preview) slots.forEach(s => { s.classList.add('preview'); s.textContent = 'Espacio para anuncio (Google AdSense)'; }); return; }
+  // El script de AdSense va en el <head> de cada página (anuncios automáticos). Si faltara, se carga aquí.
+  if (!document.querySelector('script[src*="adsbygoogle.js"]')){
+    const sc = document.createElement('script'); sc.async = true; sc.crossOrigin = 'anonymous';
+    sc.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + ADSENSE_CLIENT; document.head.appendChild(sc);
+  }
+  // Bloques fijos: solo los que tienen un identificador de bloque (data-slot). Los vacíos no ocupan espacio.
   slots.forEach(s => {
-    s.innerHTML = `<ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_CLIENT}" ${s.dataset.slot ? `data-ad-slot="${s.dataset.slot}"` : ''} data-ad-format="auto" data-full-width-responsive="true"></ins>`;
+    if (!s.dataset.slot){ s.style.display = 'none'; return; }
+    s.innerHTML = `<ins class="adsbygoogle" style="display:block" data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="${s.dataset.slot}" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
     try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e){}
   });
 }
