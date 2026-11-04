@@ -21,16 +21,61 @@ const eur = n => '€' + nf2.format(n || 0);
 const bs = n => 'Bs ' + nf2.format(n || 0);
 
 // Tasa oficial del BCV (la misma que usa StockSoft, se actualiza sola varias veces al día).
-let RATE = null;
+// La persona también puede poner su propia tasa del dólar y del euro (se guarda en este navegador).
+let RATE = null, OFFICIAL = null;
+const MANUAL_KEY = 'ss_tasa_manual';
+function getManual(){ try { const m = JSON.parse(localStorage.getItem(MANUAL_KEY) || 'null'); return m && (m.usd > 0 || m.eur > 0) ? m : null; } catch(e){ return null; } }
+function setManual(m){ try { m ? localStorage.setItem(MANUAL_KEY, JSON.stringify(m)) : localStorage.removeItem(MANUAL_KEY); } catch(e){} }
+function applyRate(){
+  const m = getManual();
+  if (m){
+    const base = OFFICIAL || {};
+    RATE = {...base, usd: m.usd > 0 ? m.usd : base.usd, eur: m.eur > 0 ? m.eur : base.eur, manual: true};
+    if (!(RATE.usd > 0)) RATE = null;
+  } else RATE = OFFICIAL;
+  renderRate();
+  if (typeof onRate === 'function') onRate(RATE);
+  if (typeof calc === 'function') calc();
+}
 async function loadRate(){
   for (const url of ['/app/tasas.json', 'https://stocksoft.web.app/app/tasas.json']){
-    try { const r = await fetch(url + '?t=' + Date.now(), {cache:'no-store'}); if (r.ok){ const j = await r.json(); if (j.usd > 0){ RATE = j; break; } } } catch(e){}
+    try { const r = await fetch(url + '?t=' + Date.now(), {cache:'no-store'}); if (r.ok){ const j = await r.json(); if (j.usd > 0){ OFFICIAL = j; break; } } } catch(e){}
   }
-  document.querySelectorAll('[data-rate]').forEach(el => {
-    el.innerHTML = RATE ? `<span class="dot"></span>Tasa oficial BCV: <b>$ ${nf4.format(RATE.usd)}</b>${RATE.eur ? ' · <b>€ ' + nf4.format(RATE.eur) + '</b>' : ''} Bs · ${RATE.dateText || ''}` : 'No se pudo cargar la tasa del BCV. Revisa tu conexión.';
-  });
+  RATE_LOADED = true;
+  applyRate();
   return RATE;
 }
+let RATE_LOADED = false, rateFormOpen = false;
+function staleDays(){ if (!OFFICIAL || !OFFICIAL.dateISO) return 0; return Math.floor((Date.now() - new Date(OFFICIAL.dateISO + 'T12:00:00').getTime()) / 864e5); }
+function renderRate(){
+  document.querySelectorAll('[data-rate]').forEach(el => {
+    const m = getManual();
+    let txt;
+    if (m && RATE) txt = `<span class="dot man"></span>Tu tasa: <b>$ ${nf4.format(RATE.usd)}</b>${RATE.eur ? ' · <b>€ ' + nf4.format(RATE.eur) + '</b>' : ''} Bs <span class="rtag">manual</span>`;
+    else if (RATE) txt = `<span class="dot"></span>Tasa oficial BCV: <b>$ ${nf4.format(RATE.usd)}</b>${RATE.eur ? ' · <b>€ ' + nf4.format(RATE.eur) + '</b>' : ''} Bs · ${RATE.dateText || ''}`;
+    else txt = RATE_LOADED ? '<span class="dot off"></span>No se pudo cargar la tasa del BCV. Escríbela a mano:' : 'Cargando la tasa del BCV…';
+    const stale = !m && RATE && staleDays() >= 2 ? '<span class="rwarn">¿No está al día? Pon la tasa a mano.</span>' : '';
+    const open = rateFormOpen || (RATE_LOADED && !RATE);
+    el.innerHTML = `<span class="rtxt">${txt}</span>${stale}
+      <span class="racts">${RATE_LOADED && RATE ? `<button type="button" class="rbtn" data-act="edit">${open ? 'Cerrar' : m ? 'Cambiar mi tasa' : 'Poner tasa a mano'}</button>` : ''}${m ? '<button type="button" class="rbtn" data-act="reset">Usar la oficial</button>' : ''}</span>
+      ${open ? `<form class="rform">
+        <label>Dólar (Bs por $)<input name="usd" inputmode="decimal" placeholder="${OFFICIAL ? nf2.format(OFFICIAL.usd) : 'Ej. 250,50'}" value="${m && m.usd ? nf4.format(m.usd) : ''}"></label>
+        <label>Euro (Bs por €)<input name="eur" inputmode="decimal" placeholder="${OFFICIAL && OFFICIAL.eur ? nf2.format(OFFICIAL.eur) : 'Opcional'}" value="${m && m.eur ? nf4.format(m.eur) : ''}"></label>
+        <button class="btn sm" type="submit">Guardar tasa</button>
+      </form>` : ''}`;
+    el.querySelector('[data-act="edit"]')?.addEventListener('click', () => { rateFormOpen = !rateFormOpen; renderRate(); if (rateFormOpen) el.querySelector('.rform input')?.focus(); });
+    el.querySelector('[data-act="reset"]')?.addEventListener('click', () => { setManual(null); rateFormOpen = false; applyRate(); });
+    el.querySelector('.rform')?.addEventListener('submit', e => {
+      e.preventDefault();
+      const f = e.target, usdV = num(f.usd.value), eurV = num(f.eur.value);
+      if (!(usdV > 0) && !(eurV > 0)) { setManual(null); } else setManual({usd: usdV > 0 ? usdV : 0, eur: eurV > 0 ? eurV : 0, at: Date.now()});
+      rateFormOpen = false; applyRate();
+    });
+  });
+}
+// Vuelve a mirar la tasa oficial cada 10 minutos y al volver a la pestaña.
+setInterval(() => { if (!rateFormOpen) loadRate(); }, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && RATE_LOADED && !rateFormOpen) loadRate(); });
 
 function copyText(t, btn){
   navigator.clipboard.writeText(t).then(() => { if (btn){ const o = btn.textContent; btn.textContent = '¡Copiado!'; setTimeout(() => btn.textContent = o, 1400); } }, () => {});

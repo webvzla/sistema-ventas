@@ -213,6 +213,14 @@ footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
 .cfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;font-size:13px;color:var(--faint)}
 .cfoot a{color:var(--acc2);font-weight:700;text-decoration:none}
 .cfoot .wa{display:inline-flex;align-items:center;gap:6px;color:#3ddc97}
+.cman{background:none;border:1px solid var(--line2);color:var(--acc2);font:600 12.5px var(--font);border-radius:999px;padding:4px 11px;cursor:pointer}
+.cman:hover{border-color:var(--acc2);color:var(--ink)}
+.cform{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;background:var(--bg2);border:1px solid var(--line2);border-radius:14px;padding:12px}
+.cform[hidden],.cman[hidden]{display:none}
+.cform label{font-size:12px;font-weight:600;color:var(--mut)}
+.cform input{width:100%;margin-top:4px;background:#081227;border:1px solid var(--line2);color:var(--ink);border-radius:10px;padding:10px 12px;font:600 16px var(--font);outline:none}
+.cform input:focus{border-color:var(--acc2)}
+.cform .btn{padding:10px 16px;font-size:14.5px}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media (max-width:520px){.tiles{grid-template-columns:1fr}}
 .tile{position:relative;display:flex;flex-direction:column;text-decoration:none;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;transition:border-color .2s,transform .25s cubic-bezier(.22,1,.36,1),box-shadow .3s}
@@ -324,7 +332,12 @@ footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
           </div>
           <div class="cres" aria-live="polite"><div class="k" id="cK">En bolívares</div><div class="v" id="cV">—</div><div class="s" id="cS">Cargando la tasa del BCV…</div></div>
           <div class="cquick"><button data-n="5">5</button><button data-n="10">10</button><button data-n="20">20</button><button data-n="50">50</button><button data-n="100">100</button></div>
-          <div class="cfoot"><span id="cDate">Tasa oficial del BCV</span><a class="wa" id="cWa" href="#" target="_blank" rel="noopener">Compartir por WhatsApp</a></div>
+          <div class="cfoot"><span id="cDate">Tasa oficial del BCV</span><span><button type="button" class="cman" id="cManBtn">Poner tasa a mano</button> <button class="cman" type="button" id="cReset" hidden>Usar la oficial</button></span><a class="wa" id="cWa" href="#" target="_blank" rel="noopener">Compartir por WhatsApp</a></div>
+          <form class="cform" id="cForm" hidden>
+            <label>Dólar (Bs por $)<input name="usd" inputmode="decimal"></label>
+            <label>Euro (Bs por €)<input name="eur" inputmode="decimal" placeholder="Opcional"></label>
+            <button class="btn btn-blue" type="submit">Guardar</button>
+          </form>
         </div>
         <div class="tiles">
           <a class="tile" href="/herramientas/precio-en-bolivares/"><span class="ti">Bs</span><b>Precio de venta en bolívares</b><p>Del costo en $ a tu precio en $ y Bs con el margen que quieras.</p><span class="open">Calcular →</span></a>
@@ -455,9 +468,33 @@ footer .hand{font:800 16px var(--brandf);background:none;color:var(--ink)}
     document.getElementById('rbUsd').textContent = nf.format(j.usd);
     document.getElementById('ppUsd').textContent = nf.format(j.usd);
     if (j.eur > 0) document.getElementById('rbEur').textContent = nf.format(j.eur);
-    window.RATE = j; calcConv();
-  } catch (e) { document.getElementById('cS').textContent = 'No se pudo cargar la tasa. Revisa tu conexión.'; }
+    window.OFFICIAL = j; applyManual();
+  } catch (e) { applyManual(); if (!window.RATE){ document.getElementById('cS').textContent = 'No se pudo cargar la tasa. Ponla a mano.'; document.getElementById('cForm').hidden = false; } }
 })();
+
+// Tasa a mano (la misma que en las calculadoras: se guarda en este navegador).
+const MANUAL_KEY = 'ss_tasa_manual';
+function getManual(){ try { const m = JSON.parse(localStorage.getItem(MANUAL_KEY) || 'null'); return m && (m.usd > 0 || m.eur > 0) ? m : null; } catch (e) { return null; } }
+function applyManual(){
+  const o = window.OFFICIAL || {}, m = getManual();
+  window.RATE = m ? {...o, usd: m.usd > 0 ? m.usd : o.usd, eur: m.eur > 0 ? m.eur : o.eur, manual: true} : (o.usd > 0 ? o : null);
+  if (window.RATE && !(window.RATE.usd > 0)) window.RATE = null;
+  document.getElementById('cReset').hidden = !m;
+  calcConv();
+}
+document.getElementById('cManBtn').addEventListener('click', () => {
+  const f = document.getElementById('cForm'), m = getManual(), o = window.OFFICIAL, nf = new Intl.NumberFormat('es-VE', {maximumFractionDigits:4});
+  f.hidden = !f.hidden;
+  f.usd.placeholder = o ? nf.format(o.usd) : 'Ej. 250,50'; f.usd.value = m && m.usd ? nf.format(m.usd) : '';
+  f.eur.value = m && m.eur ? nf.format(m.eur) : '';
+  if (!f.hidden) f.usd.focus();
+});
+document.getElementById('cForm').addEventListener('submit', e => {
+  e.preventDefault(); const f = e.target, u = cNum(f.usd.value), eu = cNum(f.eur.value);
+  try { (u > 0 || eu > 0) ? localStorage.setItem(MANUAL_KEY, JSON.stringify({usd: u > 0 ? u : 0, eur: eu > 0 ? eu : 0, at: Date.now()})) : localStorage.removeItem(MANUAL_KEY); } catch (er) {}
+  f.hidden = true; applyManual();
+});
+document.getElementById('cReset').addEventListener('click', () => { try { localStorage.removeItem(MANUAL_KEY); } catch (er) {} document.getElementById('cForm').hidden = true; applyManual(); });
 
 // Calculadora rápida de la portada (dólar / euro / bolívares).
 let cCur = 'usd';
@@ -479,9 +516,9 @@ function calcConv(){
   document.getElementById('cK').textContent = k;
   document.getElementById('cV').textContent = v;
   document.getElementById('cS').textContent = sub;
-  document.getElementById('cDate').textContent = 'Tasa BCV ' + nf.format(u) + ' Bs/$' + (R.dateText ? ' · ' + R.dateText : '');
+  document.getElementById('cDate').textContent = (R.manual ? 'Tu tasa ' : 'Tasa BCV ') + nf.format(u) + ' Bs/$' + (R.manual ? ' (manual)' : (R.dateText ? ' · ' + R.dateText : ''));
   const sym = cCur === 'usd' ? '$' : cCur === 'eur' ? '€' : 'Bs ';
-  const msg = (cCur === 'bs' ? sym + nf.format(a) : sym + nf.format(a)) + ' = ' + v + ' (tasa BCV ' + nf.format(u) + '). Calcula gratis: https://stocksoft.web.app/herramientas/dolar-bcv/';
+  const msg = (cCur === 'bs' ? sym + nf.format(a) : sym + nf.format(a)) + ' = ' + v + ' (tasa ' + (R.manual ? '' : 'BCV ') + nf.format(u) + '). Calcula gratis: https://stocksoft.web.app/herramientas/dolar-bcv/';
   document.getElementById('cWa').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
 }
 document.getElementById('cAmt').addEventListener('input', calcConv);

@@ -77,7 +77,8 @@ function calc(){
 document.querySelectorAll('.qseg button').forEach(b => b.addEventListener('click', () => { document.querySelectorAll('.qseg button').forEach(x => x.classList.toggle('on', x === b)); cur = b.dataset.c; calc(); }));
 $('#amt').addEventListener('input', calc);
 $('#cp').addEventListener('click', e => copyText($('#amt').value + ' ' + cur.toUpperCase() + ' = ' + $('#rv').textContent, e.target));
-loadRate().then(R => { if (R){ $('#hUsd').textContent = nf2.format(R.usd); if (R.eur) $('#hEur').textContent = nf2.format(R.eur); } calc(); });
+function onRate(R){ $('#hUsd').textContent = R ? nf2.format(R.usd) : '—'; $('#hEur').textContent = R && R.eur ? nf2.format(R.eur) : '—'; document.querySelectorAll('.bigrate .k').forEach((k, i) => k.textContent = (i ? 'Euro' : 'Dólar') + (R && R.manual ? ' (tu tasa)' : ' BCV hoy')); }
+loadRate();
 </script>
 </body>
 </html>
