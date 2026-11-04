@@ -831,7 +831,7 @@ function helpSheet(){
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
 /* ---- Inventario inteligente (cada opción se activa o desactiva en Ajustes) ---- */
-const SMART_DEF = {alert:true, suggest:true, pay:true, fiado:true, notif:false, days:30, cover:15, soon:7, fiadoDays:15, phone:'', email:''};
+const SMART_DEF = {alert:true, suggest:true, pay:true, fiado:true, notif:false, days:30, cover:15, soon:7, fiadoDays:15, phone:'', email:'', ownLow:false, ownOrder:false, report:true, mail:false};
 const SM = () => ({...SMART_DEF, ...(cfg.smart || {})});
 let _vel = {k:'', m:{}, q:{}};
 function velMap(){
@@ -874,6 +874,7 @@ function restockSheet(){
   ${xs.length ? '' : '<div class="empty">Todo está bien surtido.</div>'}
   ${Object.entries(g).map(([sid, ps]) => `<h3>${sid ? esc(S.suppliers[sid].name) : 'Sin proveedor asignado'}</h3><div class="card">${ps.map(p => `<div class="mv"><span>${esc(p.name)} ${restockPill(p)}</span><b>${suggestQty(p) ? nfq.format(suggestQty(p)) + ' ' + unitLbl(p.unit) : '—'}</b></div>`).join('')}</div>
   ${sid ? `<div class="gap" style="margin-top:8px"><a class="btn wa" style="flex:1" href="${waLink(S.suppliers[sid].phone, orderMsg(sid))}" target="_blank" rel="noopener">Pedir por WhatsApp</a><button class="btn sec" style="flex:1" onclick="purchaseForm('${sid}')">Registrar lo que llegó</button></div>` : '<p class="note">Asígnales un proveedor en el producto para pedirlos con un toque.</p>'}`).join('')}
+  ${xs.length ? (() => { const txt = '🛒 Pedido sugerido · ' + (cfg.name || 'StockSoft') + '\n\n' + xs.map(p => '• ' + p.name + ': quedan ' + nfq.format(num(p.stock)) + (suggestQty(p) ? ' → comprar ' + nfq.format(suggestQty(p)) + ' ' + unitLbl(p.unit) : '')).join('\n'); return `<div class="grid2" style="margin-top:10px"><a class="btn wa" href="${waLink(sm.phone || cfg.phone || '', txt)}" target="_blank" rel="noopener">Enviármelo por WhatsApp</a><a class="btn sec" href="mailto:${encodeURIComponent(sm.email || cfg.email || '')}?subject=${encodeURIComponent('Pedido sugerido · ' + (cfg.name || ''))}&body=${encodeURIComponent(txt)}">Enviármelo por correo</a></div>`; })() : ''}
   ${top.length ? `<h3>Lo más vendido (${sm.days} días)</h3><div class="card">${top.map((x, i) => `<div class="mv"><span>${i + 1}. ${esc(x.p.name)}</span><span class="sub">${nfq.format(x.q)} ${unitLbl(x.p.unit)} vendidos · quedan ${nfq.format(num(x.p.stock))}</span></div>`).join('')}</div>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
@@ -932,6 +933,7 @@ function smartBox(){
   if (sm.pay) supDues().filter(x => dueIn(x.due) <= 3).forEach(x => { h += `<div class="warnbox">Pago a <b>${esc(x.name)}</b>: ${usd(x.amount)} · ${whenTxt(dueIn(x.due))}. <a href="#" onclick="showSupplier('${x.sid}');return false">Pagar →</a></div>`; });
   if (sm.pay) (cfg.bills || []).forEach((b, i) => { const x = billInfo(b); if (!x.paid && dueIn(x.due) <= 3) h += `<div class="warnbox"><b>${esc(b.name)}</b>: ${usd(num(b.amount))} · ${whenTxt(dueIn(x.due))}. <a href="#" onclick="payBill(${i});return false">Registrar pago →</a></div>`; });
   const cg = catGroups().length, dp = dupProducts().length; if (cg || dp) h += `<div class="warnbox">${cg ? cg + ' categoría' + (cg === 1 ? '' : 's') + ' escrita' + (cg === 1 ? '' : 's') + ' de varias formas' : ''}${cg && dp ? ' y ' : ''}${dp ? dp + ' producto' + (dp === 1 ? '' : 's') + ' repetido' + (dp === 1 ? '' : 's') : ''}. <a href="#" onclick="dupSheet();return false">Revisar →</a></div>`;
+  if (sm.report && new Date().getDate() <= 7){ let seen = ''; try { seen = localStorage.getItem('ssReport') || ''; } catch(e){} if (seen !== monthKey(new Date())) h += `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">📊 Tu <b>informe de ${MONTHS[new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).getMonth()]}</b> está listo: lo más vendido, lo que menos se vende y el dinero parado. <a href="#" onclick="reportSheet(-1);return false">Ver y enviar →</a></div>`; }
   if (sm.fiado){ const fd = fiadoDue(); if (fd.length) h += `<div class="warnbox">${fd.length} cliente${fd.length === 1 ? '' : 's'} con fiado de más de ${sm.fiadoDays} días (${usd(r2(fd.reduce((a, x) => a + x.amount, 0)))}). <a href="#" onclick="ui.fiF='deuda';go('fiados');return false">Cobrar →</a></div>`; }
   return h;
 }
@@ -972,24 +974,77 @@ async function unifyCat(i){
 }
 /* ---- Pagos fijos del mes (alquiler, luz, sueldos…) ---- */
 const monthKey = d => d.getFullYear() + '-' + (d.getMonth() + 1);
-function billInfo(b){ const n = new Date(), last = new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate(); const due = new Date(n.getFullYear(), n.getMonth(), Math.min(Math.max(1, num(b.day)), last)).getTime(); const key = monthKey(n); return {due, key, paid:b.paid === key}; }
+const FREQ = {w:'Cada semana', m:'Cada mes', y:'Cada año'};
+const WDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+// Fecha de pago y "periodo" actual de un pago fijo. freq: w (día de la semana 0-6), m (día del mes), y (mes 1-12 + día).
+function billInfo(b){
+  const n = new Date(), f = b.freq || 'm';
+  if (f === 'w'){ const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - n.getDay() + (num(b.wd) || 0)); const wk = new Date(n.getFullYear(), n.getMonth(), n.getDate() - n.getDay()); const key = 'w' + dayKey(wk.getTime()); return {due:d.getTime(), key, paid:b.paid === key}; }
+  if (f === 'y'){ const mo = Math.min(12, Math.max(1, num(b.mo) || 1)) - 1, last = new Date(n.getFullYear(), mo + 1, 0).getDate(); const due = new Date(n.getFullYear(), mo, Math.min(Math.max(1, num(b.day)), last)).getTime(); const key = 'y' + n.getFullYear(); return {due, key, paid:b.paid === key}; }
+  const last = new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate(); const due = new Date(n.getFullYear(), n.getMonth(), Math.min(Math.max(1, num(b.day)), last)).getTime(); const key = monthKey(n); return {due, key, paid:b.paid === key};
+}
+const billWhen = b => (b.freq || 'm') === 'w' ? 'cada ' + WDAYS[num(b.wd) || 0] : b.freq === 'y' ? 'cada ' + num(b.day) + ' de ' + MONTHS[(num(b.mo) || 1) - 1] : 'día ' + b.day + ' de cada mes';
+const billPaidTxt = b => (b.freq || 'm') === 'w' ? 'pagado esta semana ✓' : b.freq === 'y' ? 'pagado este año ✓' : 'pagado este mes ✓';
 function billsHtml(){
   const bs = cfg.bills || [];
-  return (bs.length ? `<div class="card" style="margin:8px 0">${bs.map((b, i) => { const x = billInfo(b); return `<div class="mv"><span>${esc(b.name)} <span class="sub">· día ${b.day} · ${x.paid ? 'pagado este mes ✓' : whenTxt(dueIn(x.due))}</span></span><span><b>${usd(num(b.amount))}</b> <a href="#" class="sub" onclick="delBill(${i});return false">quitar</a></span></div>`; }).join('')}</div>` : '<p class="note">Añade lo que pagas cada mes y te lo recordamos 3 días antes. Con un toque queda registrado como gasto.</p>') +
+  return (bs.length ? `<div class="card" style="margin:8px 0">${bs.map((b, i) => { const x = billInfo(b); return `<div class="mv"><span>${esc(b.name)} <span class="sub">· ${billWhen(b)} · ${x.paid ? billPaidTxt(b) : whenTxt(dueIn(x.due))}</span></span><span><b>${usd(num(b.amount))}</b> <a href="#" class="sub" onclick="delBill(${i});return false">quitar</a></span></div>`; }).join('')}</div>` : '<p class="note">Añade lo que pagas cada semana, cada mes o cada año y te lo recordamos 3 días antes. Con un toque queda registrado como gasto. También puedes marcar "Repetir" al registrar un gasto.</p>') +
   `<div class="grid2"><div><label>Qué pagas</label><input id="bN" placeholder="Ej: Alquiler"></div><div><label>Monto ($)</label><input id="bA" inputmode="decimal" placeholder="0,00"></div></div>
-  <div class="grid2"><div><label>Día del mes</label><input id="bD" inputmode="numeric" placeholder="5"></div><div><label>Tipo de gasto</label><select id="bC">${EXP_CATS.map(c => `<option>${c}</option>`).join('')}</select></div></div>
+  <div class="grid2"><div><label>Se repite</label><select id="bF">${Object.entries(FREQ).map(([k, v]) => `<option value="${k}" ${k === 'm' ? 'selected' : ''}>${v}</option>`).join('')}</select></div><div><label>Desde (primer pago)</label><input id="bD" type="date" value="${todayISO()}"></div></div>
+  <label>Tipo de gasto</label><select id="bC">${EXP_CATS.map(c => `<option>${c}</option>`).join('')}</select>
   <button class="btn sm sec" style="margin-top:10px" onclick="addBill()">+ Añadir pago fijo</button>`;
 }
 async function addBill(){
-  const name = $('#bN').value.trim(), amount = r2(num($('#bA').value)), day = Math.round(num($('#bD').value));
-  if (!name || !(amount > 0) || !(day >= 1 && day <= 31)){ toast('Pon qué pagas, el monto y el día (1 a 31)'); return; }
-  if (await putCfg({bills:[...(cfg.bills || []), {name, amount, day, cat:$('#bC').value}]})){ $('#billsBox').innerHTML = billsHtml(); toast('Pago fijo añadido'); }
+  const name = $('#bN').value.trim(), amount = r2(num($('#bA').value)), dv = $('#bD').value;
+  if (!name || !(amount > 0) || !dv){ toast('Pon qué pagas, el monto y la fecha'); return; }
+  if (await putCfg({bills:[...(cfg.bills || []), makeBill(name, amount, $('#bC').value, $('#bF').value, dv)]})){ $('#billsBox').innerHTML = billsHtml(); toast('Pago fijo añadido'); }
+}
+function makeBill(name, amount, cat, freq, iso, paidNow){
+  const d = new Date(iso + 'T12:00:00'), b = {name, amount, cat, freq, day:d.getDate(), wd:d.getDay(), mo:d.getMonth() + 1};
+  if (paidNow) b.paid = billInfo(b).key;
+  return b;
 }
 async function delBill(i){ if (await putCfg({bills:(cfg.bills || []).filter((b, j) => j !== i)})) $('#billsBox').innerHTML = billsHtml(); }
 function payBill(i){
   const b = (cfg.bills || [])[i]; if (!b) return;
-  expenseForm(); $('#exC').value = b.cat || 'Otros'; $('#exN').value = b.name + ' de ' + new Date().toLocaleDateString('es', {month:'long'}); $('#exA').value = String(b.amount).replace('.', ',');
+  expenseForm(); $('#exC').value = b.cat || 'Otros'; $('#exN').value = b.name + ((b.freq || 'm') === 'm' ? ' de ' + new Date().toLocaleDateString('es', {month:'long'}) : (b.freq === 'y' ? ' ' + new Date().getFullYear() : '')); if ($('#exRw')) $('#exRw').style.display = 'none'; $('#exA').value = String(b.amount).replace('.', ',');
   ui.billPay = {i, key:billInfo(b).key};
+}
+/* ---- Ranking de ventas por producto (más y menos vendidos) ---- */
+function rankProducts(from, to = Infinity){
+  const q = {}, t = {}, g = {};
+  for (const s of Object.values(S.sales)) if (s.ts >= from && s.ts < to) for (const i of (s.items || [])) if (i.pid){ const sign = s.doc === 'devolucion' ? -1 : 1; q[i.pid] = (q[i.pid] || 0) + num(i.qty); t[i.pid] = (t[i.pid] || 0) + num(i.price) * num(i.qty); g[i.pid] = (g[i.pid] || 0) + (num(i.price) - num(i.cost)) * num(i.qty); }
+  const all = products().filter(p => p.track !== false || q[p.id]).map(p => ({p, q:Math.max(0, q[p.id] || 0), t:r2(t[p.id] || 0), g:r2(g[p.id] || 0), stockV:r2(num(p.stock) * (num(costUsdOf(p)) || 0))}));
+  const most = all.filter(x => x.q > 0).sort((a, b) => b.q - a.q || b.t - a.t);
+  const least = all.filter(x => num(x.p.stock) > 0 && (!x.p.created || x.p.created < from)).sort((a, b) => a.q - b.q || b.stockV - a.stockV);
+  return {most, least};
+}
+// Informe del mes: off = 0 este mes, -1 el mes pasado.
+function monthReport(off = -1){
+  const n = new Date(), a = new Date(n.getFullYear(), n.getMonth() + off, 1), b = new Date(n.getFullYear(), n.getMonth() + off + 1, 1), pa = new Date(n.getFullYear(), n.getMonth() + off - 1, 1);
+  const inR = (s, x, y) => s.ts >= x.getTime() && s.ts < y.getTime() && s.doc !== 'devolucion';
+  const ss = Object.values(S.sales).filter(s => inR(s, a, b)), sp = Object.values(S.sales).filter(s => inR(s, pa, a));
+  const tot = r2(ss.reduce((x, s) => x + num(s.total) - num(s.igtf), 0)), totP = r2(sp.reduce((x, s) => x + num(s.total) - num(s.igtf), 0));
+  const gan = r2(ss.reduce((x, s) => x + (s.items || []).reduce((y, i) => y + (num(i.price) - num(i.cost)) * num(i.qty), 0), 0));
+  const {most, least} = rankProducts(a.getTime(), b.getTime());
+  const idle = least.filter(x => x.q === 0), idleV = r2(idle.reduce((x, y) => x + y.stockV, 0));
+  const pct = totP ? Math.round((tot - totP) / totP * 100) : null, mes = MONTHS[a.getMonth()] + ' ' + a.getFullYear();
+  const top = most.slice(0, 5), low = least.slice(0, 5);
+  const text = `📊 *Informe de ${mes}* · ${cfg.name || 'StockSoft'}\n\nVentas: *${usd(tot)}* (${ss.length} venta${ss.length === 1 ? '' : 's'})${pct != null ? ' · ' + (pct >= 0 ? '+' : '') + pct + '% vs. mes anterior' : ''}\nGanancia aprox.: ${usd(gan)}\n\n🔥 *Lo más vendido*\n${top.length ? top.map((x, i) => `${i + 1}. ${x.p.name} — ${nfq.format(x.q)} ${unitLbl(x.p.unit)} (${usd(x.t)})`).join('\n') : 'Sin ventas'}\n\n🐢 *Lo que menos se vende*\n${low.length ? low.map((x, i) => `${i + 1}. ${x.p.name} — ${nfq.format(x.q)} vendidos · quedan ${nfq.format(num(x.p.stock))}${x.stockV ? ' (' + usd(x.stockV) + ' parado)' : ''}`).join('\n') : '—'}\n\n${idle.length ? `💤 ${idle.length} producto${idle.length === 1 ? '' : 's'} sin ninguna venta: ${usd(idleV)} de mercancía parada a costo.\n\n` : ''}Enviado desde StockSoft · stocksoft.app`;
+  return {mes, tot, totP, pct, gan, n:ss.length, top, low, idle, idleV, text};
+}
+function reportSheet(off = -1){
+  const r = monthReport(off), sm = SM(), ph = sm.phone || cfg.phone, em = sm.email || cfg.email || '';
+  const li = (x, i, k) => `<div class="mv"><span>${i + 1}. ${esc(x.p.name)}</span><span class="sub">${k === 'top' ? nfq.format(x.q) + ' ' + unitLbl(x.p.unit) + ' · ' + usd(x.t) : nfq.format(x.q) + ' vendidos · quedan ' + nfq.format(num(x.p.stock))}</span></div>`;
+  openSheet(`<h2>Informe de ${esc(r.mes)}</h2>
+  <div class="seg" style="margin:0 0 10px"><button class="${off === -1 ? 'on' : ''}" onclick="reportSheet(-1)">Mes pasado</button><button class="${off === 0 ? 'on' : ''}" onclick="reportSheet(0)">Este mes</button></div>
+  <div class="card"><div class="mv"><span>Ventas</span><b>${usd(r.tot)}</b></div><div class="mv"><span>Nº de ventas</span><b>${r.n}</b></div>${r.pct != null ? `<div class="mv"><span>Comparado con el mes anterior</span><b style="color:${r.pct >= 0 ? 'var(--acc)' : 'var(--bad)'}">${r.pct >= 0 ? '+' : ''}${r.pct}%</b></div>` : ''}${isAdmin() ? `<div class="mv"><span>Ganancia aproximada</span><b>${usd(r.gan)}</b></div>` : ''}</div>
+  <h3>🔥 Lo más vendido</h3><div class="card">${r.top.length ? r.top.map((x, i) => li(x, i, 'top')).join('') : '<div class="empty">Sin ventas</div>'}</div>
+  <h3>🐢 Lo que menos se vende</h3><div class="card">${r.low.length ? r.low.map((x, i) => li(x, i, 'low')).join('') : '<div class="empty">—</div>'}</div>
+  ${r.idle.length ? `<p class="note">${r.idle.length} producto${r.idle.length === 1 ? '' : 's'} sin ninguna venta este mes: <b>${usd(r.idleV)}</b> de mercancía parada (a costo). Prueba una oferta o un combo.</p>` : ''}
+  <div class="grid2" style="margin-top:10px"><a class="btn wa" href="${waLink(ph || '', r.text)}" target="_blank" rel="noopener">Enviar por WhatsApp</a><a class="btn sec" href="mailto:${encodeURIComponent(em)}?subject=${encodeURIComponent('Informe de ' + r.mes + ' · ' + (cfg.name || 'StockSoft'))}&body=${encodeURIComponent(r.text.replace(/\*/g, ''))}">Enviar por correo</a></div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+  try { localStorage.setItem('ssReport', monthKey(new Date())); } catch(e){}
 }
 /* ---- Productos sin ventas (dinero parado) ---- */
 function idleProducts(days = 60){
@@ -1503,10 +1558,24 @@ function salePayments(s){
 }
 const payLabel = s => s.method === 'mixto' ? salePayments(s).map(p => METHODS[p.m] || p.m).join(' + ') : (METHODS[s.method] || s.method);
 const normRif = r => String(r || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const cDisc = c => c && num(c.disc) > 0 ? num(c.disc) : 0;
+const discTxt = v => nf2.format(v).replace(/,00$/, '') + ' %';
+// Elegir el cliente de la venta: rellena sus datos para la factura, el fiado y aplica su descuento fijo.
+function setSaleClient(id){
+  const c = id && S.clients[id];
+  ui.saleClient = c ? id : '';
+  if (c){
+    ui.cust = {rif:c.rif || ui.cust.rif || '', name:c.name || '', addr:c.addr || '', phone:c.phone || ''};
+    ui.pay.client = id;
+    if (cDisc(c)){ ui.disc = {type:'pct', v:String(cDisc(c)), client:id}; toast('Descuento de cliente ' + (c.type ? c.type + ' ' : '') + discTxt(cDisc(c)) + ' aplicado'); }
+    else if (ui.disc.client) ui.disc = {type:'pct', v:''};
+  } else if (ui.disc.client) ui.disc = {type:'pct', v:''};
+  renderCart();
+}
 function findClientByRif(r){ const n = normRif(r); if (!n) return null; return clients().find(c => normRif(c.rif) === n) || null; }
 function custInput(k, v){
   ui.cust[k] = v;
-  if (k === 'rif'){ const c = findClientByRif(v); if (c){ ui.cust = {rif:v, name:c.name || '', addr:c.addr || '', phone:c.phone || ''}; ['name', 'addr', 'phone'].forEach(f => { const el = $('#f_' + f); if (el) el.value = ui.cust[f]; }); $('#rifHint').textContent = 'Cliente encontrado: ' + c.name; } else $('#rifHint').textContent = ''; }
+  if (k === 'rif'){ const c = findClientByRif(v); if (c && cDisc(c) && ui.saleClient !== c.id){ ui.saleClient = c.id; ui.disc = {type:'pct', v:String(cDisc(c)), client:c.id}; toast('Descuento de cliente ' + discTxt(cDisc(c)) + ' aplicado'); setTimeout(renderCart, 0); } if (c){ ui.cust = {rif:v, name:c.name || '', addr:c.addr || '', phone:c.phone || ''}; ['name', 'addr', 'phone'].forEach(f => { const el = $('#f_' + f); if (el) el.value = ui.cust[f]; }); $('#rifHint').textContent = 'Cliente encontrado: ' + c.name; } else $('#rifHint').textContent = ''; }
 }
 
 /* ---- Carrito ---- */
@@ -1516,7 +1585,8 @@ const cartSub0 = () => r2(cart.reduce((a, c) => a + c.price * c.qty, 0));
 function discUsd(){
   const s0 = cartSub0(), v = num(ui.disc.v); if (!(v > 0) || !s0) return 0;
   let d = ui.disc.type === 'pct' ? s0 * Math.min(v, 100) / 100 : Math.min(v, s0);
-  if (!isAdmin()){ const max = s0 * num(cfg.maxDisc ?? 10) / 100; if (d > max + 0.001) d = max; }
+  const cd = ui.disc.client && S.clients[ui.disc.client] ? cDisc(S.clients[ui.disc.client]) : 0;
+  if (!isAdmin()){ const max = s0 * Math.max(num(cfg.maxDisc ?? 10), cd) / 100; if (d > max + 0.001) d = max; }
   return r2(d);
 }
 function netItems(){ const s0 = cartSub0(), d = discUsd(), f = s0 ? 1 - d / s0 : 1; return cart.map(c => ({pid:c.pid, name:c.name, qty:c.qty, price:Math.round(c.price * f * 10000) / 10000, list:c.price, cost:c.cost || 0, unit:c.unit, iva:c.iva ?? 16})); }
@@ -1552,6 +1622,7 @@ function renderCart(){
   const C = ui.cust, needClient = st.fiado > 0;
   const methodOpts = (sel, withF = true) => Object.entries(METHODS).filter(([k]) => withF || k !== 'fiado').map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
   el.innerHTML = (ui.editQuote && S.quotes[ui.editQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Editando la cotización ${esc(S.quotes[ui.editQuote].no)}. Cuando termines pulsa <b>Cotización</b> para guardarla. <a href="#" onclick="ui.editQuote=null;renderCart();return false">cancelar edición</a></div>` : '') + (ui.fromQuote && S.quotes[ui.fromQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Vendiendo la cotización ${esc(S.quotes[ui.fromQuote].no || '')}. <a href="#" onclick="ui.fromQuote=null;renderCart();return false">quitar vínculo</a></div>` : '')
+    + (cart.length ? `<div class="row" style="gap:8px;margin-bottom:10px"><span class="sub" style="margin:0;white-space:nowrap">Cliente</span><select class="grow" style="padding:8px" onchange="setSaleClient(this.value)"><option value="">Cliente general${''}</option>${clients().sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => `<option value="${c.id}" ${c.id === ui.saleClient ? 'selected' : ''}>${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}${cDisc(c) ? ' (−' + discTxt(cDisc(c)) + ')' : ''}</option>`).join('')}</select></div>${ui.disc.client && S.clients[ui.disc.client] ? `<div class="pill ok" style="margin:-4px 0 10px">Descuento de cliente${S.clients[ui.disc.client].type ? ' ' + esc(S.clients[ui.disc.client].type) : ''}: −${discTxt(cDisc(S.clients[ui.disc.client]))}</div>` : ''}` : '')
     + `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
       <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}</div>
       <button type="button" class="ivachip${ivaOf(c) === 0 ? ' off' : ''}${c.ivaP != null && ivaOf(c) !== ivaOf(c, true) ? ' chg' : ''}" onclick="cycleIva(${i})" title="Toca para cambiar: 16% → 8% → sin IVA">${ivaOf(c) ? '✓ ' : '✕ '}${IVA_LBL[ivaOf(c)]}</button></div>
@@ -1621,8 +1692,9 @@ async function checkout(){
     else if (c.name !== C.name || (C.addr && c.addr !== C.addr) || (C.phone && c.phone !== C.phone)){ const {id:cid, ...rest} = c; await put('clients', cid, {...rest, name:C.name, addr:C.addr || rest.addr || '', phone:C.phone || rest.phone || ''}); }
     customer = {clientId:c.id, name:C.name, rif:C.rif, addr:C.addr || '', phone:C.phone || ''};
   } else if (fiscal) customer = {clientId:'', name:C.name, rif:C.rif, addr:'', phone:''};
+  if (!customer && ui.saleClient && S.clients[ui.saleClient]){ const c = S.clients[ui.saleClient]; customer = {clientId:ui.saleClient, name:c.name, rif:c.rif || '', addr:c.addr || '', phone:c.phone || ''}; }
   const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, disc:discUsd(), tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0,
-    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:fiscal ? nextInvNo() : '', customer, user:me ? me.u : '', userName:me ? me.name : ''};
+    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || ui.saleClient || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:fiscal ? nextInvNo() : '', customer, user:me ? me.u : '', userName:me ? me.name : ''};
   if (P.mode === 'mixto'){
     sale.payments = st.lines.map(l => ({m:l.m, usd:l.usd, raw:l.raw}));
     if (st.rest < -0.009) sale.change = {usd:r2(-st.rest), cur:P.changeCur || 'usd', raw:r2(toCur(-st.rest, P.changeCur || 'usd'))};
@@ -1639,7 +1711,7 @@ async function checkout(){
     }
     if (st.fiado > 0) await put('movs', uid(), {clientId, type:'deuda', amount:st.fiado, rate:cfg.bcv || 0, ts:now, saleId:id, note:items.map(i => nfq.format(i.qty) + ' ' + i.name).join(', ')});
     if (ui.fromQuote && S.quotes[ui.fromQuote]) await put('quotes', ui.fromQuote, {...S.quotes[ui.fromQuote], status:'vendida', saleId:id});
-    cart = []; lastScan = null; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal'; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
+    cart = []; lastScan = null; ui.saleClient = ''; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal'; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
     logA('venta', 'Venta', (sale.doc === 'fiscal' ? 'Factura' : 'Nota ' + (sale.noteNo || '')) + ' · ' + usd(sale.total) + ' · ' + payLabel(sale) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (sale.customer ? ' · ' + sale.customer.name : ''), 'sale:' + id);
     shellFor = ''; render(); showSale(id, true);
     if (warn.length) setTimeout(() => stockAlert(warn), 700);
@@ -2256,12 +2328,15 @@ function editClient(id, fromPos){
   <div class="grid2"><div><label>Cédula / RIF</label><input id="cR" value="${esc(c.rif || '')}" placeholder="V12345678"></div><div><label>Teléfono (WhatsApp)</label><input id="cP" value="${esc(c.phone)}" inputmode="tel" placeholder="0414 1234567"></div></div>
   <label>Dirección</label><input id="cA" value="${esc(c.addr || '')}" placeholder="Opcional">
   <label>Nota (opcional)</label><input id="cO" value="${esc(c.note || '')}" placeholder="Ej: vive en la casa 12">
+  ${isAdmin() ? `<div class="grid2"><div><label>Tipo de cliente</label><input id="cT" value="${esc(c.type || '')}" placeholder="Ej: Mecánico, Mayorista, VIP" list="cTypes"><datalist id="cTypes">${[...new Set(clients().map(x => x.type).filter(Boolean))].map(t => `<option value="${esc(t)}">`).join('')}</datalist></div><div><label>Descuento fijo (%)</label><input id="cD" inputmode="decimal" value="${c.disc ? nf2.format(num(c.disc)).replace(/,00$/, '') : ''}" placeholder="0"></div></div>
+  <p class="note">Se aplica solo cada vez que le vendes a este cliente. Ej: mecánicos 5 %, cliente exclusivo 10 %.</p>` : (c.disc ? `<p class="note">Descuento fijo de este cliente: <b>${nf2.format(num(c.disc)).replace(/,00$/, '')} %</b>${c.type ? ' (' + esc(c.type) + ')' : ''}</p>` : '')}
   <div class="sheet-actions"><button class="btn sec" onclick="${id ? `showClient('${id}')` : 'closeSheet()'}">Cancelar</button><button class="btn" onclick="saveClient(${id ? `'${id}'` : 'null'},${fromPos ? 'true' : 'false'})">Guardar</button></div>`);
 }
 async function saveClient(id, fromPos){
   const name = $('#cN').value.trim(); if (!name){ toast('Pon el nombre'); return; }
   const nid = id || uid();
   const d = {...(id ? S.clients[id] : {created:Date.now()}), name, phone:$('#cP').value.trim(), rif:$('#cR').value.trim().toUpperCase().replace(/\s/g, ''), addr:$('#cA').value.trim(), note:$('#cO').value.trim()};
+  if ($('#cD')){ d.disc = Math.max(0, Math.min(100, num($('#cD').value))); d.type = $('#cT').value.trim(); }
   closeSheet();
   if (await put('clients', nid, d)){
     if (!id) logA('clientes', 'Cliente creado', name);
@@ -2404,15 +2479,23 @@ function smartForm(){
   <label ${L}><input type="checkbox" id="smP" class="chk" ${ck('pay')}> Recordar pagos a proveedores (3 días antes)</label>
   <label ${L}><input type="checkbox" id="smF" class="chk" ${ck('fiado')}> Recordar fiados sin pagar después de (días)</label><input id="smFd" inputmode="numeric" value="${sm.fiadoDays}" style="margin-top:6px">
   <label ${L}><input type="checkbox" id="smN" class="chk" ${ck('notif')}> Resumen diario como notificación del equipo (una vez al día)</label>
+  <h3 style="margin-top:18px">Avisos al dueño</h3>
+  <p class="note" style="margin-top:0">Elige qué quieres recibir. Se usan el WhatsApp y el correo de arriba.</p>
+  <label ${L}><input type="checkbox" id="smOL" class="chk" ${ck('ownLow')}> Avisarme cuando un producto se esté agotando (aunque venda un empleado)</label>
+  <label ${L}><input type="checkbox" id="smOO" class="chk" ${ck('ownOrder')}> Enviarme el pedido sugerido cada lunes (lo que conviene comprar según lo que más se vende)</label>
+  <label ${L}><input type="checkbox" id="smR" class="chk" ${ck('report')}> Informe del mes (lo más vendido, lo que menos se vende y dinero parado)</label>
+  <label ${L}><input type="checkbox" id="smM" class="chk" ${ck('mail')}> Mandármelo solo al correo, sin abrir el programa</label>
+  <p class="note">Por correo llega solo, sin que abras el programa. Por WhatsApp, el mensaje queda listo en el programa y lo envías con un toque (WhatsApp no permite enviarlos automáticamente sin un servicio de pago).</p>
   <button class="btn full" style="margin-top:16px" onclick="saveSmart()">Guardar</button>
   <button class="btn sec full" style="margin-top:8px" onclick="dupSheet()">Revisar productos y categorías repetidos</button></div>
-  <h3>Pagos fijos del mes</h3><div class="card" id="billsBox">${billsHtml()}</div>`;
+  <h3>Pagos fijos (semanales, mensuales o anuales)</h3><div class="card" id="billsBox">${billsHtml()}</div>`;
 }
 async function saveSmart(){
   const pos = (id, d) => Math.max(1, Math.round(num($(id).value)) || d);
   let notif = $('#smN').checked;
   if (notif && 'Notification' in window && Notification.permission !== 'granted'){ try { notif = (await Notification.requestPermission()) === 'granted'; } catch(e){ notif = false; } if (!notif){ $('#smN').checked = false; toast('No se permitieron las notificaciones'); } }
-  const smart = {alert:$('#smA').checked, suggest:$('#smS').checked, pay:$('#smP').checked, fiado:$('#smF').checked, notif, days:pos('#smD', 30), cover:pos('#smC', 15), soon:pos('#smK', 7), fiadoDays:pos('#smFd', 15), phone:$('#smW').value.trim(), email:$('#smE').value.trim()};
+  const smart = {alert:$('#smA').checked, suggest:$('#smS').checked, pay:$('#smP').checked, fiado:$('#smF').checked, notif, days:pos('#smD', 30), cover:pos('#smC', 15), soon:pos('#smK', 7), fiadoDays:pos('#smFd', 15), phone:$('#smW').value.trim(), email:$('#smE').value.trim(), ownLow:$('#smOL').checked, ownOrder:$('#smOO').checked, report:$('#smR').checked, mail:$('#smM').checked};
+  if (smart.mail && !smart.email){ toast('Pon el correo para avisos'); $('#smE').focus(); return; }
   if (await putCfg({smart})){ logA('admin', 'Ajustes modificados', 'Inventario inteligente'); toast('Inventario inteligente guardado'); }
 }
 async function saveSettings(){
@@ -2455,6 +2538,8 @@ function fillReports(){
     <h3>Por forma de pago</h3><div class="card">${Object.keys(byM).length ? Object.entries(byM).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="mv"><span>${METHODS[k] || k}</span><b>${usd(r2(v))}</b></div>`).join('') : '<div class="empty">Sin ventas en este periodo.</div>'}</div>
     <h3>Lo más vendido</h3><div class="card">${top.length ? top.map(([n, v]) => `<div style="padding:7px 0"><div class="row between"><span>${esc(n)} <span class="sub">× ${nfq.format(v.q)}</span></span><b>${usd(r2(v.t))}</b></div><div class="bar"><i style="width:${Math.max(3, v.t / maxT * 100)}%"></i></div></div>`).join('') : '<div class="empty">Sin datos.</div>'}</div>
     ${isAdmin() && topG.length ? `<h3>Lo que más ganancia deja</h3><div class="card">${topG.map(([n, v]) => `<div class="mv"><span>${esc(n)} <span class="sub">× ${nfq.format(v.q)} · margen ${v.t ? Math.round(v.g / v.t * 100) : 0}%</span></span><b style="color:var(--acc)">${usd(r2(v.g))}</b></div>`).join('')}</div>` : ''}
+    ${(() => { const lw = rankProducts(from).least.slice(0, 8); return lw.length ? `<h3>Lo que menos se vende</h3><div class="card">${lw.map(x => `<div class="mv tap" onclick="${isAdmin() ? `editProduct('${x.p.id}')` : ''}"><span>${esc(x.p.name)} <span class="sub">· quedan ${nfq.format(num(x.p.stock))} ${unitLbl(x.p.unit)}</span></span><b>${nfq.format(x.q)} vendidos</b></div>`).join('')}</div>` : ''; })()}
+    <button class="btn sec full" style="margin-top:12px" onclick="reportSheet(-1)">📊 Informe del mes (enviar por WhatsApp o correo)</button>
     ${isAdmin() && idle.length ? `<h3>Sin ventas en 60 días</h3><div class="card">${idle.slice(0, 10).map(x => `<div class="mv tap" onclick="editProduct('${x.p.id}')"><span>${esc(x.p.name)} <span class="sub">· ${nfq.format(num(x.p.stock))} ${unitLbl(x.p.unit)}</span></span><b>${x.v ? usd(x.v) : '—'}</b></div>`).join('')}</div><p class="note">${usd(r2(idle.reduce((a, x) => a + x.v, 0)))} de dinero parado en mercancía (a costo). Prueba una oferta o un combo para moverla.</p>` : ''}
     <h3>Ventas</h3><div class="list">${ss.slice(0, 50).map(saleRow).join('') || '<div class="empty">Sin ventas.</div>'}</div>`;
 }
@@ -2641,13 +2726,17 @@ function expenseForm(id){
   <label>Monto</label><div class="row"><input id="exA" inputmode="decimal" value="${e ? String(e.amount).replace('.', ',') : ''}" placeholder="0,00" class="grow">${curSel('exCur')}</div>
   <div class="grid2"><div><label>Fecha</label><input id="exD" type="date" value="${e ? new Date(e.ts - new Date(e.ts).getTimezoneOffset() * 6e4).toISOString().slice(0, 10) : todayISO()}"></div>
   <div><label>Cómo se pagó</label><select id="exM">${Object.values(PAY_OUT).map(v => `<option ${e && e.paidIn === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
+  ${!e && isAdmin() ? `<div id="exRw"><label>Repetir</label><select id="exR"><option value="">No se repite</option>${Object.entries(FREQ).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+  <p class="note">Si se repite, queda como pago fijo: te lo recordamos 3 días antes de la próxima vez y lo registras con un toque.</p></div>` : ''}
   <div class="sheet-actions">${e ? `<button class="btn bad" onclick="delExpense('${id}')">Borrar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}<button class="btn" onclick="saveExpense(${id ? `'${id}'` : 'null'})">Guardar</button></div>`);
 }
 async function saveExpense(id){
   const cur = $('#exCur').value, raw = num($('#exA').value), a = r2(amtToUsd(raw, cur));
   if (!(a > 0)){ toast('Pon el monto'); return; }
   const d = {cat:$('#exC').value, note:$('#exN').value.trim(), amount:a, raw, cur, ts:dateToTs($('#exD').value), paidIn:$('#exM').value, m:LABEL_TO_M()[$('#exM').value] || '', rate:cfg.bcv || 0, user:me ? me.name : ''};
-  closeSheet(); if (await put('expenses', id || uid(), d)){ logA('compras', id ? 'Gasto modificado' : 'Gasto', d.cat + (d.note ? ' · ' + d.note : '') + ' · ' + usd(a)); toast('Gasto guardado'); if (!id && ui.billPay){ const bp = ui.billPay; ui.billPay = null; await putCfg({bills:(cfg.bills || []).map((b, j) => j === bp.i ? {...b, paid:bp.key} : b)}); } }
+  const rep = !id && $('#exR') ? $('#exR').value : '', repDate = $('#exD').value;
+  closeSheet(); if (await put('expenses', id || uid(), d)){ logA('compras', id ? 'Gasto modificado' : 'Gasto', d.cat + (d.note ? ' · ' + d.note : '') + ' · ' + usd(a)); toast('Gasto guardado');
+    if (rep && !ui.billPay){ const nm = d.note || d.cat; await putCfg({bills:[...(cfg.bills || []), makeBill(nm, a, d.cat, rep, repDate, true)]}); toast('Gasto guardado y se repetirá ' + FREQ[rep].toLowerCase()); } if (!id && ui.billPay){ const bp = ui.billPay; ui.billPay = null; await putCfg({bills:(cfg.bills || []).map((b, j) => j === bp.i ? {...b, paid:bp.key} : b)}); } }
 }
 function delExpense(id){ ask('¿Borrar gasto?', 'Se quitará de los reportes y del dashboard.', 'Borrar', async () => { await del('expenses', id); toast('Gasto borrado'); }); }
 function fillExpenses(){

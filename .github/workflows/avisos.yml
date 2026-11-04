@@ -1,0 +1,47 @@
+name: Avisos por correo a los dueños
+
+# Productos que se agotan (diario), pedido sugerido (lunes) e informe del mes (día 1).
+# Solo para negocios que lo activaron en Ajustes > Inventario inteligente > "Mandármelo solo al correo".
+on:
+  schedule:
+    - cron: '17 12 * * *'   # 8:17 en Venezuela
+    - cron: '47 20 * * *'   # 16:47 en Venezuela
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Solo probar (no envía correos)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: avisos
+  cancel-in-progress: false
+
+jobs:
+  avisos:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Comprobar secretos
+        id: chk
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then echo "Falta FIREBASE_SERVICE_ACCOUNT"; echo "ok=false" >> $GITHUB_OUTPUT; exit 0; fi
+          if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ]; then echo "Faltan SMTP_USER / SMTP_PASS: los avisos por correo están desactivados"; echo "ok=nomail" >> $GITHUB_OUTPUT; exit 0; fi
+          echo "ok=true" >> $GITHUB_OUTPUT
+      - if: steps.chk.outputs.ok != 'false'
+        run: |
+          mkdir -p /tmp/av && cd /tmp/av && npm init -y >/dev/null && npm install --no-audit --no-fund firebase-admin@12 nodemailer@6
+          echo "NODE_PATH=/tmp/av/node_modules" >> $GITHUB_ENV
+      - if: steps.chk.outputs.ok == 'true' && github.event.inputs.dry != 'true'
+        run: node scripts/avisos.js
+      - if: steps.chk.outputs.ok == 'nomail' || github.event.inputs.dry == 'true'
+        run: node scripts/avisos.js --dry
