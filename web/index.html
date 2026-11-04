@@ -124,6 +124,9 @@ label.row{display:flex;font-size:14px;color:var(--tx)}
 .ph-box{width:84px;height:84px;border-radius:16px;border:1.5px dashed var(--line2);display:grid;place-items:center;color:var(--faint);font-size:28px;overflow:hidden;flex:none;background:var(--card2)}
 .ph-box img{width:100%;height:100%;object-fit:cover}
 .ph-big{width:100%;max-height:340px;object-fit:contain;border-radius:16px;background:#fff;margin:8px 0 12px;cursor:zoom-in}
+.ivachip{margin-top:6px;display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--font);padding:4px 10px;border-radius:999px;border:1px solid var(--line2, var(--line));background:var(--card2);color:var(--tx);cursor:pointer}
+.ivachip.off{color:var(--mut);text-decoration:none;opacity:.85}
+.ivachip.chg{border-color:var(--warn);color:var(--warn)}
 .pill{display:inline-flex;align-items:center;font:700 11px var(--font);padding:3px 9px;border-radius:7px;background:var(--card2);color:var(--mut);white-space:nowrap}
 .pill.low{background:rgba(255,179,71,.14);color:var(--warn)}
 .pill.out{background:rgba(255,93,108,.15);color:var(--bad)}
@@ -1398,19 +1401,27 @@ function addToCart(pid, quiet){
   if (p.track !== false && num(p.stock) <= 0) toast('Ojo: ' + p.name + ' figura agotado');
   else if (e && e.days < 0){ toast('Ojo: ' + p.name + ' tiene un lote vencido (' + fmtExp(e.exp) + ')'); quiet = true; }
   const ex = cart.find(c => c.pid === pid);
-  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? 16 : num(p.iva)}; reprice(c); cart.push(c); }
+  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? 16 : num(p.iva)}; c.ivaP = c.iva; reprice(c); cart.push(c); }
   if (!quiet) toast('+1 ' + p.name + ' · ' + pMain(p) + (pBs(p) ? ' · ' + bsF(pBs(p)) : ''));
   renderCart();
 }
 /* Aplica el precio al mayor (o lo quita) según la cantidad de la línea. */
-function reprice(c){ const p = c.pid && S.products[c.pid]; if (!hasW(p)){ c.mayor = false; return; } const u = unitUsd(p, c.qty); if (isFinite(u)){ c.price = r2(u); c.mayor = isW(p, c.qty); } }
+function reprice(c){ const p = c.pid && S.products[c.pid]; if (!hasW(p)){ c.mayor = false; return; } const u = unitUsd(p, c.qty); if (isFinite(u)){ c.price = r2(ivaAdj(u, ivaOf(c, true), ivaOf(c))); c.mayor = isW(p, c.qty); } }
+/* IVA por línea al vender: el precio incluye el IVA, así que al quitarlo o cambiarlo se recalcula el precio
+   manteniendo la base (ej. $11,60 con 16 % → exento $10,00 → 8 % $10,80). ivaP = el IVA con que se cargó la línea. */
+const ivaOf = (c, orig) => { const v = orig ? (c.ivaP ?? c.iva) : c.iva; return v == null || v === '' ? 16 : num(v); };
+const ivaAdj = (price, from, to) => from === to ? price : price / (1 + from / 100) * (1 + to / 100);
+const IVA_LBL = {16:'IVA 16%', 8:'IVA 8%', 0:'Sin IVA'};
+function setLineIva(i, to){ const c = cart[i]; if (!c) return; if (c.ivaP == null) c.ivaP = ivaOf(c); const from = ivaOf(c); if (from === to) return; c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; renderCart(); }
+function cycleIva(i){ const c = cart[i]; if (!c) return; const cur = ivaOf(c), next = cur === 16 ? 8 : cur === 8 ? 0 : 16; setLineIva(i, next); toast(c.name + ': ' + IVA_LBL[next] + ' · ' + usd(c.price)); }
+function allIva(on){ cart.forEach((c, i) => { if (c.ivaP == null) c.ivaP = ivaOf(c); const to = on ? ivaOf(c, true) : 0; const from = ivaOf(c); if (from !== to){ c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; } }); renderCart(); toast(on ? 'IVA de nuevo como en el inventario' : 'IVA quitado de toda la venta'); }
 function freeItem(){
   openSheet(`<h2>Artículo libre</h2><p class="note">Para vender algo que no está en el inventario (un servicio, una reparación…).</p>
   <label>Descripción</label><input id="fiN" placeholder="Ej: Envío a domicilio" autofocus>
   <label>Precio en $</label><input id="fiP" inputmode="decimal" placeholder="0,00">
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="
     const n=$('#fiN').value.trim()||'Artículo',p=num($('#fiP').value);if(p<=0){toast('Pon un precio');return}
-    cart.push({pid:'',name:n,price:r2(p),cost:0,unit:'unidad',qty:1,iva:16});closeSheet();renderCart()">Añadir</button></div>`);
+    cart.push({pid:'',name:n,price:r2(p),cost:0,unit:'unidad',qty:1,iva:16,ivaP:16});closeSheet();renderCart()">Añadir</button></div>`);
 }
 function setQty(i, v){ v = r3(num(v)); if (v <= 0) cart.splice(i, 1); else { cart[i].qty = v; reprice(cart[i]); } renderCart(); }
 /* ---- Impuestos, descuentos y pagos ---- */
@@ -1499,9 +1510,11 @@ function renderCart(){
   const methodOpts = (sel, withF = true) => Object.entries(METHODS).filter(([k]) => withF || k !== 'fiado').map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
   el.innerHTML = (ui.editQuote && S.quotes[ui.editQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Editando la cotización ${esc(S.quotes[ui.editQuote].no)}. Cuando termines pulsa <b>Cotización</b> para guardarla. <a href="#" onclick="ui.editQuote=null;renderCart();return false">cancelar edición</a></div>` : '') + (ui.fromQuote && S.quotes[ui.fromQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Vendiendo la cotización ${esc(S.quotes[ui.fromQuote].no || '')}. <a href="#" onclick="ui.fromQuote=null;renderCart();return false">quitar vínculo</a></div>` : '')
     + `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
-      <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}${num(c.iva ?? 16) === 0 ? ' · exento' : num(c.iva) === 8 ? ' · IVA 8%' : ''}</div></div>
+      <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}</div>
+      <button type="button" class="ivachip${ivaOf(c) === 0 ? ' off' : ''}${c.ivaP != null && ivaOf(c) !== ivaOf(c, true) ? ' chg' : ''}" onclick="cycleIva(${i})" title="Toca para cambiar: 16% → 8% → sin IVA">${ivaOf(c) ? '✓ ' : '✕ '}${IVA_LBL[ivaOf(c)]}</button></div>
       <div class="qty"><button onclick="setQty(${i},${c.qty}-1)">−</button><input inputmode="decimal" value="${nfq.format(c.qty)}" onchange="setQty(${i},this.value)"><button onclick="setQty(${i},${c.qty}+1)">+</button></div>
     </div></div>`).join('') + `</div>
+    ${cart.length ? `<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><span class="sub" style="margin:0">IVA de la venta:</span>${cart.some(c => ivaOf(c) > 0) ? `<button type="button" class="btn sm sec" onclick="allIva(false)">Quitar IVA a todo</button>` : ''}${cart.some(c => ivaOf(c) !== ivaOf(c, true)) ? `<button type="button" class="btn sm sec" onclick="allIva(true)">Volver a poner el IVA</button>` : ''}</div>` : ''}
     <div class="row" style="margin-top:10px;gap:8px"><span class="sub" style="margin:0;white-space:nowrap">Descuento</span><input inputmode="decimal" value="${esc(ui.disc.v)}" placeholder="0" style="width:90px;padding:8px" onchange="ui.disc.v=this.value;renderCart()"><select style="width:80px;padding:8px" onchange="ui.disc.type=this.value;renderCart()"><option value="pct" ${ui.disc.type === 'pct' ? 'selected' : ''}>%</option><option value="usd" ${ui.disc.type === 'usd' ? 'selected' : ''}>$</option></select>${t.disc ? `<span class="sub" style="margin:0">−${usd(t.disc)}</span>` : ''}${!isAdmin() ? `<span class="sub" style="margin:0">máx. ${nf0.format(num(cfg.maxDisc ?? 10))}%</span>` : ''}</div>
     <div class="total" style="margin-top:12px"><div class="sub" style="color:var(--tot-mut);font-size:12px;font-weight:600">TOTAL A PAGAR</div><div class="v" id="totV">${usd(t.total)}</div>
     <div class="bsline" style="font-size:22px" id="totB">${cfg.bcv ? bs(t.total) : '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>'}</div>
