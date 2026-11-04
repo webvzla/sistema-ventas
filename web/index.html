@@ -623,6 +623,20 @@ async function fillBackupInfo(){
   <div class="gap" style="margin-top:10px"><button class="btn sm" onclick="autoBackup(true)">Hacer copia ahora</button><button class="btn sm sec" onclick="window.desktop.openBackupDir()">Abrir carpeta</button><button class="btn sm sec" onclick="window.desktop.chooseBackupDir().then(fillBackupInfo)">Cambiar carpeta</button></div>
   <p class="note">Consejo: elige una carpeta de Google Drive o OneDrive para que la copia quede también en internet.</p>`;
 }
+/* ---- Actualización sola: si se publica una versión nueva, la app se recarga cuando no estás en medio de una venta ----
+   build-site.sh escribe la versión en app/version.json y en esta constante. */
+const APP_BUILD = '__BUILD__';
+async function checkUpdate(){
+  if (APP_BUILD.startsWith('__') || location.protocol !== 'https:' && !window.desktop) return;
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
+    const v = (await r.json()).build; if (!v || v === APP_BUILD) return;
+    const isBusy = () => cart.length || $('#ov').classList.contains('on') || busyFlag();
+    if (isBusy()){ checkUpdate.pending = true; return; }
+    toast('Actualizando StockSoft a la última versión…'); setTimeout(() => location.reload(), 1200);
+  } catch(e){}
+}
+const busyFlag = () => { try { return !!busy; } catch(e){ return false; } };
 let afterLoginDone = false;
 function afterLogin(){
   autoRates(); setTimeout(smartDaily, 8000);
@@ -632,6 +646,8 @@ function afterLogin(){
   setInterval(() => autoRates(), 15 * 60e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - (autoRates.last || 0) > 5 * 60e3) autoRates(); });
   setInterval(() => autoBackup(), 3600e3);
+  setInterval(checkUpdate, 20 * 60e3); setTimeout(checkUpdate, 60e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
   window.addEventListener('online', () => { toast('Conexión recuperada'); autoRates(); });
   window.addEventListener('offline', () => toast('Sin internet: puedes seguir vendiendo, se sincroniza al volver'));
 }
