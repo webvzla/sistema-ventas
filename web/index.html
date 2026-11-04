@@ -559,11 +559,13 @@ async function autoRates(manual){
   // Al entrar (sobre todo en una instalación nueva) los datos aún pueden estar cargando: se reintenta en 2 s.
   if (!loaded || (backend === 'cloud' && !cfgLoaded)){ clearTimeout(autoRates.retry); autoRates.retry = setTimeout(() => autoRates(manual), 2000); return; }
   if (!navigator.onLine){ if (manual) toast('Sin conexión a internet'); return; }
-  ratesBusy = true;
+  ratesBusy = true; autoRates.last = Date.now();
   try {
     const r = await fetchRates();
     if (!r){ if (manual) toast('No se pudo consultar la tasa del BCV'); return; }
-    if (cfg.bcv && Math.abs(r.usd - cfg.bcv) / cfg.bcv > 0.15){ toast('La tasa recibida es muy distinta a la actual; no se aplicó'); return; }
+    // Un salto grande solo se frena si la tasa guardada es de hace menos de 2 días (posible error de la fuente).
+    // Si la guardada es vieja o se pidió a mano, se aplica: antes se bloqueaba para siempre y la tasa se quedaba congelada.
+    if (!manual && cfg.bcv && Math.abs(r.usd - cfg.bcv) / cfg.bcv > 0.15 && Date.now() - num(cfg.ratesAt) < 2 * 864e5){ console.warn('Salto de tasa sin aplicar', cfg.bcv, '→', r.usd); return; }
     const now = Date.now();
     const latestISO = Object.keys(S.rates).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().pop();
     if (r.dateISO && latestISO && r.dateISO < latestISO){ if (now - num(cfg.checkedAt) > 3600e3) await putCfg({checkedAt:now}); if (manual) toast('La tasa ya está al día'); return; }
@@ -602,7 +604,9 @@ function afterLogin(){
   autoRates(); setTimeout(smartDaily, 8000);
   if (window.desktop) setTimeout(() => autoBackup(), 4000);
   if (afterLoginDone) return; afterLoginDone = true;
-  setInterval(() => autoRates(), 3 * 3600e3);
+  // La tasa puede cambiar varias veces al día: se revisa cada 15 minutos y al volver a la app (si pasaron más de 5).
+  setInterval(() => autoRates(), 15 * 60e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - (autoRates.last || 0) > 5 * 60e3) autoRates(); });
   setInterval(() => autoBackup(), 3600e3);
   window.addEventListener('online', () => { toast('Conexión recuperada'); autoRates(); });
   window.addEventListener('offline', () => toast('Sin internet: puedes seguir vendiendo, se sincroniza al volver'));

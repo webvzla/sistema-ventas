@@ -54,7 +54,7 @@ function getHtml(url, insecure, depth = 0) {
 }
 function parseBCV(html) {
   const grab = id => {
-    const m = html.match(new RegExp('id="' + id + '"[\\s\\S]{0,1500}?<strong>\\s*([\\d.,]+)\\s*</strong>', 'i'));
+    const m = html.match(new RegExp('id="' + id + '"[\\s\\S]{0,1500}?<strong[^>]*>\\s*([\\d.,]+)\\s*</strong>', 'i'));
     if (!m) return null;
     const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
     return isFinite(v) && v > 0 ? v : null;
