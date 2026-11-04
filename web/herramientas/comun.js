@@ -98,7 +98,7 @@ function moreTools(){
   const main = document.querySelector('main .layout'); if (!main) return;
   const here = location.pathname.replace(/index\.html$/, '').replace(/([^/])$/, '$1/');
   const sec = document.createElement('section'); sec.className = 'more noprint';
-  sec.innerHTML = '<h2>Otras calculadoras gratis</h2><div class="more-grid">' + TOOLS.filter(t => t[0] !== here).map(t => `<a href="${t[0]}"><span class="ico">${t[1]}</span>${t[2]}<i>→</i></a>`).join('') + '</div>';
+  sec.innerHTML = '<h2>Otras utilidades gratis</h2><div class="more-grid">' + TOOLS.filter(t => t[0] !== here).map(t => `<a href="${t[0]}"><span class="ico">${t[1]}</span>${t[2]}<i>→</i></a>`).join('') + '</div>';
   main.after(sec);
 }
 
