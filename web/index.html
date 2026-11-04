@@ -124,6 +124,11 @@ label.row{display:flex;font-size:14px;color:var(--tx)}
 .ph-box{width:84px;height:84px;border-radius:16px;border:1.5px dashed var(--line2);display:grid;place-items:center;color:var(--faint);font-size:28px;overflow:hidden;flex:none;background:var(--card2)}
 .ph-box img{width:100%;height:100%;object-fit:cover}
 .ph-big{width:100%;max-height:340px;object-fit:contain;border-radius:16px;background:#fff;margin:8px 0 12px;cursor:zoom-in}
+.logoprev{width:84px;height:84px;border-radius:14px;border:1px dashed var(--line2, var(--line));display:grid;place-items:center;background:#fff;overflow:hidden;flex:none}
+.logoprev img{max-width:100%;max-height:100%;object-fit:contain}.logoprev span{font-size:11px;color:#667}
+.svchip{display:inline-flex;align-items:center;border:1px solid var(--line2, var(--line));border-radius:999px;background:var(--card2);overflow:hidden}
+.svchip button{background:none;border:0;color:var(--tx);font:600 12.5px var(--font);padding:6px 11px;cursor:pointer}
+.svchip button.x{padding:6px 9px 6px 2px;color:var(--mut)}
 .ivachip{margin-top:6px;display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--font);padding:4px 10px;border-radius:999px;border:1px solid var(--line2, var(--line));background:var(--card2);color:var(--tx);cursor:pointer}
 .ivachip.off{color:var(--mut);text-decoration:none;opacity:.85}
 .ivachip.chg{border-color:var(--warn);color:var(--warn)}
@@ -1366,7 +1371,7 @@ VIEWS.vender = {
     <div class="search"><input id="posQ" placeholder="Buscar por nombre o código…" value="${esc(ui.posQ)}" oninput="ui.posQ=this.value;VIEWS.vender.fill()" onkeydown="if(event.key==='Enter'){const p=findByCode(this.value);if(p){this.value='';ui.posQ='';handleScan(p.code)}}"></div>
     <div class="seg" id="posCats"></div>
     <div class="list" id="posList"></div>
-    <div class="gap" style="margin-top:8px"><button class="btn sm sec" onclick="freeItem()">+ Artículo libre</button></div>
+    <div class="gap" style="margin-top:8px"><button class="btn sm sec" onclick="freeItem()">+ Servicio o artículo libre</button></div>
     <h3>Carrito</h3><div id="cart"></div>`,
   fill(){
     renderLastScan();
@@ -1415,13 +1420,36 @@ const IVA_LBL = {16:'IVA 16%', 8:'IVA 8%', 0:'Sin IVA'};
 function setLineIva(i, to){ const c = cart[i]; if (!c) return; if (c.ivaP == null) c.ivaP = ivaOf(c); const from = ivaOf(c); if (from === to) return; c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; renderCart(); }
 function cycleIva(i){ const c = cart[i]; if (!c) return; const cur = ivaOf(c), next = cur === 16 ? 8 : cur === 8 ? 0 : 16; setLineIva(i, next); toast(c.name + ': ' + IVA_LBL[next] + ' · ' + usd(c.price)); }
 function allIva(on){ cart.forEach((c, i) => { if (c.ivaP == null) c.ivaP = ivaOf(c); const to = on ? ivaOf(c, true) : 0; const from = ivaOf(c); if (from !== to){ c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; } }); renderCart(); toast(on ? 'IVA de nuevo como en el inventario' : 'IVA quitado de toda la venta'); }
+/* Servicios y artículos que no están en el inventario (reparaciones, envíos, mano de obra…).
+   El precio lo pones tú en cada venta. Los servicios guardados (cfg.services) y los usados hace poco salen como atajos. */
+function recentFree(){
+  const seen = new Map();
+  for (const sv of (cfg.services || [])) seen.set(sv.name.toLowerCase(), {name:sv.name, price:num(sv.price), saved:true});
+  const sales = Object.values(S.sales).filter(x => x.doc !== 'devolucion').sort((a, b) => b.ts - a.ts).slice(0, 300);
+  for (const x of sales) for (const i of (x.items || [])) if (!i.pid && i.name && !seen.has(i.name.toLowerCase()) && seen.size < 14) seen.set(i.name.toLowerCase(), {name:i.name, price:num(i.list ?? i.price), saved:false});
+  return [...seen.values()];
+}
 function freeItem(){
-  openSheet(`<h2>Artículo libre</h2><p class="note">Para vender algo que no está en el inventario (un servicio, una reparación…).</p>
-  <label>Descripción</label><input id="fiN" placeholder="Ej: Envío a domicilio" autofocus>
-  <label>Precio en $</label><input id="fiP" inputmode="decimal" placeholder="0,00">
-  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="
-    const n=$('#fiN').value.trim()||'Artículo',p=num($('#fiP').value);if(p<=0){toast('Pon un precio');return}
-    cart.push({pid:'',name:n,price:r2(p),cost:0,unit:'unidad',qty:1,iva:16,ivaP:16});closeSheet();renderCart()">Añadir</button></div>`);
+  const chips = recentFree();
+  openSheet(`<h2>Servicio o artículo libre</h2><p class="note" style="margin-top:0">Para cobrar algo que no está en el inventario: una reparación, un envío, mano de obra… Tú pones la descripción y el precio, y sale así en la factura.</p>
+  ${chips.length ? `<div class="sub" style="font-weight:600;margin:6px 0">Atajos</div><div class="gap" style="flex-wrap:wrap">${chips.map((c, k) => `<span class="svchip"><button type="button" onclick="pickFree(${k})">${c.saved ? '★ ' : ''}${esc(c.name)}${c.price ? ' · ' + usd(c.price) : ''}</button>${c.saved && isAdmin() ? `<button type="button" class="x" title="Quitar de servicios guardados" onclick="delService(${k})">×</button>` : ''}</span>`).join('')}</div>` : ''}
+  <label>Descripción</label><input id="fiN" placeholder="Ej: Reparación de control remoto" autofocus>
+  <div class="grid2"><div><label>Cantidad</label><input id="fiQ" inputmode="decimal" value="1"></div><div><label>Precio unitario en $</label><input id="fiP" inputmode="decimal" placeholder="0,00"></div></div>
+  <label>IVA</label><div class="seg" id="fiI" style="margin:0">${[[16, 'IVA 16%'], [8, 'IVA 8%'], [0, 'Sin IVA']].map(([v, l]) => `<button type="button" data-v="${v}" class="${v === 16 ? 'on' : ''}" onclick="document.querySelectorAll('#fiI button').forEach(b=>b.classList.toggle('on',b===this))">${l}</button>`).join('')}</div>
+  ${isAdmin() ? `<label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="fiS" class="chk"> Guardar como servicio frecuente (sale como atajo)</label>` : ''}
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="addFree()">Añadir a la venta</button></div>`);
+  ui._free = chips;
+}
+function pickFree(k){ const c = (ui._free || [])[k]; if (!c) return; $('#fiN').value = c.name; if (c.price) $('#fiP').value = nf2.format(c.price); $('#fiP').focus(); }
+async function delService(k){ const c = (ui._free || [])[k]; if (!c) return; await putCfg({services:(cfg.services || []).filter(x => x.name.toLowerCase() !== c.name.toLowerCase())}); freeItem(); }
+async function addFree(){
+  const n = $('#fiN').value.trim(), q = r3(num($('#fiQ').value) || 1), pr = num($('#fiP').value);
+  if (!n){ toast('Escribe la descripción'); $('#fiN').focus(); return; }
+  if (pr <= 0){ toast('Pon un precio'); $('#fiP').focus(); return; }
+  const on = document.querySelector('#fiI button.on'), iva = on ? num(on.dataset.v) : 16;
+  cart.push({pid:'', name:n, price:r2(pr), cost:0, unit:'unidad', qty:q, iva, ivaP:iva});
+  if ($('#fiS') && $('#fiS').checked){ const list = (cfg.services || []).filter(x => x.name.toLowerCase() !== n.toLowerCase()); list.unshift({name:n, price:r2(pr)}); await putCfg({services:list.slice(0, 30)}); }
+  closeSheet(); renderCart(); toast('+ ' + n);
 }
 function setQty(i, v){ v = r3(num(v)); if (v <= 0) cart.splice(i, 1); else { cart[i].qty = v; reprice(cart[i]); } renderCart(); }
 /* ---- Impuestos, descuentos y pagos ---- */
@@ -1629,8 +1657,9 @@ function showSale(id, justDone){
   ${rets.length ? `<p class="note" style="color:var(--warn)">Tiene ${rets.length} devolución(es): ${rets.map(([rid, r]) => `<a href="#" onclick="showSale('${rid}');return false">${usd(num(r.total))}</a>`).join(', ')}</p>` : ''}
   ${fiscal ? `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">${s.fiscalNo ? 'Factura Nº ' + esc(s.fiscalNo) : 'Emite la factura en tu máquina fiscal'}</div>
     <p class="note">${s.fiscalNo ? 'Puedes corregir el número si hace falta.' : 'Usa estos datos en la máquina fiscal y anota aquí el número de factura que imprime, para tenerlo registrado.'}</p>
-    <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>`
-  : s.doc === 'nota' ? `<button class="btn sec full" style="margin-top:10px" onclick="notaPDF('${id}')">Descargar nota de entrega (PDF)</button>` : ''}
+    <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>
+    <button class="btn sec full" style="margin-top:10px" onclick="facturaPDF('${id}')">Descargar factura tamaño carta (PDF)</button>`
+  : s.doc === 'nota' ? `<div class="grid2" style="margin-top:10px"><button class="btn sec" onclick="facturaPDF('${id}')">Nota tamaño carta (PDF)</button><button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm (PDF)</button></div>` : ''}
   <a class="btn wa full" style="margin-top:8px" href="${waLink(phone, receiptText(s))}" target="_blank" rel="noopener">Enviar recibo por WhatsApp</a>
   ${isAdmin() ? `<div class="card" style="margin-top:12px;padding:10px 12px"><div class="sub" style="font-weight:600;margin:0 0 8px">¿Hubo un error? (solo administrador)</div><div class="gap">
     ${!isRet ? `<button class="btn sm sec" onclick="correctSale('${id}')">Corregir venta</button>` : ''}
@@ -1676,20 +1705,22 @@ async function notaPDF(id){
   if (!window.jspdf){ toast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf;
   const items = s.items || [];
-  const h = 125 + items.reduce((a, i) => a + 4 + Math.ceil(String(i.name).length / 34) * 3.6, 0) + (s.igtf ? 6 : 0) + (s.customer ? 12 : 0);
+  const h = 125 + (showLogo() ? 22 : 0) + (cfg.email ? 4 : 0) + items.reduce((a, i) => a + 4 + Math.ceil(String(i.name).length / 34) * 3.6, 0) + (s.igtf ? 6 : 0) + (s.customer ? 12 : 0);
   const doc = new jsPDF({unit:'mm', format:[80, h]});
   const c = 40, L = 5, R = 75; let y = 9;
   const center = (t, size, bold) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.splitTextToSize(String(t), 70).forEach(l => { doc.text(l, c, y, {align:'center'}); y += size * 0.42; }); };
   const lr = (a, b, bold, size = 8.5) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.text(String(a), L, y); doc.text(String(b), R, y, {align:'right'}); y += size * 0.45; };
   const hr = () => { doc.setDrawColor(150); doc.setLineDashPattern([0.8, 0.8], 0); doc.line(L, y, R, y); y += 3.5; };
+  if (showLogo()){ const d = await imgSize(cfg.logo); if (d){ const k = Math.min(30 / d.w, 18 / d.h); try { doc.addImage(cfg.logo, cfg.logo.includes('image/jpeg') ? 'JPEG' : 'PNG', c - d.w * k / 2, y - 4, d.w * k, d.h * k); y += d.h * k + 1; } catch(e){} } }
   center(cfg.name || '', 12, true); y += 0.5;
   if (cfg.rif) center('RIF: ' + cfg.rif, 8);
   if (cfg.addr) center(cfg.addr, 7.5);
   if (cfg.phone) center('Tel: ' + cfg.phone, 7.5);
+  if (cfg.email) center(cfg.email, 7.5);
   y += 2; center('NOTA DE ENTREGA', 11, true); center('Documento no fiscal', 7.5); y += 1.5;
   lr('Nº ' + (s.noteNo || ''), new Date(s.ts).toLocaleString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}));
   const cl = s.customer || (s.clientId && S.clients[s.clientId]);
-  if (cl){ lr('Cliente: ' + String(cl.name).slice(0, 34), ''); if (cl.rif) lr('C.I./RIF: ' + cl.rif, ''); }
+  if (cl){ lr('Cliente: ' + String(cl.name).slice(0, 34), ''); if (cl.rif) lr('C.I./RIF: ' + cl.rif, ''); if (cl.addr) lr(String(cl.addr).slice(0, 40), '', false, 7.5); if (cl.phone) lr('Tel: ' + cl.phone, '', false, 7.5); }
   hr();
   items.forEach(i => {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -1706,6 +1737,105 @@ async function notaPDF(id){
   if (s.userName) lr('Atendido por', s.userName, false, 7.5);
   y += 4; center('¡Gracias por su compra!', 8.5);
   await saveFile('nota-' + (s.noteNo || id) + '.pdf', doc.output('blob'));
+}
+
+/* ---- Logo del negocio (se guarda reducido en la configuración) ---- */
+function uploadLogo(file){
+  if (!file) return;
+  if (!/^image\//.test(file.type)){ toast('Elige una imagen (PNG o JPG)'); return; }
+  const fr = new FileReader();
+  fr.onload = () => { const img = new Image(); img.onload = async () => {
+    const M = 360, k = Math.min(1, M / Math.max(img.width, img.height)), w = Math.round(img.width * k), h = Math.round(img.height * k);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, w, h);
+    let url = cv.toDataURL('image/png');
+    if (url.length > 160000){ const c2 = document.createElement('canvas'); c2.width = w; c2.height = h; const x2 = c2.getContext('2d'); x2.fillStyle = '#fff'; x2.fillRect(0, 0, w, h); x2.drawImage(img, 0, 0, w, h); url = c2.toDataURL('image/jpeg', 0.85); }
+    if (url.length > 300000){ toast('La imagen es demasiado grande'); return; }
+    if (await putCfg({logo:url})){ const pv = $('#logoPrev'); if (pv) pv.innerHTML = `<img src="${url}" alt="Logo">`; const d = $('#logoDel'); if (d) d.style.display = ''; logA('admin', 'Ajustes modificados', 'Logo del negocio'); toast('Logo guardado'); }
+  }; img.onerror = () => toast('No se pudo leer la imagen'); img.src = fr.result; };
+  fr.readAsDataURL(file);
+}
+async function removeLogo(){ if (await putCfg({logo:''})){ const pv = $('#logoPrev'); if (pv) pv.innerHTML = '<span>Sin logo</span>'; const d = $('#logoDel'); if (d) d.style.display = 'none'; toast('Logo quitado'); } }
+const showLogo = () => !!(cfg.logo && cfg.logoOn !== false);
+function imgSize(url){ return new Promise(r => { const i = new Image(); i.onload = () => r({w:i.width, h:i.height}); i.onerror = () => r(null); i.src = url; }); }
+const payCond = s => salePayments(s).some(p => p.m === 'fiado') ? 'Crédito' : 'Contado';
+
+/* ---- Factura / nota tamaño carta, con el formato de un talonario ---- */
+async function facturaPDF(id){
+  const s = S.sales[id]; if (!s) return;
+  if (!window.jspdf){ toast('No se pudo cargar el generador de PDF'); return; }
+  const { jsPDF } = window.jspdf, doc = new jsPDF({unit:'mm', format:'letter'});
+  const W = 215.9, L = 14, R = W - 14, fiscal = s.doc === 'fiscal', rate = num(s.rate);
+  const inBs = rate > 0, money = v => inBs ? 'Bs ' + nf2.format(r2(v * rate)) : usd(v);
+  let y = 14;
+  const txt = (t, x, yy, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.s || 9); Array.isArray(o.c) ? doc.setTextColor(...o.c) : doc.setTextColor(o.c || 0); doc.text(String(t), x, yy, o.a ? {align:o.a} : undefined); };
+  // Encabezado: logo + datos del negocio
+  let x0 = L;
+  if (showLogo()){ const d = await imgSize(cfg.logo); if (d){ const k = Math.min(28 / d.w, 24 / d.h); const w = d.w * k, h = d.h * k; try { doc.addImage(cfg.logo, cfg.logo.includes('image/jpeg') ? 'JPEG' : 'PNG', L, y - 2, w, h); x0 = L + w + 5; } catch(e){} } }
+  const nmW = 136 - x0; doc.setFont('helvetica', 'bold'); let nmS = 15; doc.setFontSize(nmS); let nm = doc.splitTextToSize(cfg.name || 'Mi Negocio', nmW);
+  if (nm.length > 1){ nmS = 12.5; doc.setFontSize(nmS); nm = doc.splitTextToSize(cfg.name || 'Mi Negocio', nmW); }
+  nm.slice(0, 2).forEach((l, k) => txt(l, x0, y + 3 + k * nmS * 0.42, {b:1, s:nmS}));
+  let yy = y + 8.5 + (Math.min(nm.length, 2) - 1) * nmS * 0.42; const lines = [cfg.rif && 'RIF: ' + cfg.rif, cfg.addr, [cfg.phone && 'Tlf: ' + cfg.phone, cfg.email && 'Email: ' + cfg.email].filter(Boolean).join('   ')].filter(Boolean);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+  lines.forEach(t => doc.splitTextToSize(String(t), 136 - x0).forEach(l => { doc.text(l, x0, yy); yy += 4; }));
+  // Recuadro del documento (derecha)
+  const bx = 140, bw = R - bx;
+  doc.setDrawColor(40); doc.setLineWidth(0.4); doc.roundedRect(bx, y - 4, bw, 30, 2, 2);
+  txt(fiscal ? 'FACTURA' : 'NOTA DE ENTREGA', bx + bw / 2, y + 3, {b:1, s:fiscal ? 14 : 12, a:'center', c:fiscal ? [200, 30, 40] : 0});
+  const no = fiscal ? (s.fiscalNo ? 'Nº ' + s.fiscalNo : 'Nº ________') : 'Nº ' + (s.noteNo || '');
+  txt(no, bx + bw / 2, y + 9.5, {b:1, s:11, a:'center'});
+  const dt = new Date(s.ts);
+  txt('Fecha de emisión', bx + bw / 2, y + 15.5, {s:7.5, a:'center', c:90});
+  txt(dt.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'}) + '  ' + dt.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'}), bx + bw / 2, y + 20.5, {b:1, s:10, a:'center'});
+  y = Math.max(yy, y + 28) + 4;
+  // Datos del cliente
+  const cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
+  doc.roundedRect(L, y, R - L, 23, 2, 2);
+  const row = (k, v, x, yy2, w) => { txt(k, x, yy2, {s:7.5, c:90}); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(0); doc.text(doc.splitTextToSize(String(v || ''), w)[0] || '', x, yy2 + 4.2); };
+  row('Nombre y apellido o razón social', cl.name, L + 3, y + 4.5, 120); row('RIF / C.I.', cl.rif, 142, y + 4.5, 55);
+  row('Domicilio fiscal', cl.addr, L + 3, y + 13.5, 120); row('Teléfono', cl.phone, 142, y + 13.5, 30); row('Condiciones de pago', payCond(s), 175, y + 13.5, 26);
+  y += 28;
+  // Tabla de productos y servicios
+  const cQ = L, cD = L + 18, cP = 150, cT = R; const head = () => { doc.setFillColor(235, 240, 248); doc.rect(L, y, R - L, 7, 'F'); doc.rect(L, y, R - L, 7); txt('CANT.', cQ + 9, y + 4.8, {b:1, s:8, a:'center'}); txt('DESCRIPCIÓN', cD + 2, y + 4.8, {b:1, s:8}); txt('PRECIO UNITARIO', cP + 3 + 15, y + 4.8, {b:1, s:8, a:'center'}); txt('TOTAL', cT - 2, y + 4.8, {b:1, s:8, a:'right'}); y += 7; };
+  head();
+  const items = s.items || [];
+  for (const i of items){
+    const desc = doc.splitTextToSize(String(i.name) + (fiscal && num(i.iva ?? 16) === 0 ? ' (E)' : num(i.iva ?? 16) === 8 ? ' (8%)' : ''), cP - cD - 4);
+    const h = Math.max(6.5, desc.length * 4 + 2.5);
+    if (y + h > 225){ doc.addPage(); y = 16; head(); }
+    doc.setDrawColor(200); doc.line(L, y + h, R, y + h);
+    txt(nfq.format(num(i.qty)), cQ + 9, y + 4.5, {s:9.5, a:'center'});
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(0); desc.forEach((l, k) => doc.text(l, cD + 2, y + 4.5 + k * 4));
+    txt(money(num(i.price)), cP + 18, y + 4.5, {s:9.5, a:'center'});
+    txt(money(r2(num(i.price) * num(i.qty))), cT - 2, y + 4.5, {s:9.5, a:'right'});
+    y += h;
+  }
+  y += 4; if (y > 205){ doc.addPage(); y = 20; }
+  // Totales (derecha) y forma de pago (izquierda)
+  const t = s.tax || {}, tl = [];
+  tl.push(['SUB-TOTAL', num(s.sub ?? s.total)]);
+  if (fiscal || num(t.i16) || num(t.i8)){
+    if (num(t.b16)) tl.push(['Base imponible 16%', num(t.b16)], ['I.V.A. 16%', num(t.i16)]);
+    if (num(t.b8)) tl.push(['Base imponible 8%', num(t.b8)], ['I.V.A. 8%', num(t.i8)]);
+    if (num(t.ex)) tl.push(['Exento', num(t.ex)]);
+  }
+  if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
+  const tx = 128; let ty = y;
+  tl.forEach(([k, v]) => { txt(k, tx, ty + 4, {s:9}); txt(money(v), R - 2, ty + 4, {s:9.5, a:'right'}); ty += 6; });
+  doc.setFillColor(235, 240, 248); doc.rect(tx - 3, ty, R - tx + 3, 9, 'F'); doc.rect(tx - 3, ty, R - tx + 3, 9);
+  txt('TOTAL A PAGAR' + (inBs ? ' Bs' : ''), tx, ty + 6, {b:1, s:10.5}); txt(inBs ? nf2.format(r2(num(s.total) * rate)) : usd(num(s.total)), R - 2, ty + 6, {b:1, s:12, a:'right'});
+  ty += 13;
+  if (inBs) txt('Equivale a ' + usd(num(s.total)) + ' · tasa BCV ' + nf2.format(rate) + ' Bs/$', R - 2, ty, {s:8, a:'right', c:90});
+  if (num(s.disc)) txt('Incluye descuento de ' + usd(num(s.disc)), R - 2, ty + 4.5, {s:8, a:'right', c:90});
+  let py = y; txt('FORMA DE PAGO', L, py + 4, {b:1, s:8.5}); py += 9;
+  salePayments(s).forEach(p => { txt('• ' + (METHODS[p.m] || p.m) + ': ' + fmtCur(p.raw, p.cur), L + 1, py, {s:9}); py += 5; });
+  if (s.change){ txt('Vuelto: ' + fmtCur(s.change.raw, s.change.cur), L + 1, py, {s:9}); py += 5; }
+  if (s.userName){ txt('Atendido por: ' + s.userName, L + 1, py + 1, {s:8, c:90}); py += 6; }
+  py = Math.max(py, ty) + 16;
+  doc.setDrawColor(120); doc.line(L, py, L + 60, py); txt('Recibí conforme', L + 30, py + 4.5, {s:8, a:'center', c:90});
+  // Pie
+  txt(fiscal ? 'Copia de control interno. La factura legal es la que emite tu máquina fiscal o la forma libre autorizada por el SENIAT.' : 'Documento no fiscal.', W / 2, 266, {s:7, a:'center', c:120});
+  txt('Generado con StockSoft · stocksoft.app', W / 2, 270, {s:7, a:'center', c:150});
+  await saveFile((fiscal ? 'factura-' + (s.fiscalNo || id) : 'nota-' + (s.noteNo || id)) + '.pdf', doc.output('blob'));
 }
 /* ---- Correcciones (solo administrador) y registro de cambios ---- */
 const LOG_TYPES = {venta:'Ventas', cotizacion:'Cotizaciones', caja:'Caja', inventario:'Inventario', clientes:'Clientes y cobros', compras:'Proveedores y gastos', correccion:'Correcciones', admin:'Usuarios y ajustes'};
@@ -2182,7 +2312,13 @@ VIEWS.mas = {
       $('#mx').innerHTML = `<div class="card">
         <label style="margin-top:0">Nombre del negocio</label><input id="aN" value="${esc(cfg.name)}">
         <div class="grid2"><div><label>RIF</label><input id="aR" value="${esc(cfg.rif)}" placeholder="J-12345678-9"></div><div><label>Teléfono</label><input id="aT" value="${esc(cfg.phone)}" inputmode="tel"></div></div>
-        <label>Dirección</label><input id="aD" value="${esc(cfg.addr)}" placeholder="Sale en las notas de entrega">
+        <label>Dirección del local</label><input id="aD" value="${esc(cfg.addr)}" placeholder="Ej: Av. Principal, C.C. Plaza, Local 12, Caracas">
+        <label>Correo de contacto</label><input id="aE" type="email" value="${esc(cfg.email || '')}" placeholder="ventas@minegocio.com" autocapitalize="none">
+        <label>Logo del negocio</label>
+        <div class="row" style="gap:14px;align-items:center"><div id="logoPrev" class="logoprev">${cfg.logo ? `<img src="${cfg.logo}" alt="Logo">` : '<span>Sin logo</span>'}</div>
+          <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${cfg.logo ? 'Cambiar logo' : 'Subir logo'}<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this.files[0])"></label><button type="button" class="btn sm sec" id="logoDel" style="${cfg.logo ? '' : 'display:none'}" onclick="removeLogo()">Quitar</button></div></div>
+        <label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="aLg" class="chk" ${cfg.logoOn !== false ? 'checked' : ''}> Mostrar el logo en facturas y notas de entrega</label>
+        <p class="note">Nombre, RIF, dirección, teléfono, correo y logo salen arriba en todas tus facturas y notas. Se guardan aquí una sola vez.</p>
         <label>Documento por defecto al cobrar</label><select id="aDoc"><option value="fiscal" ${cfg.docDefault !== 'nota' ? 'selected' : ''}>Factura fiscal</option><option value="nota" ${cfg.docDefault === 'nota' ? 'selected' : ''}>Nota de entrega</option></select>
         <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="aI" class="chk" ${cfg.igtf ? 'checked' : ''}> Cobrar IGTF 3% en pagos en divisas (efectivo $, efectivo €, Zelle)</label>
         <p class="note">Actívalo si tu negocio está obligado a cobrar el IGTF (consúltalo con tu contador). Se suma al total y aparece desglosado.</p>
@@ -2217,7 +2353,7 @@ async function saveSmart(){
   if (await putCfg({smart})){ logA('admin', 'Ajustes modificados', 'Inventario inteligente'); toast('Inventario inteligente guardado'); }
 }
 async function saveSettings(){
-  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
+  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
 }
 function fillReports(){
   const ranges = {hoy:'Hoy', '7':'7 días', '30':'30 días', mes:'Este mes'};
