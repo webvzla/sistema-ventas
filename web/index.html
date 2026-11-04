@@ -120,6 +120,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--acc2);box-shadow:0 0 
 select option{background:#0c1730;color:var(--tx)}
 label{display:block;font:600 12.5px var(--font);color:var(--mut);margin:13px 0 6px}
 label.row{display:flex;font-size:14px;color:var(--tx)}
+.pthumb{width:46px;height:46px;border-radius:11px;object-fit:cover;flex:none;background:#fff;border:1px solid var(--line2)}
+.ph-box{width:84px;height:84px;border-radius:16px;border:1.5px dashed var(--line2);display:grid;place-items:center;color:var(--faint);font-size:28px;overflow:hidden;flex:none;background:var(--card2)}
+.ph-box img{width:100%;height:100%;object-fit:cover}
+.ph-big{width:100%;max-height:340px;object-fit:contain;border-radius:16px;background:#fff;margin:8px 0 12px;cursor:zoom-in}
 .pill{display:inline-flex;align-items:center;font:700 11px var(--font);padding:3px 9px;border-radius:7px;background:var(--card2);color:var(--mut);white-space:nowrap}
 .pill.low{background:rgba(255,179,71,.14);color:var(--warn)}
 .pill.out{background:rgba(255,93,108,.15);color:var(--bad)}
@@ -157,6 +161,10 @@ label.row{display:flex;font-size:14px;color:var(--tx)}
 #sheet h2{font-size:21px}
 .sheet-actions{display:flex;gap:8px;margin-top:20px}
 .sheet-actions .btn{flex:1}
+#smPop{position:fixed;right:14px;bottom:96px;z-index:60;width:min(340px,calc(100vw - 28px));background:#0f1e3d;color:var(--tx);border:1px solid var(--line2);border-left:4px solid var(--warn);border-radius:14px;padding:12px 14px 10px;box-shadow:0 12px 30px rgba(0,0,0,.4);transform:translateY(20px);opacity:0;pointer-events:none;transition:.25s}
+#smPop.on{transform:none;opacity:1;pointer-events:auto}
+#smPop .x{position:absolute;top:6px;right:8px;background:none;border:0;color:var(--mut);font-size:20px;cursor:pointer;line-height:1}
+#smPop .bar{height:3px;background:var(--line2);border-radius:3px;margin-top:10px;overflow:hidden}#smPop .bar i{display:block;height:100%;background:var(--warn);width:100%}
 #toast{position:fixed;left:50%;bottom:102px;transform:translateX(-50%) translateY(16px);background:#0f1e3d;color:var(--tx);border:1px solid var(--line2);border-left:4px solid var(--org);padding:11px 16px;border-radius:12px;font-weight:600;font-size:14px;opacity:0;transition:.25s;z-index:30;pointer-events:none;max-width:90vw;text-align:center;box-shadow:0 18px 40px -16px #000}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .status{font-size:12px;color:var(--faint);text-align:center;margin-top:24px}
@@ -205,10 +213,13 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
   <label>Tu nombre</label><input id="suN" placeholder="Ej: Carlos">
   <div class="grid2"><div><label id="suUl">Usuario</label><input id="suU" autocapitalize="none" autocorrect="off" placeholder="carlos"></div><div><label>Contraseña</label><input id="suP" type="password" autocomplete="new-password"></div></div>
-  <label class="row" style="gap:8px;margin-top:16px;color:var(--tx);font-size:14px"><input type="checkbox" id="suE" class="chk" checked onchange="$('#suEw').style.display=this.checked?'block':'none'"> Crear también un usuario de empleado</label>
-  <div id="suEw"><p class="note">El empleado puede vender, consultar precios y tasas y cobrar a clientes. No puede modificar el inventario ni los precios, ni ver costos, ganancias, proveedores o reportes.</p>
+  <div id="suU2w" style="display:none"><label>Repite tu correo</label><input id="suU2" autocapitalize="none" autocorrect="off" type="email" placeholder="Escríbelo otra vez" autocomplete="off" onpaste="return false">
+  <p class="note" style="margin-top:6px">Lo usarás para entrar y para <b>recuperar tu contraseña</b> si la olvidas. Te enviaremos un correo para confirmarlo.</p></div>
+  <label class="row" style="gap:8px;margin-top:16px;color:var(--tx);font-size:14px"><input type="checkbox" id="suE" class="chk" onchange="$('#suEw').style.display=this.checked?'block':'none'"> Crear también un usuario de empleado (opcional, puedes hacerlo luego)</label>
+  <div id="suEw" style="display:none"><p class="note">El empleado puede vender, consultar precios y tasas y cobrar a clientes. No puede modificar el inventario ni los precios, ni ver costos, ganancias, proveedores o reportes.</p>
   <label>Nombre del empleado</label><input id="seN" placeholder="Ej: María">
-  <div class="grid2"><div><label id="seUl">Usuario</label><input id="seU" autocapitalize="none" autocorrect="off" placeholder="maria"></div><div><label>Contraseña</label><input id="seP" type="password" autocomplete="new-password"></div></div></div>
+  <div class="grid2"><div id="seUw"><label id="seUl">Usuario</label><input id="seU" autocapitalize="none" autocorrect="off" placeholder="maria"></div><div><label id="sePl">Contraseña</label><input id="seP" type="password" autocomplete="new-password"></div></div>
+  <p class="note" id="sePin" style="display:none">Sin correo: entrará con un usuario que se crea solo (por ejemplo <b>maria-4821</b>) y este PIN.</p></div>
   <label class="row" id="suTw" style="gap:8px;margin-top:16px;align-items:flex-start;font-size:13.5px"><input type="checkbox" id="suT" class="chk" style="margin-top:2px"> <span>Acepto los <a href="legal/terminos.html" target="_blank" rel="noopener">Términos de uso</a> y la <a href="legal/privacidad.html" target="_blank" rel="noopener">Política de privacidad</a></span></label>
   <button class="btn full" id="suBtn" style="margin-top:18px">Crear y entrar</button>
   <div id="suMsg" class="note" style="text-align:center;color:var(--warn)"></div>
@@ -223,7 +234,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <div style="text-align:center;margin-top:10px"><a href="#" onclick="ui.renew=null;FB.auth.signOut();return false">Cerrar sesión</a></div>
 </form></div>
 <div id="ov" onclick="if(event.target===this)closeSheet()"><div id="sheet"></div></div>
-<div id="toast"></div>
+<div id="toast"></div><div id="smPop" onmouseenter="smHold()"></div>
 
 <script>
 /* ============ Estado ============ */
@@ -426,7 +437,8 @@ function fbInit(){
     const fs = firebase.firestore();
     fs.settings({ignoreUndefinedProperties:true});
     fs.enablePersistence({synchronizeTabs:true}).catch(() => {});
-    return {app, auth:firebase.auth(), fs};
+    const auth = firebase.auth(); auth.languageCode = 'es'; // correos de verificación y de recuperar contraseña en español
+    return {app, auth, fs};
   } catch(e){ console.error('Firebase', e); return null; }
 }
 function fbWrap(fs, b){ const map = c => c === 'users' ? 'members' : c; return {collection:c => fs.collection('biz/' + b + '/' + map(c)), doc:p => fs.doc('biz/' + b + '/' + p)}; }
@@ -493,6 +505,25 @@ async function onFbUser(u){
   go(isAdmin() ? 'panel' : 'vender');
   setTimeout(afterLogin, 1500);
 }
+const EMP_DOMAIN = 'empleados.stocksoft.app';
+const isPinEmail = e => String(e || '').endsWith('@' + EMP_DOMAIN);
+const pinUser = e => String(e || '').split('@')[0];
+const loginEmail = u => u.includes('@') ? u : u + '@' + EMP_DOMAIN;
+const slugName = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 12) || 'empleado';
+async function createPinMember(name, pin, role){
+  for (let i = 0; i < 4; i++){
+    const user = slugName(name) + '-' + (1000 + Math.floor(Math.random() * 9000));
+    try { await fbCreateMember(loginEmail(user), pin, name, role); return {user, pin, name}; }
+    catch(e){ if (!/email-already-in-use/.test((e && e.code) || '') || i === 3) throw e; }
+  }
+}
+function empCredSheet(x){
+  ui.empTxt = 'Tu acceso a StockSoft (' + (cfg.name || 'el negocio') + '):\nUsuario: ' + x.user + '\nPIN: ' + x.pin + '\nEntra en https://stocksoft.web.app/app/ o en la app de PC y escribe el usuario en "Correo o usuario".';
+  openSheet(`<h2>Empleado creado</h2><p class="note" style="margin-top:0">Dale estos datos a <b>${esc(x.name)}</b>. Entra escribiendo el usuario en "Correo o usuario" y su PIN.</p>
+  <div class="card" style="margin-top:10px"><div class="mv"><span>Usuario</span><b>${esc(x.user)}</b></div><div class="mv"><span>PIN</span><b>${esc(x.pin)}</b></div></div>
+  <div class="gap" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="navigator.clipboard.writeText(ui.empTxt).then(()=>toast('Copiado'),()=>toast('Cópialo a mano'))">Copiar</button><a class="btn wa" style="flex:1" href="${waLink('', ui.empTxt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>
+  <div class="sheet-actions"><button class="btn" onclick="closeSheet()">Listo</button></div>`);
+}
 async function fbCreateMember(email, pass, name, role){
   const sec = firebase.initializeApp(window.FIREBASE_CONFIG, 'sec' + Date.now());
   try {
@@ -524,13 +555,17 @@ async function fetchRates(){
 }
 let ratesBusy = false;
 async function autoRates(manual){
-  if (!me || ratesBusy || backend === 'db' || !loaded || (backend === 'cloud' && !cfgLoaded)) return;
+  if (!me || ratesBusy || backend === 'db') return;
+  // Al entrar (sobre todo en una instalación nueva) los datos aún pueden estar cargando: se reintenta en 2 s.
+  if (!loaded || (backend === 'cloud' && !cfgLoaded)){ clearTimeout(autoRates.retry); autoRates.retry = setTimeout(() => autoRates(manual), 2000); return; }
   if (!navigator.onLine){ if (manual) toast('Sin conexión a internet'); return; }
-  ratesBusy = true;
+  ratesBusy = true; autoRates.last = Date.now();
   try {
     const r = await fetchRates();
     if (!r){ if (manual) toast('No se pudo consultar la tasa del BCV'); return; }
-    if (cfg.bcv && Math.abs(r.usd - cfg.bcv) / cfg.bcv > 0.15){ toast('La tasa recibida es muy distinta a la actual; no se aplicó'); return; }
+    // Un salto grande solo se frena si la tasa guardada es de hace menos de 2 días (posible error de la fuente).
+    // Si la guardada es vieja o se pidió a mano, se aplica: antes se bloqueaba para siempre y la tasa se quedaba congelada.
+    if (!manual && cfg.bcv && Math.abs(r.usd - cfg.bcv) / cfg.bcv > 0.15 && Date.now() - num(cfg.ratesAt) < 2 * 864e5){ console.warn('Salto de tasa sin aplicar', cfg.bcv, '→', r.usd); return; }
     const now = Date.now();
     const latestISO = Object.keys(S.rates).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().pop();
     if (r.dateISO && latestISO && r.dateISO < latestISO){ if (now - num(cfg.checkedAt) > 3600e3) await putCfg({checkedAt:now}); if (manual) toast('La tasa ya está al día'); return; }
@@ -566,10 +601,12 @@ async function fillBackupInfo(){
 }
 let afterLoginDone = false;
 function afterLogin(){
-  autoRates();
+  autoRates(); setTimeout(smartDaily, 8000);
   if (window.desktop) setTimeout(() => autoBackup(), 4000);
   if (afterLoginDone) return; afterLoginDone = true;
-  setInterval(() => autoRates(), 3 * 3600e3);
+  // La tasa puede cambiar varias veces al día: se revisa cada 15 minutos y al volver a la app (si pasaron más de 5).
+  setInterval(() => autoRates(), 15 * 60e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - (autoRates.last || 0) > 5 * 60e3) autoRates(); });
   setInterval(() => autoBackup(), 3600e3);
   window.addEventListener('online', () => { toast('Conexión recuperada'); autoRates(); });
   window.addEventListener('offline', () => toast('Sin internet: puedes seguir vendiendo, se sincroniza al volver'));
@@ -651,13 +688,14 @@ function authScreen(){
   document.querySelector('#login form.lg-card:not(#setupForm):not(#renewForm)').style.display = setup || renew ? 'none' : 'block';
   if (renew){ $('#rnTitle').textContent = ui.renew.title; $('#rnNote').textContent = ui.renew.note; }
   const c = CLOUD();
-  $('#lgUl').textContent = c ? 'Correo' : 'Usuario'; $('#lgU').type = c ? 'email' : 'text';
+  $('#lgUl').textContent = c ? 'Correo o usuario' : 'Usuario'; $('#lgU').type = 'text'; $('#lgU').inputMode = c ? 'email' : 'text';
+  $('#seUw').style.display = c ? 'none' : ''; $('#sePl').textContent = c ? 'PIN del empleado (6 números)' : 'Contraseña'; $('#seP').inputMode = c ? 'numeric' : 'text'; $('#sePin').style.display = c ? 'block' : 'none';
   $('#suUl').textContent = c ? 'Correo' : 'Usuario'; $('#seUl').textContent = c ? 'Correo' : 'Usuario';
   $('#suU').placeholder = c ? 'tu@correo.com' : 'carlos'; $('#seU').placeholder = c ? 'empleado@correo.com' : 'maria';
   $('#suU').type = $('#seU').type = c ? 'email' : 'text';
   $('#lgNew').style.display = c ? 'block' : 'none'; $('#suBack').style.display = c ? 'block' : 'none';
   $('#lgReset').style.display = c ? 'inline' : 'none';
-  $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none';
+  $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none'; $('#suU2w').style.display = c ? 'block' : 'none';
   if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
@@ -672,11 +710,12 @@ async function doSetup(ev){
   if (CLOUD() && !$('#suT').checked) return msg('Para crear la cuenta acepta los Términos de uso y la Política de privacidad');
   if (!biz) return msg('Pon el nombre del negocio');
   if (!an || !okU(au)) return msg(CLOUD() ? 'Pon tu nombre y un correo válido' : 'Pon tu nombre y un usuario (solo letras, números, punto o guion)');
+  if (CLOUD() && au !== $('#suU2').value.trim().toLowerCase()) return msg('Los dos correos no coinciden. Revísalo bien: lo necesitarás para recuperar tu contraseña.');
   if (ap.length < minP) return msg('Tu contraseña debe tener al menos ' + minP + ' caracteres');
   if (wantE){
-    if (!en || !okU(eu)) return msg(CLOUD() ? 'Pon el nombre y el correo del empleado' : 'Pon el nombre y el usuario del empleado');
-    if (eu === au) return msg('El empleado debe tener un ' + (CLOUD() ? 'correo' : 'usuario') + ' distinto al tuyo');
-    if (ep.length < minP) return msg('La contraseña del empleado debe tener al menos ' + minP + ' caracteres');
+    if (!en || (!CLOUD() && !okU(eu))) return msg(CLOUD() ? 'Pon el nombre del empleado' : 'Pon el nombre y el usuario del empleado');
+    if (!CLOUD() && eu === au) return msg('El empleado debe tener un ' + (CLOUD() ? 'correo' : 'usuario') + ' distinto al tuyo');
+    if (CLOUD() ? !/^\d{6,12}$/.test(ep) : ep.length < minP) return msg(CLOUD() ? 'El PIN del empleado debe tener de 6 a 12 números' : 'La contraseña del empleado debe tener al menos ' + minP + ' caracteres');
   }
   $('#suBtn').disabled = true; msg('');
   if (CLOUD()){
@@ -705,10 +744,13 @@ async function doSetup(ev){
       b.set(FB.fs.doc('users/' + id), {biz:id, role:'admin', name:an, email:au});
       try { await b.commit(); } catch(e){ try { await cred.user.delete(); } catch(e2){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg('No se pudo activar con ese código.' + contactTxt()); }
       await FB.fs.doc('biz/' + id + '/config/main').set({...DEF_CFG, name:biz, termsV:1, termsAt:Date.now()});
-      if (wantE){ msg('Creando el usuario del empleado…'); try { await fbCreateMember(eu, ep, en, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
+      if (wantE){ msg('Creando el usuario del empleado…'); try { ui.newEmp = await createPinMember(en, ep, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
       toast(trial ? '¡Listo! Tienes 7 días de prueba gratis, ' + an : '¡Listo! Bienvenido, ' + an);
+      // Correo para confirmar la dirección (así sabemos que podrá recuperar su contraseña).
+      try { await FB.auth.currentUser.sendEmailVerification(); setTimeout(() => toast('Te enviamos un correo a ' + au + ' para confirmarlo (revisa también spam)'), 3200); } catch(e){ console.warn('verificación', e); }
+      if (ui.newEmp){ const x = ui.newEmp; ui.newEmp = null; setTimeout(() => empCredSheet(x), 900); }
     } catch(e){ pendingSetup = false; msg(fbMsg(e)); }
     $('#suBtn').disabled = false;
     return;
@@ -750,6 +792,186 @@ function renewSheet(){
   ${window.APP_WA ? `<a class="btn wa full" style="margin-top:8px" target="_blank" rel="noopener" href="https://wa.me/${window.APP_WA}?text=${encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.')}">Pedir un código por WhatsApp</a>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="rsBtn" onclick="(async()=>{$('#rsBtn').disabled=true;const e=await activateCode($('#rsL').value);$('#rsBtn').disabled=false;if(e){$('#rsMsg').textContent=e;return;}closeSheet();const d=await FB.fs.doc('biz/'+bizId).get();bizInfo=d.data();render();toast('¡Licencia activada!');})()">Activar</button></div>`);
 }
+/* ---- Inventario inteligente (cada opción se activa o desactiva en Ajustes) ---- */
+const SMART_DEF = {alert:true, suggest:true, pay:true, fiado:true, notif:false, days:30, cover:15, soon:7, fiadoDays:15, phone:'', email:''};
+const SM = () => ({...SMART_DEF, ...(cfg.smart || {})});
+let _vel = {k:'', m:{}, q:{}};
+function velMap(){
+  const d = Math.max(1, num(SM().days)), k = Object.keys(S.sales).length + '|' + d + '|' + Math.floor(Date.now() / 36e5);
+  if (_vel.k === k) return _vel;
+  const from = Date.now() - d * 864e5, q = {};
+  for (const s of Object.values(S.sales)) if (s.ts >= from) for (const i of (s.items || [])) if (i.pid) q[i.pid] = (q[i.pid] || 0) + num(i.qty);
+  const m = {}; for (const id in q) m[id] = Math.max(0, q[id]) / d;
+  return _vel = {k, m, q};
+}
+const perDay = p => velMap().m[p.id] || 0;
+const daysLeft = p => { const v = perDay(p); return num(p.stock) <= 0 ? 0 : v > 0 ? num(p.stock) / v : Infinity; };
+// Cuánto comprar: lo que se vende en los días a cubrir + el mínimo, menos lo que queda.
+function suggestQty(p){
+  const v = perDay(p), s = num(p.stock);
+  const q = v > 0 ? v * num(SM().cover) + minStock(p) - s : (stockState(p) !== 'ok' ? Math.max(minStock(p) * 2, 1) - s : 0);
+  if (!(q > 0)) return 0;
+  return ['unidad', 'paquete', 'caja'].includes(p.unit || 'unidad') ? Math.ceil(q) : Math.ceil(q * 10) / 10;
+}
+const isSoon = p => stockState(p) === 'ok' && SM().suggest && daysLeft(p) <= num(SM().soon);
+function restockList(){
+  const rank = p => ({out:0, low:1}[stockState(p)] ?? 2);
+  return products().filter(p => p.track !== false && (stockState(p) !== 'ok' || isSoon(p))).sort((a, b) => rank(a) - rank(b) || daysLeft(a) - daysLeft(b));
+}
+function restockSub(p){
+  let s = 'Quedan ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit) + ' · mínimo ' + nfq.format(minStock(p));
+  if (!SM().suggest) return s;
+  const v = perDay(p), q = suggestQty(p), dl = daysLeft(p);
+  if (v > 0) s += ' · vendes ~' + nfq.format(Math.round(v * 10) / 10) + '/día' + (isFinite(dl) && dl > 0 ? ' · se agota en ~' + Math.max(1, Math.round(dl)) + ' días' : '');
+  if (q) s += ' · <b>comprar ' + nfq.format(q) + ' ' + unitLbl(p.unit) + '</b>';
+  return s;
+}
+const restockPill = p => stockState(p) === 'out' ? '<span class="pill out">Agotado</span>' : stockState(p) === 'low' ? '<span class="pill low">Bajo</span>' : '<span class="pill low">Pronto</span>';
+function topSold(n = 5){ const q = velMap().q; return Object.entries(q).filter(([id, v]) => S.products[id] && v > 0).sort((a, b) => b[1] - a[1]).slice(0, n).map(([id, v]) => ({p:{id, ...S.products[id]}, q:v})); }
+function restockSheet(){
+  const sm = SM(), xs = restockList(), g = {};
+  xs.forEach(p => { const k = p.supplierId && S.suppliers[p.supplierId] ? p.supplierId : ''; (g[k] = g[k] || []).push(p); });
+  const top = topSold();
+  openSheet(`<h2>Pedido sugerido</h2><p class="note" style="margin-top:0">${sm.suggest ? 'Calculado con lo que vendiste en los últimos ' + sm.days + ' días, para tener mercancía para ' + sm.cover + ' días.' : 'Productos con stock bajo o agotados.'}</p>
+  ${xs.length ? '' : '<div class="empty">Todo está bien surtido.</div>'}
+  ${Object.entries(g).map(([sid, ps]) => `<h3>${sid ? esc(S.suppliers[sid].name) : 'Sin proveedor asignado'}</h3><div class="card">${ps.map(p => `<div class="mv"><span>${esc(p.name)} ${restockPill(p)}</span><b>${suggestQty(p) ? nfq.format(suggestQty(p)) + ' ' + unitLbl(p.unit) : '—'}</b></div>`).join('')}</div>
+  ${sid ? `<div class="gap" style="margin-top:8px"><a class="btn wa" style="flex:1" href="${waLink(S.suppliers[sid].phone, orderMsg(sid))}" target="_blank" rel="noopener">Pedir por WhatsApp</a><button class="btn sec" style="flex:1" onclick="purchaseForm('${sid}')">Registrar lo que llegó</button></div>` : '<p class="note">Asígnales un proveedor en el producto para pedirlos con un toque.</p>'}`).join('')}
+  ${top.length ? `<h3>Lo más vendido (${sm.days} días)</h3><div class="card">${top.map((x, i) => `<div class="mv"><span>${i + 1}. ${esc(x.p.name)}</span><span class="sub">${nfq.format(x.q)} ${unitLbl(x.p.unit)} vendidos · quedan ${nfq.format(num(x.p.stock))}</span></div>`).join('')}</div>` : ''}
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+// Aviso emergente pequeño: se quita solo a los 8 segundos o con la X (si pasas el ratón por encima, se queda).
+function smPop(html){
+  const e = $('#smPop'); clearTimeout(e._h);
+  e.innerHTML = `<button class="x" onclick="smClose()" aria-label="Cerrar">×</button>${html}<div class="bar"><i id="smBar"></i></div>`;
+  e.classList.add('on'); const b = $('#smBar'); b.style.transition = 'none'; b.style.width = '100%'; requestAnimationFrame(() => requestAnimationFrame(() => { b.style.transition = 'width 8s linear'; b.style.width = '0'; }));
+  e._h = setTimeout(smClose, 8000);
+}
+function smHold(){ const e = $('#smPop'); clearTimeout(e._h); const b = $('#smBar'); if (b){ b.style.transition = 'none'; b.style.width = '100%'; } }
+function smClose(){ $('#smPop').classList.remove('on'); }
+function stockAlert(ps){
+  const sm = SM(); if (!sm.alert) return;
+  const day = dayKey(Date.now()); let seen = {}; try { seen = JSON.parse(localStorage.getItem('ssAlert') || '{}'); } catch(e){}
+  if (seen.day !== day) seen = {day, ids:[]};
+  ps = ps.filter(p => !seen.ids.includes(p.id)); if (!ps.length) return;
+  seen.ids.push(...ps.map(p => p.id)); try { localStorage.setItem('ssAlert', JSON.stringify(seen)); } catch(e){}
+  const txt = 'Aviso de StockSoft (' + (cfg.name || '') + '): ' + ps.map(p => p.name + ' quedan ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit) + (sm.suggest && suggestQty(p) ? ' (comprar ' + nfq.format(suggestQty(p)) + ')' : '')).join('; ') + '.';
+  const ph = sm.phone || cfg.phone, em = sm.email;
+  smPop(`<div style="font-weight:700;margin-right:18px">⚠ Queda poco</div>
+  <div class="sub" style="margin-top:4px">${ps.map(p => esc(p.name) + ': <b>' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit) + '</b>' + (sm.suggest && suggestQty(p) ? ' · comprar ' + nfq.format(suggestQty(p)) : '')).join('<br>')}</div>
+  <div class="gap" style="margin-top:8px">${ph ? `<a class="btn sm wa" href="${waLink(ph, txt)}" target="_blank" rel="noopener" onclick="smClose()">WhatsApp</a>` : ''}<a class="btn sm sec" href="mailto:${encodeURIComponent(em || '')}?subject=${encodeURIComponent('Stock bajo en ' + (cfg.name || 'el negocio'))}&body=${encodeURIComponent(txt)}" onclick="smClose()">Correo</a>${isAdmin() ? '<button class="btn sm sec" onclick="smClose();restockSheet()">Pedido</button>' : ''}</div>`);
+}
+// Recordatorios de pago (solo administrador)
+const dayStart = ts => { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const dueIn = ts => Math.round((dayStart(ts) - dayStart(Date.now())) / 864e5);
+const whenTxt = d => d < 0 ? 'venció hace ' + (-d) + ' día' + (d === -1 ? '' : 's') : d === 0 ? 'vence hoy' : d === 1 ? 'vence mañana' : 'vence en ' + d + ' días';
+function supDues(){
+  const out = [], by = {};
+  for (const m of Object.values(S.pmovs)) (by[m.supplierId] = by[m.supplierId] || []).push(m);
+  for (const [sid, ms] of Object.entries(by)){
+    let paid = ms.filter(m => m.type === 'pago').reduce((a, m) => a + num(m.amount), 0);
+    for (const m of ms.filter(m => m.type === 'compra').sort((a, b) => a.ts - b.ts)){
+      const rest = r2(num(m.amount) - paid); paid = Math.max(0, paid - num(m.amount));
+      if (rest > 0.009 && m.due) out.push({sid, amount:rest, due:m.due, name:(S.suppliers[sid] || {}).name || 'Proveedor'});
+    }
+  }
+  return out.sort((a, b) => a.due - b.due);
+}
+function fiadoDue(){
+  const lim = Math.max(1, num(SM().fiadoDays)), out = [], by = {};
+  for (const m of Object.values(S.movs)) (by[m.clientId] = by[m.clientId] || []).push(m);
+  for (const [cid, ms] of Object.entries(by)){
+    let b = 0, since = 0;
+    for (const m of ms.sort((x, y) => x.ts - y.ts)){ const nb = b + (m.type === 'abono' ? -num(m.amount) : num(m.amount)); if (b <= 0.009 && nb > 0.009) since = m.ts; b = nb; }
+    if (b > 0.009 && Date.now() - since > lim * 864e5) out.push({cid, amount:r2(b), since});
+  }
+  return out;
+}
+function smartBox(){
+  const sm = SM(); let h = '';
+  const rs = restockList();
+  if (rs.length) h += `<div class="warnbox"><b>${rs.length} producto${rs.length === 1 ? '' : 's'} por reponer</b>${rs.some(isSoon) ? ' (incluye los que se agotarán pronto)' : ''}. <a href="#" onclick="restockSheet();return false">Ver pedido sugerido →</a></div>`;
+  if (!isAdmin()) return h;
+  if (sm.pay) supDues().filter(x => dueIn(x.due) <= 3).forEach(x => { h += `<div class="warnbox">Pago a <b>${esc(x.name)}</b>: ${usd(x.amount)} · ${whenTxt(dueIn(x.due))}. <a href="#" onclick="showSupplier('${x.sid}');return false">Pagar →</a></div>`; });
+  if (sm.pay) (cfg.bills || []).forEach((b, i) => { const x = billInfo(b); if (!x.paid && dueIn(x.due) <= 3) h += `<div class="warnbox"><b>${esc(b.name)}</b>: ${usd(num(b.amount))} · ${whenTxt(dueIn(x.due))}. <a href="#" onclick="payBill(${i});return false">Registrar pago →</a></div>`; });
+  const cg = catGroups().length, dp = dupProducts().length; if (cg || dp) h += `<div class="warnbox">${cg ? cg + ' categoría' + (cg === 1 ? '' : 's') + ' escrita' + (cg === 1 ? '' : 's') + ' de varias formas' : ''}${cg && dp ? ' y ' : ''}${dp ? dp + ' producto' + (dp === 1 ? '' : 's') + ' repetido' + (dp === 1 ? '' : 's') : ''}. <a href="#" onclick="dupSheet();return false">Revisar →</a></div>`;
+  if (sm.fiado){ const fd = fiadoDue(); if (fd.length) h += `<div class="warnbox">${fd.length} cliente${fd.length === 1 ? '' : 's'} con fiado de más de ${sm.fiadoDays} días (${usd(r2(fd.reduce((a, x) => a + x.amount, 0)))}). <a href="#" onclick="ui.fiF='deuda';go('fiados');return false">Cobrar →</a></div>`; }
+  return h;
+}
+// Resumen diario como notificación del sistema (una vez al día, solo si el administrador lo activó).
+function smartDaily(){
+  const sm = SM(); if (!sm.notif || !isAdmin() || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const day = dayKey(Date.now()); try { if (localStorage.getItem('ssDaily') === day) return; } catch(e){}
+  const parts = [], r = restockList().length, d = sm.pay ? supDues().filter(x => dueIn(x.due) <= 3).length + (cfg.bills || []).filter(b => { const x = billInfo(b); return !x.paid && dueIn(x.due) <= 3; }).length : 0, fd = sm.fiado ? fiadoDue().length : 0;
+  if (r) parts.push(r + ' producto' + (r === 1 ? '' : 's') + ' por reponer'); if (d) parts.push(d + ' pago' + (d === 1 ? '' : 's') + ' por vencer'); if (fd) parts.push(fd + ' fiado' + (fd === 1 ? '' : 's') + ' por cobrar');
+  if (!parts.length) return;
+  try { localStorage.setItem('ssDaily', day); } catch(e){}
+  try { const n = new Notification('StockSoft · resumen de hoy', {body:parts.join(' · ')}); n.onclick = () => { window.focus(); go('panel'); }; } catch(e){}
+}
+/* ---- Repetidos: productos con el mismo nombre y categorías escritas de varias formas ---- */
+const normTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const catKey = s => normTxt(s).split(' ').map(w => w.length > 3 ? w.replace(/s$/, '').replace(/e$/, '') : w).join(' ');
+function catGroups(){
+  const g = {}; products().forEach(p => { const c = (p.cat || '').trim(); if (!c) return; const k = catKey(c); (g[k] = g[k] || {}); g[k][c] = (g[k][c] || 0) + 1; });
+  return Object.values(g).filter(x => Object.keys(x).length > 1).map(x => Object.entries(x).sort((a, b) => b[1] - a[1]));
+}
+function dupProducts(){
+  const g = {}; products().forEach(p => { const k = normTxt(p.name); if (k) (g[k] = g[k] || []).push(p); });
+  return Object.values(g).filter(x => x.length > 1);
+}
+const sameCat = c => { const k = catKey(c); return (c && categories().find(x => x !== c && catKey(x) === k)) || c; };
+function dupSheet(){
+  const cg = catGroups(), dp = dupProducts();
+  openSheet(`<h2>Revisar repetidos</h2>
+  <h3>Categorías escritas de varias formas</h3>${cg.length ? cg.map((x, i) => `<div class="card" style="margin-bottom:8px"><div class="sub">${x.map(([c, n]) => '“' + esc(c) + '” (' + n + ')').join(' · ')}</div>
+    <button class="btn sm" style="margin-top:8px" onclick="unifyCat(${i})">Unir todo en “${esc(x[0][0])}”</button></div>`).join('') : '<div class="empty">No hay categorías repetidas.</div>'}
+  <h3>Productos con el mismo nombre</h3>${dp.length ? dp.map(x => `<div class="card" style="margin-bottom:8px">${x.map(p => `<div class="mv tap" onclick="editProduct('${p.id}')"><span>${esc(p.name)}${p.brand ? ' <span class="sub">· ' + esc(p.brand) + '</span>' : ''}</span><span class="sub">${p.code ? esc(p.code) + ' · ' : ''}${nfq.format(num(p.stock))} ${unitLbl(p.unit)}</span></div>`).join('')}</div>`).join('') + '<p class="note">Toca uno para editarlo o borrarlo. Si son distintos, ponles la marca o el tamaño en el nombre.</p>' : '<div class="empty">No hay productos repetidos.</div>'}
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+async function unifyCat(i){
+  const x = catGroups()[i]; if (!x) return; const to = x[0][0], from = x.slice(1).map(y => y[0]);
+  let n = 0; for (const p of products().filter(p => from.includes((p.cat || '').trim()))){ const {id, ...rest} = p; await put('products', id, {...rest, cat:to, updated:Date.now()}); n++; }
+  logA('admin', 'Categorías unificadas', from.join(', ') + ' → ' + to); toast(n + ' producto' + (n === 1 ? '' : 's') + ' movidos a “' + to + '”'); dupSheet();
+}
+/* ---- Pagos fijos del mes (alquiler, luz, sueldos…) ---- */
+const monthKey = d => d.getFullYear() + '-' + (d.getMonth() + 1);
+function billInfo(b){ const n = new Date(), last = new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate(); const due = new Date(n.getFullYear(), n.getMonth(), Math.min(Math.max(1, num(b.day)), last)).getTime(); const key = monthKey(n); return {due, key, paid:b.paid === key}; }
+function billsHtml(){
+  const bs = cfg.bills || [];
+  return (bs.length ? `<div class="card" style="margin:8px 0">${bs.map((b, i) => { const x = billInfo(b); return `<div class="mv"><span>${esc(b.name)} <span class="sub">· día ${b.day} · ${x.paid ? 'pagado este mes ✓' : whenTxt(dueIn(x.due))}</span></span><span><b>${usd(num(b.amount))}</b> <a href="#" class="sub" onclick="delBill(${i});return false">quitar</a></span></div>`; }).join('')}</div>` : '<p class="note">Añade lo que pagas cada mes y te lo recordamos 3 días antes. Con un toque queda registrado como gasto.</p>') +
+  `<div class="grid2"><div><label>Qué pagas</label><input id="bN" placeholder="Ej: Alquiler"></div><div><label>Monto ($)</label><input id="bA" inputmode="decimal" placeholder="0,00"></div></div>
+  <div class="grid2"><div><label>Día del mes</label><input id="bD" inputmode="numeric" placeholder="5"></div><div><label>Tipo de gasto</label><select id="bC">${EXP_CATS.map(c => `<option>${c}</option>`).join('')}</select></div></div>
+  <button class="btn sm sec" style="margin-top:10px" onclick="addBill()">+ Añadir pago fijo</button>`;
+}
+async function addBill(){
+  const name = $('#bN').value.trim(), amount = r2(num($('#bA').value)), day = Math.round(num($('#bD').value));
+  if (!name || !(amount > 0) || !(day >= 1 && day <= 31)){ toast('Pon qué pagas, el monto y el día (1 a 31)'); return; }
+  if (await putCfg({bills:[...(cfg.bills || []), {name, amount, day, cat:$('#bC').value}]})){ $('#billsBox').innerHTML = billsHtml(); toast('Pago fijo añadido'); }
+}
+async function delBill(i){ if (await putCfg({bills:(cfg.bills || []).filter((b, j) => j !== i)})) $('#billsBox').innerHTML = billsHtml(); }
+function payBill(i){
+  const b = (cfg.bills || [])[i]; if (!b) return;
+  expenseForm(); $('#exC').value = b.cat || 'Otros'; $('#exN').value = b.name + ' de ' + new Date().toLocaleDateString('es', {month:'long'}); $('#exA').value = String(b.amount).replace('.', ',');
+  ui.billPay = {i, key:billInfo(b).key};
+}
+/* ---- Productos sin ventas (dinero parado) ---- */
+function idleProducts(days = 60){
+  const from = Date.now() - days * 864e5, sold = new Set();
+  for (const s of Object.values(S.sales)) if (s.ts >= from) for (const i of (s.items || [])) if (i.pid) sold.add(i.pid);
+  return products().filter(p => p.track !== false && num(p.stock) > 0 && !sold.has(p.id) && (!p.created || p.created < from))
+    .map(p => ({p, v:r2(num(p.stock) * (num(costUsdOf(p)) || 0))})).sort((a, b) => b.v - a.v);
+}
+/* ---- Cierre de caja: resumen para enviar por WhatsApp ---- */
+function cashMsg(c){
+  const k = ['usd', 'bs', 'eur'], row = o => k.filter(x => Math.abs(num(o && o[x])) >= 0.01).map(x => fmtCur(num(o[x]), x)).join(' · ') || '0';
+  const d = k.filter(x => Math.abs(num(c.diff && c.diff[x])) >= 0.01).map(x => (c.diff[x] > 0 ? 'sobran ' : 'faltan ') + fmtCur(Math.abs(c.diff[x]), x));
+  return 'Cierre de caja · ' + (cfg.name || '') + '\n' + fmtDate(c.openedAt) + ' → ' + fmtDate(c.closedAt) + '\n' + (c.sales ? 'Ventas: ' + c.sales.n + ' · ' + usd(num(c.sales.usd)) + '\n' : '') + 'Esperado en caja: ' + row(c.expected) + '\nContado: ' + row(c.counted) + '\nResultado: ' + (d.length ? d.join(', ') : 'cuadró ✓') + '\nCerró: ' + (c.closedBy || '') + (c.note ? '\nNota: ' + c.note : '');
+}
+function cashDoneSheet(id){
+  const c = S.cash[id]; if (!c) return; const ph = SM().phone || cfg.phone, txt = cashMsg(c);
+  openSheet(`<h2>Caja cerrada</h2><div class="card" style="white-space:pre-line;font-size:14px">${esc(txt)}</div>
+  <div class="gap" style="margin-top:12px"><a class="btn wa" style="flex:1" href="${waLink(ph || '', txt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a><button class="btn sec" style="flex:1" onclick="navigator.clipboard.writeText(${esc(JSON.stringify(txt))}).then(()=>toast('Copiado'),()=>toast('Cópialo a mano'))">Copiar</button></div>
+  <div class="sheet-actions"><button class="btn" onclick="closeSheet()">Listo</button></div>`);
+}
 // Aviso de productos vencidos o que vencen pronto (lotes).
 function expBox(){
   const xs = expiring(); if (!xs.length) return '';
@@ -775,7 +997,7 @@ async function doLogin(ev){
   if (CLOUD()){
     $('#lgBtn').disabled = true; $('#lgMsg').textContent = 'Entrando…';
     await applyPersistence(keep);
-    try { await FB.auth.signInWithEmailAndPassword(u, p); $('#lgMsg').textContent = ''; } catch(e){ loginErr(fbMsg(e)); }
+    try { await FB.auth.signInWithEmailAndPassword(loginEmail(u), p); $('#lgMsg').textContent = ''; } catch(e){ loginErr(fbMsg(e)); }
     $('#lgBtn').disabled = false; return;
   }
   let user = S.users[u];
@@ -786,6 +1008,7 @@ async function doLogin(ev){
 async function resetPass(){
   const e = $('#lgU').value.trim();
   if (!e){ $('#lgMsg').textContent = 'Escribe tu correo arriba y vuelve a tocar "¿Olvidaste tu contraseña?"'; return; }
+  if (!e.includes('@') || isPinEmail(e)){ $('#lgMsg').textContent = 'Si entras con usuario y PIN, pide al administrador que te cree un PIN nuevo.'; return; }
   try { await FB.auth.sendPasswordResetEmail(e); $('#lgMsg').textContent = 'Te enviamos un correo para cambiar la contraseña'; } catch(err){ $('#lgMsg').textContent = fbMsg(err); }
 }
 const keepPref = () => { try { return localStorage.getItem('negocio_keep') === '1'; } catch(e){ return false; } };
@@ -833,6 +1056,7 @@ function passForm(u){
   const self = me && me.u === u;
   if (CLOUD() && !self){
     const x = S.users[u] || {};
+    if (isPinEmail(x.email)){ ask('PIN de ' + (x.name || ''), 'Este empleado entra con usuario y PIN, sin correo. Para darle un PIN nuevo, elimínalo y créalo de nuevo con "+ Nuevo usuario".', 'Entendido', () => {}, false); return; }
     ask('Cambiar contraseña de ' + (x.name || ''), 'Le enviaremos un correo a ' + (x.email || '') + ' con un enlace para que ponga una contraseña nueva.', 'Enviar correo', async () => {
       try { await FB.auth.sendPasswordResetEmail(x.email); toast('Correo enviado a ' + x.email); } catch(e){ toast(fbMsg(e)); }
     }, false);
@@ -845,7 +1069,7 @@ function passForm(u){
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="savePass('${u}')">Guardar</button></div>`);
 }
 async function savePass(u){
-  const p1 = $('#pw1').value, p2 = $('#pw2').value, minP = CLOUD() ? 8 : 4;
+  const p1 = $('#pw1').value, p2 = $('#pw2').value, minP = CLOUD() ? (isPinEmail(FB.auth.currentUser && FB.auth.currentUser.email) ? 6 : 8) : 4;
   if (p1.length < minP){ toast('Usa al menos ' + minP + ' caracteres'); return; }
   if (p1 !== p2){ toast('Las contraseñas no coinciden'); return; }
   if (CLOUD()){
@@ -866,17 +1090,28 @@ async function savePass(u){
     closeSheet(); toast('Contraseña cambiada'); render();
   }
 }
+function nuMode(m){ ui.nuMode = m; const pin = m === 'pin'; $('#nuM1').classList.toggle('on', pin); $('#nuM2').classList.toggle('on', !pin); $('#nuMailW').style.display = pin ? 'none' : ''; $('#nuPinN').style.display = pin ? '' : 'none'; $('#nuPl').textContent = pin ? 'PIN (6 números)' : 'Contraseña (mínimo 8 caracteres)'; $('#nuP').inputMode = pin ? 'numeric' : 'text'; $('#nuP').placeholder = pin ? 'Ej: 482913' : ''; }
 function userForm(){
-  const c = CLOUD();
+  const c = CLOUD(); ui.nuMode = 'pin';
   openSheet(`<h2>Nuevo usuario</h2>
   <label>Nombre</label><input id="nuN" placeholder="Ej: María" autofocus>
-  <label>${c ? 'Correo (para entrar)' : 'Usuario (para entrar)'}</label><input id="nuU" autocapitalize="none" type="${c ? 'email' : 'text'}" placeholder="${c ? 'maria@correo.com' : 'Ej: maria'}">
-  <label>Contraseña</label><input id="nuP" type="password" autocomplete="new-password" placeholder="${c ? 'Mínimo 6 caracteres' : ''}">
+  ${c ? `<label>Cómo entra</label><div class="seg" style="margin:0"><button type="button" id="nuM1" class="on" onclick="nuMode('pin')">Usuario y PIN (sin correo)</button><button type="button" id="nuM2" onclick="nuMode('mail')">Con correo</button></div>` : ''}
+  <div id="nuMailW" style="${c ? 'display:none' : ''}"><label>${c ? 'Correo (para entrar)' : 'Usuario (para entrar)'}</label><input id="nuU" autocapitalize="none" type="${c ? 'email' : 'text'}" placeholder="${c ? 'maria@correo.com' : 'Ej: maria'}"></div>
+  <label id="nuPl">${c ? 'PIN (6 números)' : 'Contraseña'}</label><input id="nuP" type="password" autocomplete="new-password" ${c ? 'inputmode="numeric" placeholder="Ej: 482913"' : ''}>
+  ${c ? '<p class="note" id="nuPinN">El usuario se crea solo a partir del nombre (por ejemplo maria-4821). Te lo mostramos al terminar.</p>' : ''}
   <label>Rol</label><select id="nuR"><option value="vendedor">Vendedor: vende, consulta precios y tasas, cobra a clientes</option><option value="admin">Administrador: todo (inventario, costos, reportes, usuarios)</option></select>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="nuBtn" onclick="saveUser()">Crear</button></div>`);
 }
 async function saveUser(){
   const name = $('#nuN').value.trim(), u = $('#nuU').value.trim().toLowerCase(), p = $('#nuP').value;
+  if (CLOUD() && ui.nuMode !== 'mail'){
+    if (!name){ toast('Pon el nombre'); return; }
+    if (!/^\d{6,12}$/.test(p)){ toast('El PIN debe tener de 6 a 12 números'); return; }
+    $('#nuBtn').disabled = true;
+    try { const x = await createPinMember(name, p, $('#nuR').value); logA('admin', 'Usuario creado', name + ' · usuario ' + x.user + ' (sin correo) · ' + $('#nuR').value); empCredSheet(x); }
+    catch(e){ toast(fbMsg(e)); $('#nuBtn').disabled = false; }
+    return;
+  }
   if (CLOUD()){
     if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(u)){ toast('Pon nombre y un correo válido'); return; }
     if (p.length < 8){ toast('La contraseña debe tener al menos 8 caracteres'); return; }
@@ -930,7 +1165,7 @@ VIEWS.inicio = {
     if (isAdmin() && S.users[me.u] && S.users[me.u].def) h += `<div class="warnbox">Estás usando la contraseña inicial (admin/admin). <a href="#" onclick="passForm('${me.u}');return false">Cámbiala ahora →</a></div>`;
     if (ratesStale()) h += `<div class="warnbox">${cfg.bcv ? 'La tasa no se ha actualizado en más de un día.' : 'Aún no hay tasa del dólar.'} <a href="#" onclick="go('tasas');return false">Actualizar tasa →</a></div>`;
     if (backend === 'local') h += `<div class="warnbox">${LOCAL_TXT()}</div>`;
-    h += trialBox() + expBox();
+    h += trialBox() + expBox() + smartBox();
     if (readOnly) h += `<div class="warnbox">Estás en modo solo lectura: puedes ver los datos pero no cambiarlos.</div>`;
     h += `<h2>Hoy</h2>
     <div class="grid2">
@@ -940,11 +1175,12 @@ VIEWS.inicio = {
       <div class="card stat" style="cursor:pointer" onclick="ui.invF='bajo';go('inventario')"><div class="k">Stock bajo o agotado</div><div class="v ${low.length ? 'neg' : ''}">${low.length}</div><div class="s">de ${products().length} productos</div></div>
     </div>
     <div class="gap" style="margin-top:14px"><button class="btn" style="flex:2" onclick="go('vender')">Nueva venta</button><button class="btn sec" style="flex:1" onclick="openScanner()">${ICON_CAM} Precio</button></div>`;
-    if (low.length){
-      h += `<h3>Por reponer</h3><div class="list">` + low.slice(0, 8).map(p => `
+    const rl = restockList();
+    if (rl.length){
+      h += `<h3>Por reponer</h3><div class="list">` + rl.slice(0, 8).map(p => `
         <div class="item tap row" onclick="editProduct('${p.id}')"><div class="grow"><div class="name">${esc(p.name)}</div>
-        <div class="sub">Quedan ${nfq.format(num(p.stock))} ${unitLbl(p.unit)} · mínimo ${nfq.format(minStock(p))}</div></div>
-        <span class="pill ${stockState(p)}">${stockState(p) === 'out' ? 'Agotado' : 'Bajo'}</span></div>`).join('') + `</div>`;
+        <div class="sub">${restockSub(p)}</div></div>
+        ${restockPill(p)}</div>`).join('') + `</div>`;
     }
     if (ts.length){
       h += `<h3>Últimas ventas de hoy</h3><div class="list">` + ts.slice(0, 5).map(saleRow).join('') + `</div>`;
@@ -1095,11 +1331,13 @@ function priceBlock(p, big){
 function priceSheet(id){
   const p = S.products[id]; if (!p) return;
   openSheet(`<div class="sub">${esc([p.cat, p.brand].filter(Boolean).join(' · '))}</div><h2 style="margin-top:2px">${esc(p.name)}</h2>
+  ${p.img ? `<img class="ph-big" id="psImg" src="${p.img}" alt="" onclick="photoZoom(this.src)">` : ''}
   ${priceBlock(p, true)}
   <div class="sub" style="margin-top:10px">${p.track === false ? '' : 'En stock: ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit) + ' · '}Código: ${esc(p.code || '—')}${p.warranty ? ' · Garantía: ' + esc(p.warranty) : ''}</div>
   ${(() => { const e = expInfo(p); return e ? `<div class="sub">Próximo vencimiento: <b>${fmtExp(e.exp)}</b> (${nfq.format(e.qty)} ${unitLbl(p.unit)})${expPill(e)}</div>` : ''; })()}
   <div class="sheet-actions">${isAdmin() ? `<button class="btn sec" onclick="editProduct('${id}')">Editar</button>` : ''}<button class="btn" onclick="closeSheet();go('vender');addToCart('${id}',true);lastScan='${id}';renderLastScan()">Vender</button></div>
   <button class="btn sec full" style="margin-top:8px" onclick="openScanner()">Escanear otro</button>`);
+  if (p.img) loadPhoto(id).then(src => { const el = $('#psImg'); if (src && el) el.src = src; });
 }
 
 /* ---- Vender (punto de venta) ---- */
@@ -1128,6 +1366,7 @@ VIEWS.vender = {
 function prodRow(p){
   const st = stockState(p);
   return `<div class="item tap row" onclick="addToCart('${p.id}')">
+    ${p.img ? `<img class="pthumb" src="${p.img}" alt="" onclick="event.stopPropagation();showProdPhoto('${p.id}')">` : ''}
     <div class="grow"><div class="name">${esc(p.name)}</div><div class="sub">${p.track === false ? (p.cat ? esc(p.cat) : '') : `Stock: ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}`}${p.track !== false && st !== 'ok' ? ` <span class="pill ${st}">${st === 'out' ? 'Agotado' : 'Bajo'}</span>` : ''}${expPill(expInfo(p))}</div>${hasW(p) ? `<div class="sub">${wTxt(p)}</div>` : ''}</div>
     <div><div class="price">${pMain(p)}</div>${pBs(p) ? `<div class="sub" style="text-align:right">${bsF(pBs(p))}</div>` : ''}</div></div>`;
 }
@@ -1321,14 +1560,18 @@ async function checkout(){
   if (!fiscal){ const seq = num(cfg.noteSeq) + 1; sale.noteNo = 'NE-' + String(seq).padStart(6, '0'); await putCfg({noteSeq:seq}); }
   const ok = await put('sales', id, sale);
   if (ok){
+    const warn = [];
     for (const c of items) if (c.pid && S.products[c.pid] && S.products[c.pid].track !== false){
-      await put('products', c.pid, {...S.products[c.pid], stock: r3(num(S.products[c.pid].stock) - c.qty)});
+      const was = stockState(S.products[c.pid]), np = {...S.products[c.pid], stock: r3(num(S.products[c.pid].stock) - c.qty)};
+      await put('products', c.pid, np);
+      if (was === 'ok' && stockState(np) !== 'ok') warn.push({id:c.pid, ...np});
     }
     if (st.fiado > 0) await put('movs', uid(), {clientId, type:'deuda', amount:st.fiado, rate:cfg.bcv || 0, ts:now, saleId:id, note:items.map(i => nfq.format(i.qty) + ' ' + i.name).join(', ')});
     if (ui.fromQuote && S.quotes[ui.fromQuote]) await put('quotes', ui.fromQuote, {...S.quotes[ui.fromQuote], status:'vendida', saleId:id});
     cart = []; lastScan = null; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal'; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
     logA('venta', 'Venta', (sale.doc === 'fiscal' ? 'Factura' : 'Nota ' + (sale.noteNo || '')) + ' · ' + usd(sale.total) + ' · ' + payLabel(sale) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (sale.customer ? ' · ' + sale.customer.name : ''), 'sale:' + id);
     shellFor = ''; render(); showSale(id, true);
+    if (warn.length) setTimeout(() => stockAlert(warn), 700);
   }
   busy = false;
 }
@@ -1554,6 +1797,7 @@ VIEWS.inventario = {
       : (!ps.length ? `<div class="empty">Nada coincide.</div>` : ps.map(p => { const st = stockState(p);
         return `<div class="item ${ui.labelMode ? '' : 'tap'}" ${ui.labelMode ? '' : `onclick="editProduct('${p.id}')"`}><div class="row">
         ${ui.labelMode ? `<input type="checkbox" class="chk" ${ui.selLabels.has(p.id) ? 'checked' : ''} onchange="this.checked?ui.selLabels.add('${p.id}'):ui.selLabels.delete('${p.id}');VIEWS.inventario.fill()">` : ''}
+        ${p.img ? `<img class="pthumb" src="${p.img}" alt="">` : ''}
         <div class="grow"><div class="name">${esc(p.name)}</div>
         <div class="sub">${esc([p.cat, p.brand].filter(Boolean).join(' · '))}${p.cat || p.brand ? ' · ' : ''}${p.track === false ? 'Sin control de stock' : 'Stock: ' + nfq.format(num(p.stock)) + ' ' + unitLbl(p.unit)}</div>
         <div class="sub">${pLine(p)}${p.code ? '' : ' <span class="pill">sin código</span>'}${expPill(expInfo(p))}</div>${hasW(p) ? `<div class="sub">${wTxt(p)}</div>` : ''}</div>
@@ -1562,6 +1806,7 @@ VIEWS.inventario = {
   }
 };
 function editProduct(id, preset = {}){
+  ui.dupOk = false;
   if (!isAdmin()){ if (id) priceSheet(id); return; }
   const p = id ? S.products[id] : {name:'', cat:'', brand:'', unit:'unidad', cur:cfg.cur || 'usd', price:'', cost:'', stock:'', min:'', code:preset.code || '', warranty:'', track:true};
   if (!p) return;
@@ -1570,6 +1815,9 @@ function editProduct(id, preset = {}){
   openSheet(`<h2>${id ? 'Editar producto' : 'Nuevo producto'}</h2>
   ${preset.code ? `<div class="warnbox" style="margin-bottom:4px">El código <b>${esc(preset.code)}</b> no está en tu inventario. Ponle nombre y precio para añadirlo.</div>` : ''}
   <label>Nombre</label><input id="pN" value="${esc(p.name)}" placeholder="Ej: Harina de maíz 1 kg" ${id ? '' : 'autofocus'}>
+  <label>Foto (opcional)</label>
+  <div class="row" style="gap:14px"><div class="ph-box" id="phBox">${p.img ? `<img src="${p.img}" alt="">` : '📷'}</div>
+  <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${p.img ? 'Cambiar foto' : 'Tomar o subir foto'}<input type="file" accept="image/*" hidden onchange="pickProdPhoto(this)"></label>${p.img ? '<button class="btn sm bad" onclick="clearProdPhoto()">Quitar</button>' : ''}</div></div>
   <div class="grid2"><div><label>Categoría</label><input id="pC" list="catList" value="${esc(p.cat)}" placeholder="${cats.length ? 'Elige o escribe una nueva' : 'Escribe una categoría'}"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
   <div><label>Marca / modelo</label><input id="pBr" value="${esc(p.brand || '')}" placeholder="Opcional"></div></div>
   <label>Precio en</label>
@@ -1600,9 +1848,28 @@ function editProduct(id, preset = {}){
     <a class="btn sm wa" href="${waLink('', productMsg(p))}" target="_blank" rel="noopener">WhatsApp</a></div>` : ''}
   <div class="sheet-actions">${id ? `<button class="btn bad" onclick="delProduct('${id}')">Eliminar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}
   <button class="btn" onclick="saveProduct(${id ? `'${id}'` : 'null'},${preset.code ? 'true' : 'false'})">Guardar</button></div>`);
-  ui.lotsEdit = activeLots(p).map(l => ({...l}));
+  ui.lotsEdit = activeLots(p).map(l => ({...l})); ui.photoEdit = null;
   pPrev(); bcPrev(); renderLots();
 }
+/* Fotos de productos: miniatura ligera dentro del producto (para las listas) y foto grande aparte,
+   en photos/{id}, que solo se descarga al abrir el producto. Se reducen al elegirlas. */
+function shrinkImage(img, max, q){ const s = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', q); }
+function pickProdPhoto(input){
+  const file = input.files && input.files[0]; if (!file) return;
+  if (!/^image\//.test(file.type)){ toast('Elige una imagen'); return; }
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => { ui.photoEdit = {thumb:shrinkImage(img, 160, .72), full:shrinkImage(img, 720, .78)}; URL.revokeObjectURL(url); $('#phBox').innerHTML = `<img src="${ui.photoEdit.thumb}" alt="">`; };
+  img.onerror = () => toast('No se pudo leer esa imagen');
+  img.src = url;
+}
+function clearProdPhoto(){ ui.photoEdit = 'del'; $('#phBox').innerHTML = '📷'; }
+async function savePhoto(id, full){
+  if (!(backend === 'cloud' || backend === 'db')) return;
+  try { if (full) await DB.collection('photos').doc(id).set({src:full, ts:Date.now()}); else await DB.collection('photos').doc(id).delete(); } catch(e){ console.warn('foto', e); }
+}
+async function loadPhoto(id){ if (!(backend === 'cloud' || backend === 'db')) return null; try { const d = await DB.doc('photos/' + id).get(); return d.exists ? d.data().src : null; } catch(e){ return null; } }
+function showProdPhoto(id){ const p = S.products[id]; if (!p || !p.img) return; photoZoom(p.img); loadPhoto(id).then(src => { const el = $('#sheet img'); if (src && el) el.src = src; }); }
+function photoZoom(src){ openSheet(`<img src="${src}" alt="" style="width:100%;border-radius:16px;background:#fff"><div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`); }
 /* Lotes del formulario de producto */
 function renderLots(){
   const box = $('#lotBox'); if (!box) return;
@@ -1647,25 +1914,29 @@ async function saveProduct(id, fromScan){
   const code = $('#pB').value.trim().replace(/\s+/g, '');
   const other = code && findByCode(code, id || undefined);
   if (other){ toast('Ese código ya lo tiene “' + other.name + '”'); return; }
+  const dupP = !ui.dupOk && products().find(p => p.id !== id && normTxt(p.name) === normTxt(name));
+  if (dupP){ ui.dupOk = true; if (!$('#pDup')) $('#pN').insertAdjacentHTML('afterend', `<div class="warnbox" id="pDup" style="margin-top:8px">Ya tienes “${esc(dupP.name)}” (${nfq.format(num(dupP.stock))} ${unitLbl(dupP.unit)}). Si es otro producto, toca Guardar otra vez; si es el mismo, <a href="#" onclick="editProduct('${dupP.id}');return false">ábrelo aquí</a>.</div>`); $('#pN').scrollIntoView({block:'center'}); return; }
   const minV = $('#pM').value.trim();
   const wP = num($('#pWP').value), wQ = num($('#pWQ').value);
   if ((wP > 0) !== (wQ > 0)){ toast('Para el precio al mayor pon el precio y la cantidad'); return; }
   if (wP > 0 && wP >= price){ toast('El precio al mayor debe ser menor que el precio normal'); return; }
   const old = id ? S.products[id] : {created:Date.now()};
-  const d = {...old, name, cat:$('#pC').value.trim(), brand:$('#pBr').value.trim(), cur:$('#pCur').value, unit:$('#pU').value, price:r2(price), cost:r2(num($('#pK').value)), stock:r3(num($('#pS').value)), min: minV === '' ? '' : r3(num(minV)), code, warranty:$('#pW').value.trim(), iva:num($('#pI').value), supplierId:$('#pSup').value, track:$('#pT').checked, updated:Date.now(),
+  const d = {...old, name, cat:sameCat($('#pC').value.trim()), brand:$('#pBr').value.trim(), cur:$('#pCur').value, unit:$('#pU').value, price:r2(price), cost:r2(num($('#pK').value)), stock:r3(num($('#pS').value)), min: minV === '' ? '' : r3(num(minV)), code, warranty:$('#pW').value.trim(), iva:num($('#pI').value), supplierId:$('#pSup').value, track:$('#pT').checked, updated:Date.now(),
     wPrice: wP > 0 ? r2(wP) : '', wQty: wQ > 0 ? r3(wQ) : ''};
   // Solo se guardan los lotes que siguen en el estante (los vendidos se descartan solos).
   d.lots = activeLots({stock:d.stock, lots:ui.lotsEdit || []});
+  const ph = ui.photoEdit; if (ph === 'del') d.img = ''; else if (ph) d.img = ph.thumb;
   const nid = id || uid();
   closeSheet();
   if (await put('products', nid, d)){
+    if (ph) savePhoto(nid, ph === 'del' ? null : ph.full);
     if (!id) logA('inventario', 'Producto creado', name + ' · ' + (d.cur === 'eur' ? '€' : '$') + nf2.format(d.price) + ' · stock ' + nfq.format(d.stock));
     else { const ch = []; if (num(old.price) !== d.price) ch.push('precio ' + nf2.format(num(old.price)) + ' → ' + nf2.format(d.price)); if (num(old.cost) !== d.cost) ch.push('costo ' + nf2.format(num(old.cost)) + ' → ' + nf2.format(d.cost)); if (num(old.stock) !== d.stock) ch.push('stock ' + nfq.format(num(old.stock)) + ' → ' + nfq.format(d.stock)); if (old.name !== d.name) ch.push('nombre antes: ' + old.name); if (ch.length) logA('inventario', 'Producto modificado', name + ' · ' + ch.join(' · ')); }
     toast(id ? 'Producto actualizado' : 'Producto añadido');
     if (fromScan && view === 'vender'){ addToCart(nid, true); lastScan = nid; renderLastScan(); }
   }
 }
-function delProduct(id){ ask('¿Eliminar producto?', 'Se borrará “' + (S.products[id] || {}).name + '” del inventario. Las ventas pasadas se mantienen.', 'Eliminar', async () => { logA('inventario', 'Producto eliminado', (S.products[id] || {}).name + ' · stock ' + nfq.format(num((S.products[id] || {}).stock))); await del('products', id); toast('Producto eliminado'); }); }
+function delProduct(id){ ask('¿Eliminar producto?', 'Se borrará “' + (S.products[id] || {}).name + '” del inventario. Las ventas pasadas se mantienen.', 'Eliminar', async () => { logA('inventario', 'Producto eliminado', (S.products[id] || {}).name + ' · stock ' + nfq.format(num((S.products[id] || {}).stock))); await del('products', id); savePhoto(id, null); toast('Producto eliminado'); }); }
 function restock(id){
   const p = S.products[id];
   openSheet(`<h2>Reponer stock</h2><div class="sub">${esc(p.name)} · hay ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}</div>
@@ -1859,7 +2130,7 @@ VIEWS.mas = {
     if (sub === 'cotizaciones') return fillQuotes();
     if (sub === 'usuarios'){
       const us = Object.entries(S.users).sort((a, b) => (a[1].role === 'admin' ? 0 : 1) - (b[1].role === 'admin' ? 0 : 1) || a[0].localeCompare(b[0]));
-      $('#mx').innerHTML = `<div class="list">${us.map(([u, x]) => `<div class="item"><div class="row"><div class="grow"><div class="name">${esc(x.name || u)}${me && me.u === u ? ' <span class="pill ok">tú</span>' : ''}</div><div class="sub">${CLOUD() ? esc(x.email || '') : 'Usuario: <b>' + esc(u) + '</b>'} · ${x.role === 'admin' ? 'Administrador' : 'Vendedor'}${x.def ? ' · <span style="color:var(--warn)">contraseña inicial</span>' : ''}</div></div></div>
+      $('#mx').innerHTML = `<div class="list">${us.map(([u, x]) => `<div class="item"><div class="row"><div class="grow"><div class="name">${esc(x.name || u)}${me && me.u === u ? ' <span class="pill ok">tú</span>' : ''}</div><div class="sub">${CLOUD() ? (isPinEmail(x.email) ? 'Usuario: <b>' + esc(pinUser(x.email)) + '</b> (sin correo)' : esc(x.email || '')) : 'Usuario: <b>' + esc(u) + '</b>'} · ${x.role === 'admin' ? 'Administrador' : 'Vendedor'}${x.def ? ' · <span style="color:var(--warn)">contraseña inicial</span>' : ''}</div></div></div>
         <div class="gap" style="margin-top:10px"><button class="btn sm sec" onclick="passForm('${u}')">Contraseña</button>${me && me.u !== u ? `<button class="btn sm sec" onclick="toggleRole('${u}')">Hacer ${x.role === 'admin' ? 'vendedor' : 'admin'}</button><button class="btn sm bad" onclick="delUser('${u}')">Eliminar</button>` : ''}</div></div>`).join('')}</div>
         <p class="note"><b>Vendedor:</b> vende, consulta precios y tasas, ve el inventario y cobra fiados. No ve costos ni ganancias, ni puede editar productos, anular ventas o cambiar ajustes.<br><b>Administrador:</b> puede hacer todo.</p>
         ${CLOUD() ? `<p class="note">El empleado entra con su correo y contraseña desde la app de PC o desde la versión web en el móvil (puede instalarla como app desde el navegador).</p>` : backend === 'db' ? `<p class="note">Para que un empleado entre desde su móvil, invítalo a esta página con su correo (como Editor, desde el botón Compartir) y dale su usuario y contraseña. Un enlace público no sirve: con él no se pueden guardar ventas.</p>` : `<p class="note">Sin conexión a la nube, los usuarios solo funcionan en este dispositivo.</p>`}`;
@@ -1889,10 +2160,33 @@ VIEWS.mas = {
         <label>Descuento máximo que puede dar un vendedor (%)</label><input id="aX" inputmode="decimal" value="${nf0.format(num(cfg.maxDisc ?? 10))}">
         <label>Moneda por defecto de los precios nuevos</label><select id="aM"><option value="usd" ${cfg.cur !== 'eur' ? 'selected' : ''}>Dólares ($ BCV)</option><option value="eur" ${cfg.cur === 'eur' ? 'selected' : ''}>Euros (€ BCV)</option></select>
         <div class="grid2"><div><label>Aviso de stock bajo</label><input id="aL" inputmode="decimal" value="${nfq.format(num(cfg.lowDefault))}"></div><div><label>Código de país (WhatsApp)</label><input id="aC" inputmode="numeric" value="${esc(cfg.cc)}" placeholder="58"></div></div>
-        <button class="btn full" style="margin-top:16px" onclick="saveSettings()">Guardar</button></div>`;
+        <button class="btn full" style="margin-top:16px" onclick="saveSettings()">Guardar</button></div>
+      ${smartForm()}`;
     }
   }
 };
+function smartForm(){
+  const sm = SM(), L = 'class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"', ck = k => sm[k] ? 'checked' : '';
+  return `<h3>Inventario inteligente</h3><div class="card">
+  <label ${L}><input type="checkbox" id="smA" class="chk" ${ck('alert')}> Aviso emergente al vender cuando un producto queda bajo</label>
+  <div class="grid2"><div><label>WhatsApp para avisos</label><input id="smW" inputmode="tel" value="${esc(sm.phone)}" placeholder="${esc(cfg.phone || '0414…')}"></div><div><label>Correo para avisos</label><input id="smE" type="email" value="${esc(sm.email)}" placeholder="Opcional"></div></div>
+  <label ${L}><input type="checkbox" id="smS" class="chk" ${ck('suggest')}> Sugerir cuánto comprar según lo que se vende</label>
+  <div class="grid2"><div><label>Calcular con ventas de (días)</label><input id="smD" inputmode="numeric" value="${sm.days}"></div><div><label>Comprar para cubrir (días)</label><input id="smC" inputmode="numeric" value="${sm.cover}"></div></div>
+  <label>Avisar si se agota en menos de (días)</label><input id="smK" inputmode="numeric" value="${sm.soon}">
+  <label ${L}><input type="checkbox" id="smP" class="chk" ${ck('pay')}> Recordar pagos a proveedores (3 días antes)</label>
+  <label ${L}><input type="checkbox" id="smF" class="chk" ${ck('fiado')}> Recordar fiados sin pagar después de (días)</label><input id="smFd" inputmode="numeric" value="${sm.fiadoDays}" style="margin-top:6px">
+  <label ${L}><input type="checkbox" id="smN" class="chk" ${ck('notif')}> Resumen diario como notificación del equipo (una vez al día)</label>
+  <button class="btn full" style="margin-top:16px" onclick="saveSmart()">Guardar</button>
+  <button class="btn sec full" style="margin-top:8px" onclick="dupSheet()">Revisar productos y categorías repetidos</button></div>
+  <h3>Pagos fijos del mes</h3><div class="card" id="billsBox">${billsHtml()}</div>`;
+}
+async function saveSmart(){
+  const pos = (id, d) => Math.max(1, Math.round(num($(id).value)) || d);
+  let notif = $('#smN').checked;
+  if (notif && 'Notification' in window && Notification.permission !== 'granted'){ try { notif = (await Notification.requestPermission()) === 'granted'; } catch(e){ notif = false; } if (!notif){ $('#smN').checked = false; toast('No se permitieron las notificaciones'); } }
+  const smart = {alert:$('#smA').checked, suggest:$('#smS').checked, pay:$('#smP').checked, fiado:$('#smF').checked, notif, days:pos('#smD', 30), cover:pos('#smC', 15), soon:pos('#smK', 7), fiadoDays:pos('#smFd', 15), phone:$('#smW').value.trim(), email:$('#smE').value.trim()};
+  if (await putCfg({smart})){ logA('admin', 'Ajustes modificados', 'Inventario inteligente'); toast('Inventario inteligente guardado'); }
+}
 async function saveSettings(){
   if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
 }
@@ -1908,7 +2202,8 @@ function fillReports(){
   const tot = r2(ss.reduce((a, s) => a + num(s.total), 0));
   const cost = r2(ss.reduce((a, s) => a + (s.items || []).reduce((b, i) => b + num(i.cost) * num(i.qty), 0), 0));
   const byM = {}; ss.forEach(s => salePayments(s).forEach(p => byM[p.m] = (byM[p.m] || 0) + p.usd));
-  const byP = {}; ss.forEach(s => (s.items || []).forEach(i => { const k = i.name; byP[k] = byP[k] || {q:0, t:0}; byP[k].q += num(i.qty); byP[k].t += num(i.price) * num(i.qty); }));
+  const byP = {}; ss.forEach(s => (s.items || []).forEach(i => { const k = i.name; byP[k] = byP[k] || {q:0, t:0, g:0}; byP[k].q += num(i.qty); byP[k].t += num(i.price) * num(i.qty); byP[k].g += (num(i.price) - num(i.cost)) * num(i.qty); }));
+  const topG = Object.entries(byP).filter(([, v]) => v.g > 0).sort((a, b) => b[1].g - a[1].g).slice(0, 8), idle = idleProducts();
   const top = Object.entries(byP).sort((a, b) => b[1].t - a[1].t).slice(0, 8);
   const maxT = top.length ? top[0][1].t : 1;
   const fis = ss.filter(x => x.doc === 'fiscal'), notas = ss.filter(x => x.doc === 'nota');
@@ -1931,6 +2226,8 @@ function fillReports(){
     ${Object.keys(bySeller).length ? `<h3>Por vendedor</h3><div class="card">${Object.entries(bySeller).sort((a, b) => b[1].t - a[1].t).map(([k, v]) => `<div class="mv"><span>${esc(k)} <span class="sub">· ${v.n} venta${v.n === 1 ? '' : 's'} · promedio ${usd(v.n ? r2(v.t / v.n) : 0)}</span></span><b>${usd(r2(v.t))}</b></div>`).join('')}</div>` : ''}
     <h3>Por forma de pago</h3><div class="card">${Object.keys(byM).length ? Object.entries(byM).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="mv"><span>${METHODS[k] || k}</span><b>${usd(r2(v))}</b></div>`).join('') : '<div class="empty">Sin ventas en este periodo.</div>'}</div>
     <h3>Lo más vendido</h3><div class="card">${top.length ? top.map(([n, v]) => `<div style="padding:7px 0"><div class="row between"><span>${esc(n)} <span class="sub">× ${nfq.format(v.q)}</span></span><b>${usd(r2(v.t))}</b></div><div class="bar"><i style="width:${Math.max(3, v.t / maxT * 100)}%"></i></div></div>`).join('') : '<div class="empty">Sin datos.</div>'}</div>
+    ${isAdmin() && topG.length ? `<h3>Lo que más ganancia deja</h3><div class="card">${topG.map(([n, v]) => `<div class="mv"><span>${esc(n)} <span class="sub">× ${nfq.format(v.q)} · margen ${v.t ? Math.round(v.g / v.t * 100) : 0}%</span></span><b style="color:var(--acc)">${usd(r2(v.g))}</b></div>`).join('')}</div>` : ''}
+    ${isAdmin() && idle.length ? `<h3>Sin ventas en 60 días</h3><div class="card">${idle.slice(0, 10).map(x => `<div class="mv tap" onclick="editProduct('${x.p.id}')"><span>${esc(x.p.name)} <span class="sub">· ${nfq.format(num(x.p.stock))} ${unitLbl(x.p.unit)}</span></span><b>${x.v ? usd(x.v) : '—'}</b></div>`).join('')}</div><p class="note">${usd(r2(idle.reduce((a, x) => a + x.v, 0)))} de dinero parado en mercancía (a costo). Prueba una oferta o un combo para moverla.</p>` : ''}
     <h3>Ventas</h3><div class="list">${ss.slice(0, 50).map(saleRow).join('') || '<div class="empty">Sin ventas.</div>'}</div>`;
 }
 
@@ -1971,13 +2268,13 @@ function editSupplier(id){
   <label>Persona de contacto</label><input id="sC" value="${esc(x.contact || '')}" placeholder="Opcional">
   <label>Qué te vende</label><input id="sS" value="${esc(x.supplies || '')}" placeholder="Ej: alimentos y bebidas">
   <label>Dirección</label><input id="sA" value="${esc(x.addr || '')}" placeholder="Opcional">
-  <label>Nota</label><input id="sO" value="${esc(x.note || '')}" placeholder="Ej: crédito a 15 días">
+  <div class="grid2"><div><label>Días de crédito</label><input id="sD" inputmode="numeric" value="${x.creditDays || ''}" placeholder="15"></div><div><label>Nota</label><input id="sO" value="${esc(x.note || '')}" placeholder="Opcional"></div></div>
   <div class="sheet-actions"><button class="btn sec" onclick="${id ? `showSupplier('${id}')` : 'closeSheet()'}">Cancelar</button><button class="btn" onclick="saveSupplier(${id ? `'${id}'` : 'null'})">Guardar</button></div>`);
 }
 async function saveSupplier(id){
   const name = $('#sN').value.trim(); if (!name){ toast('Pon el nombre'); return; }
   const nid = id || uid();
-  const d = {...(id ? S.suppliers[id] : {created:Date.now()}), name, rif:$('#sR').value.trim().toUpperCase(), phone:$('#sP').value.trim(), contact:$('#sC').value.trim(), supplies:$('#sS').value.trim(), addr:$('#sA').value.trim(), note:$('#sO').value.trim()};
+  const d = {...(id ? S.suppliers[id] : {created:Date.now()}), name, rif:$('#sR').value.trim().toUpperCase(), phone:$('#sP').value.trim(), contact:$('#sC').value.trim(), supplies:$('#sS').value.trim(), addr:$('#sA').value.trim(), note:$('#sO').value.trim(), creditDays:num($('#sD').value) || ''};
   if (await put('suppliers', nid, d)){ toast(id ? 'Proveedor actualizado' : 'Proveedor añadido'); showSupplier(nid); }
 }
 function showSupplier(id){
@@ -1985,11 +2282,12 @@ function showSupplier(id){
   const b = sBalance(id);
   const mv = Object.entries(S.pmovs).filter(([, m]) => m.supplierId === id).map(([mid, m]) => ({mid, ...m})).sort((p, q) => q.ts - p.ts);
   const prods = products().filter(p => p.supplierId === id);
-  const low = prods.filter(p => p.track !== false && stockState(p) !== 'ok');
+  const low = restockList().filter(p => p.supplierId === id); const nd = supDues().find(d => d.sid === id);
   const bought = r2(Object.values(S.purchases).filter(p => p.supplierId === id).reduce((a, p) => a + num(p.total), 0));
   openSheet(`<div class="row between"><h2 style="margin:0">${esc(x.name)}</h2><button class="btn sm sec" onclick="editSupplier('${id}')">Editar</button></div>
   <div class="sub">${esc([x.rif, x.phone, x.contact].filter(Boolean).join(' · '))}</div>${x.supplies ? `<div class="sub">${esc(x.supplies)}</div>` : ''}${x.note ? `<div class="sub">${esc(x.note)}</div>` : ''}
   <div class="total" style="margin-top:12px;background:var(--pay-bg);border-color:var(--pay-line)"><div class="sub" style="color:var(--pay-mut);font-size:12px;font-weight:600">${b >= 0 ? 'LE DEBES' : 'SALDO A TU FAVOR'}</div><div class="v">${usd(Math.abs(b))}</div><div class="s" style="color:var(--pay-mut)">${conv(Math.abs(b))} · comprado en total ${usd(bought)}</div></div>
+  ${nd ? `<p class="note" style="margin:8px 0 0">Próximo pago: <b>${usd(nd.amount)}</b> · ${whenTxt(dueIn(nd.due))} (${fmtDate(nd.due)})</p>` : ''}
   <div class="gap" style="margin-top:12px"><button class="btn" style="flex:1" onclick="purchaseForm('${id}')">Registrar compra</button><button class="btn sec" style="flex:1" onclick="supPayForm('${id}')">Registrar pago</button></div>
   <a class="btn wa full" style="margin-top:8px" href="${waLink(x.phone, orderMsg(id))}" target="_blank" rel="noopener">Hacer pedido por WhatsApp${low.length ? ' (' + low.length + ' por reponer)' : ''}</a>
   <h3>Sus productos (${prods.length})</h3>
@@ -2000,8 +2298,8 @@ function showSupplier(id){
   <div class="sheet-actions"><button class="btn bad" onclick="delSupplier('${id}')">Eliminar</button><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
 function orderMsg(sid){
-  const x = S.suppliers[sid]; const low = products().filter(p => p.supplierId === sid && p.track !== false && stockState(p) !== 'ok');
-  return `Hola${x.contact ? ' ' + x.contact : ''}, te escribe ${cfg.name}. ${low.length ? 'Quisiera hacer un pedido:\n' + low.map(p => `• ${p.name}${p.brand ? ' (' + p.brand + ')' : ''}${p.code ? ' [' + p.code + ']' : ''}`).join('\n') + '\n\n¿Me confirmas disponibilidad y precio? Gracias.' : 'Quisiera hacer un pedido: '}`;
+  const x = S.suppliers[sid]; const low = restockList().filter(p => p.supplierId === sid);
+  return `Hola${x.contact ? ' ' + x.contact : ''}, te escribe ${cfg.name}. ${low.length ? 'Quisiera hacer un pedido:\n' + low.map(p => `• ${SM().suggest && suggestQty(p) ? nfq.format(suggestQty(p)) + ' ' + unitLbl(p.unit) + ' de ' : ''}${p.name}${p.brand ? ' (' + p.brand + ')' : ''}${p.code ? ' [' + p.code + ']' : ''}`).join('\n') + '\n\n¿Me confirmas disponibilidad y precio? Gracias.' : 'Quisiera hacer un pedido: '}`;
 }
 function supPayForm(sid){
   const x = S.suppliers[sid], b = sBalance(sid);
@@ -2032,18 +2330,21 @@ function delSupplier(id){
 let purch = null;
 function purchaseForm(sid){
   purch = {sid, lines:[], q:''};
-  products().filter(p => p.supplierId === sid && p.track !== false && stockState(p) !== 'ok').forEach(p => purch.lines.push({pid:p.id, qty:'', cost:costUsdOf(p)}));
+  restockList().filter(p => p.supplierId === sid).forEach(p => { const q = SM().suggest ? suggestQty(p) : 0; purch.lines.push({pid:p.id, qty:q ? String(q).replace('.', ',') : '', cost:costUsdOf(p)}); });
+  const cd = num(S.suppliers[sid].creditDays) || 15;
   openSheet(`<h2>Compra a ${esc(S.suppliers[sid].name)}</h2>
   <p class="note" style="margin-top:0">Añade lo que te llegó. El stock se suma solo y se actualiza el costo de cada producto.</p>
   <div class="search" style="margin:10px 0 6px"><input id="pcQ" placeholder="Buscar producto o escanear código…" oninput="purch.q=this.value;renderPurchRes()" onkeydown="if(event.key==='Enter'){const p=findByCode(this.value);if(p){purchAdd(p.id);this.value='';purch.q='';renderPurchRes()}}"></div>
   <div class="list" id="pcRes"></div>
   <div id="pcLines" style="margin-top:10px"></div>
-  <div class="grid2"><div><label>Nº de factura del proveedor</label><input id="pcRef" placeholder="Opcional"></div><div><label>Fecha</label><input id="pcD" type="date" value="${todayISO()}"></div></div>
-  <label>Pago</label><select id="pcPay" onchange="$('#pcMw').style.display=this.value==='credito'?'none':'block'"><option value="credito">A crédito (queda como deuda con el proveedor)</option><option value="contado">De contado (pagado ya)</option></select>
+  <div class="grid2"><div><label>Nº de factura del proveedor</label><input id="pcRef" placeholder="Opcional"></div><div><label>Fecha</label><input id="pcD" type="date" value="${todayISO()}" onchange="$('#pcV').value=isoPlus(this.value, ${cd})"></div></div>
+  <label>Pago</label><select id="pcPay" onchange="$('#pcMw').style.display=this.value==='credito'?'none':'block';$('#pcVw').style.display=this.value==='credito'?'block':'none'"><option value="credito">A crédito (queda como deuda con el proveedor)</option><option value="contado">De contado (pagado ya)</option></select>
+  <div id="pcVw"><label>Fecha de pago (te lo recordamos 3 días antes)</label><input id="pcV" type="date" value="${isoPlus(todayISO(), cd)}"></div>
   <div id="pcMw" style="display:none"><label>Cómo pagaste</label><select id="pcM">${Object.values(PAY_OUT).map(v => `<option>${v}</option>`).join('')}</select></div>
   <div class="sheet-actions"><button class="btn sec" onclick="showSupplier('${sid}')">Cancelar</button><button class="btn" onclick="savePurchase()">Guardar compra</button></div>`);
   renderPurchRes(); renderPurchLines();
 }
+function isoPlus(iso, d){ const t = new Date((iso || todayISO()) + 'T12:00'); t.setDate(t.getDate() + d); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
 const costUsdOf = p => { const c = toUsd(p.cost, curOf(p)); return isFinite(c) && c > 0 ? r2(c) : ''; };
 function renderPurchRes(){
   const q = (purch.q || '').trim().toLowerCase();
@@ -2073,7 +2374,9 @@ async function savePurchase(){
   const sid = purch.sid, ts = dateToTs($('#pcD').value), id = uid(), ref = $('#pcRef').value.trim(), pay = $('#pcPay').value;
   const items = L.map(l => ({pid:l.pid, name:S.products[l.pid].name, qty:r3(num(l.qty)), cost:r2(num(l.cost))}));
   const total = r2(items.reduce((a, i) => a + i.qty * i.cost, 0));
-  if (!(await put('purchases', id, {supplierId:sid, ts, items, total, ref, pay, rate:cfg.bcv || 0, user:me ? me.name : ''}))) return;
+  const due = pay === 'credito' && $('#pcV').value ? dateToTs($('#pcV').value) : 0;
+  if (!(await put('purchases', id, {supplierId:sid, ts, items, total, ref, pay, due, rate:cfg.bcv || 0, user:me ? me.name : ''}))) return;
+  if (due){ const cd = Math.round((due - ts) / 864e5); if (cd > 0 && S.suppliers[sid] && num(S.suppliers[sid].creditDays) !== cd) await put('suppliers', sid, {...S.suppliers[sid], creditDays:cd}); }
   for (const i of items){
     const p = {...S.products[i.pid]}; p.stock = r3(num(p.stock) + i.qty);
     if (i.cost > 0){ if (curOf(p) === 'eur'){ if (cfg.eur && cfg.bcv) p.cost = r2(i.cost * cfg.bcv / cfg.eur); } else p.cost = i.cost; }
@@ -2081,7 +2384,7 @@ async function savePurchase(){
     p.updated = Date.now(); await put('products', i.pid, p);
   }
   const note = (ref ? 'Fact. ' + ref + ' · ' : '') + items.length + ' producto' + (items.length === 1 ? '' : 's');
-  await put('pmovs', uid(), {supplierId:sid, type:'compra', amount:total, ts, note, purchaseId:id, rate:cfg.bcv || 0});
+  await put('pmovs', uid(), {supplierId:sid, type:'compra', amount:total, ts, note, purchaseId:id, due, rate:cfg.bcv || 0});
   if (pay === 'contado') await put('pmovs', uid(), {supplierId:sid, type:'pago', amount:total, ts:ts + 1, note:'Pago de contado', paidIn:$('#pcM').value, purchaseId:id, rate:cfg.bcv || 0});
   logA('compras', 'Compra a proveedor', (S.suppliers[sid] || {}).name + ' · ' + usd(total) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (pay === 'contado' ? ' · de contado' : ' · a crédito'));
   toast('Compra registrada · stock actualizado'); showSupplier(sid);
@@ -2103,7 +2406,7 @@ function voidPurchase(id){
 
 /* ---- Gastos ---- */
 function expenseForm(id){
-  const e = id ? S.expenses[id] : null;
+  const e = id ? S.expenses[id] : null; ui.billPay = null;
   openSheet(`<h2>${e ? 'Editar gasto' : 'Registrar gasto'}</h2>
   <label>Categoría</label><select id="exC">${EXP_CATS.map(c => `<option ${e && e.cat === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
   <label>Descripción</label><input id="exN" value="${esc(e ? e.note : '')}" placeholder="Ej: alquiler de noviembre" ${e ? '' : 'autofocus'}>
@@ -2116,7 +2419,7 @@ async function saveExpense(id){
   const cur = $('#exCur').value, raw = num($('#exA').value), a = r2(amtToUsd(raw, cur));
   if (!(a > 0)){ toast('Pon el monto'); return; }
   const d = {cat:$('#exC').value, note:$('#exN').value.trim(), amount:a, raw, cur, ts:dateToTs($('#exD').value), paidIn:$('#exM').value, m:LABEL_TO_M()[$('#exM').value] || '', rate:cfg.bcv || 0, user:me ? me.name : ''};
-  closeSheet(); if (await put('expenses', id || uid(), d)){ logA('compras', id ? 'Gasto modificado' : 'Gasto', d.cat + (d.note ? ' · ' + d.note : '') + ' · ' + usd(a)); toast('Gasto guardado'); }
+  closeSheet(); if (await put('expenses', id || uid(), d)){ logA('compras', id ? 'Gasto modificado' : 'Gasto', d.cat + (d.note ? ' · ' + d.note : '') + ' · ' + usd(a)); toast('Gasto guardado'); if (!id && ui.billPay){ const bp = ui.billPay; ui.billPay = null; await putCfg({bills:(cfg.bills || []).map((b, j) => j === bp.i ? {...b, paid:bp.key} : b)}); } }
 }
 function delExpense(id){ ask('¿Borrar gasto?', 'Se quitará de los reportes y del dashboard.', 'Borrar', async () => { await del('expenses', id); toast('Gasto borrado'); }); }
 function fillExpenses(){
@@ -2177,7 +2480,7 @@ VIEWS.panel = {
     if (S.users[me.u] && S.users[me.u].def) al += `<div class="warnbox">Estás usando la contraseña inicial (admin/admin). <a href="#" onclick="passForm('${me.u}');return false">Cámbiala ahora →</a></div>`;
     if (ratesStale()) al += `<div class="warnbox">La tasa lleva más de un día sin actualizarse. <a href="#" onclick="go('tasas');return false">Ver tasas →</a></div>`;
     if (backend === 'local') al += `<div class="warnbox">${LOCAL_TXT()}</div>`;
-    al += trialBox() + expBox();
+    al += trialBox() + expBox() + smartBox();
     $('#dAlerts').innerHTML = al;
     const tile = (k, v, s, cls = '', click = '') => `<div class="card stat" ${click ? `style="cursor:pointer" onclick="${click}"` : ''}><div class="k">${k}</div><div class="v ${cls}" style="font-size:20px">${v}</div><div class="s">${s}</div></div>`;
     const debt = totalDebt(), pay = totalPayable(), low = products().filter(p => p.track !== false && stockState(p) !== 'ok').length;
@@ -2284,7 +2587,7 @@ async function saveCloseCash(id){
   const c = S.cash[id]; if (!c) return;
   const sm = cashSummary({...c, closedAt:Date.now()}), counted = readCur('cc');
   const diff = {usd:r2(counted.usd - sm.exp.usd), bs:r2(counted.bs - sm.exp.bs), eur:r2(counted.eur - sm.exp.eur)};
-  if (await put('cash', id, {...c, status:'closed', closedAt:Date.now(), closedBy:me ? me.name : '', expected:sm.exp, counted, diff, other:sm.other, sales:sm.sales, note:$('#ccN').value.trim()})){ const dd = ['usd', 'bs', 'eur'].filter(k => Math.abs(diff[k]) >= 0.01).map(k => (diff[k] > 0 ? 'sobran ' : 'faltan ') + fmtCur(Math.abs(diff[k]), k)); logA('caja', 'Caja cerrada', (sm.sales ? sm.sales.n + ' ventas · ' + usd(sm.sales.usd) + ' · ' : '') + (dd.length ? dd.join(', ') : 'cuadró')); closeSheet(); toast('Caja cerrada'); render(); }
+  if (await put('cash', id, {...c, status:'closed', closedAt:Date.now(), closedBy:me ? me.name : '', expected:sm.exp, counted, diff, other:sm.other, sales:sm.sales, note:$('#ccN').value.trim()})){ const dd = ['usd', 'bs', 'eur'].filter(k => Math.abs(diff[k]) >= 0.01).map(k => (diff[k] > 0 ? 'sobran ' : 'faltan ') + fmtCur(Math.abs(diff[k]), k)); logA('caja', 'Caja cerrada', (sm.sales ? sm.sales.n + ' ventas · ' + usd(sm.sales.usd) + ' · ' : '') + (dd.length ? dd.join(', ') : 'cuadró')); render(); cashDoneSheet(id); }
 }
 function fillCashView(){
   const c = openCash();

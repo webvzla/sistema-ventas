@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de margen de ganancia y recargo para comercios · StockSoft</title>
+<meta name="description" content="Calcula cuánto ganas por producto: ganancia, margen sobre la venta y recargo sobre el costo, en dólares y bolívares con la tasa del BCV. Gratis.">
+<link rel="canonical" href="https://stocksoft.web.app/herramientas/margen-ganancia/">
+<meta property="og:title" content="Calculadora de margen de ganancia · StockSoft">
+<meta property="og:description" content="Ganancia, margen sobre la venta y recargo sobre el costo.">
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/herramientas/">Herramientas</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/herramientas/">Herramientas</a> › Margen de ganancia</div>
+    <h1>Calculadora de <em>margen de ganancia</em></h1>
+    <p class="lead">Pon lo que te cuesta un producto y a cuánto lo vendes. Te decimos cuánto ganas y qué porcentaje representa.</p>
+  </section>
+
+  <div class="layout">
+    <div>
+      <div class="tool">
+        <div class="row">
+          <div><label for="cost">Costo ($)</label><input id="cost" inputmode="decimal" placeholder="Ej: 10" autocomplete="off"></div>
+          <div><label for="sale">Precio de venta ($)</label><input id="sale" inputmode="decimal" placeholder="Ej: 14" autocomplete="off"></div>
+        </div>
+        <div class="row">
+          <div><label for="qty">Unidades vendidas al mes (opcional)</label><input id="qty" inputmode="decimal" placeholder="Ej: 120" autocomplete="off"></div>
+          <div></div>
+        </div>
+        <div class="result"><div class="k">Ganancia por unidad</div><div class="v" id="gv">—</div><div class="s" id="gs"></div></div>
+        <div class="lines" id="det"></div>
+        <div class="rate" data-rate>Cargando la tasa del BCV…</div>
+      </div>
+      <div class="ad" data-slot=""></div>
+      <section class="info">
+        <h2>Margen y recargo no son lo mismo</h2>
+        <p><b>Margen sobre la venta</b> = ganancia ÷ precio de venta. Te dice qué parte de cada venta es ganancia.<br><b>Recargo sobre el costo</b> = ganancia ÷ costo. Es el porcentaje que le sumas al costo para fijar el precio.</p>
+        <p>Ejemplo: cuesta 10 $ y lo vendes a 14 $. Ganas 4 $: un <b>28,57 % de margen</b> y un <b>40 % de recargo</b>.</p>
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq">
+          <details><summary>¿Qué margen es bueno?</summary><p>Depende del rubro: en víveres de alta rotación suelen ser márgenes bajos, y en ferretería, ropa o accesorios, más altos. Lo importante es que cubra tus gastos fijos (alquiler, sueldos, servicios) y deje ganancia.</p></details>
+          <details><summary>¿Cómo veo la ganancia real de mi negocio?</summary><p><a href="/">StockSoft</a> calcula la ganancia de cada venta con el costo de cada producto y te muestra ingresos, costos, gastos y ganancia neta por día, mes o año.</p></details>
+        </div>
+      </section>
+    </div>
+    <aside class="side">
+      <div class="promo"><b>Tu ganancia real, cada día</b><p>StockSoft te muestra ingresos, costos, gastos y ganancia neta con gráficos.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/herramientas/">Todas las herramientas</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+<script>
+function calc(){
+  const c = num($('#cost').value), s = num($('#sale').value), q = num($('#qty').value);
+  if (!(c > 0 && s > 0)){ $('#gv').textContent = '—'; $('#gs').textContent = 'Escribe el costo y el precio'; $('#det').innerHTML = ''; return; }
+  const g = s - c, fx = RATE && RATE.usd;
+  $('#gv').textContent = usd(g); $('#gs').textContent = fx ? bs(g * fx) : '';
+  $('#det').innerHTML = `<div><span>Margen sobre la venta</span><b>${nf2.format(g / s * 100)} %</b></div><div><span>Recargo sobre el costo</span><b>${nf2.format(g / c * 100)} %</b></div>${q > 0 ? `<div><span>Ganancia al mes (${nf2.format(q)} und)</span><b>${usd(g * q)}${fx ? ' · ' + bs(g * q * fx) : ''}</b></div>` : ''}${g < 0 ? '<div><span style="color:#ff8a8a">Ojo: estás vendiendo por debajo del costo</span><b></b></div>' : ''}`;
+}
+['cost', 'sale', 'qty'].forEach(id => $('#' + id).addEventListener('input', calc));
+loadRate().then(calc); calc();
+</script>
+</body>
+</html>

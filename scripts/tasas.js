@@ -1,5 +1,5 @@
 // Consulta la tasa oficial del BCV (dólar y euro) y la guarda en web/tasas.json.
-// Lo ejecuta GitHub Actions cada 2 horas; la app la lee desde ahí.
+// Lo ejecuta GitHub Actions cada 30 minutos; la app la lee desde ahí.
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
@@ -22,7 +22,7 @@ function textoFecha(iso) { const d = new Date(iso + 'T12:00:00Z'); return DIAS[d
 async function desdeBCV() {
   let html;
   try { html = await get('https://www.bcv.org.ve/', false); } catch (e) { html = await get('https://www.bcv.org.ve/', true); }
-  const grab = id => { const m = html.match(new RegExp('id="' + id + '"[\\s\\S]{0,1500}?<strong>\\s*([\\d.,]+)\\s*</strong>', 'i')); return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : null; };
+  const grab = id => { const m = html.match(new RegExp('id="' + id + '"[\\s\\S]{0,1500}?<strong[^>]*>\\s*([\\d.,]+)\\s*</strong>', 'i')); return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : null; };
   const iso = (html.match(/Fecha Valor:[\s\S]{0,400}?content="(\d{4}-\d{2}-\d{2})/i) || [])[1] || null;
   const usd = grab('dolar'), eur = grab('euro');
   if (!usd) throw new Error('No se encontró la tasa en bcv.org.ve');
@@ -44,7 +44,15 @@ async function desdeDolarApi() {
     try { r = await f(); console.log('✓', r.src, r.usd, r.eur, r.dateISO); break; } catch (e) { console.warn('✗', f.name, e.message); }
   }
   if (!r) { console.error('No se pudo obtener la tasa de ninguna fuente'); process.exit(0); }
-  if (prev && prev.usd && Math.abs(r.usd - prev.usd) / prev.usd > 0.15) { console.error('Cambio mayor al 15 %, no se guarda', prev.usd, '→', r.usd); process.exit(0); }
+  // Un salto grande se confirma con la otra fuente (antes se bloqueaba para siempre y la tasa se quedaba congelada).
+  if (prev && prev.usd && Math.abs(r.usd - prev.usd) / prev.usd > 0.15) {
+    let ok = false;
+    for (const f of [desdeBCV, desdeDolarApi]) {
+      if ((f === desdeBCV) === (r.src === 'bcv.org.ve')) continue;
+      try { const o = await f(); ok = Math.abs(o.usd - r.usd) / r.usd < 0.02; console.log('Confirmación con', o.src, o.usd, ok ? '✓' : '✗'); } catch (e) { console.warn('Sin confirmación:', e.message); }
+    }
+    if (!ok) { console.error('Cambio mayor al 15 % sin confirmar, no se guarda', prev.usd, '→', r.usd); process.exit(0); }
+  }
   if (prev && prev.dateISO && r.dateISO && r.dateISO < prev.dateISO) { console.log('La fuente tiene una fecha más antigua (' + r.dateISO + ') que la guardada (' + prev.dateISO + '); no se cambia'); process.exit(0); }
   if (!r.eur && prev && prev.eur) r.eur = prev.eur;
   const out = { usd: r.usd, eur: r.eur, dateISO: r.dateISO, dateText: r.dateISO ? textoFecha(r.dateISO) : '', src: r.src };

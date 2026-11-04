@@ -1,0 +1,94 @@
+/* Herramientas gratuitas de StockSoft · © 2026 StockSoft. Todos los derechos reservados. */
+:root{
+  --bg:#060d1d;--bg2:#081327;--card:#0c1730;--card2:#11203f;--line:#1b2c52;--line2:#284073;
+  --ink:#edf3ff;--mut:#8ea0c4;--faint:#5d6f96;--acc:#2f8cf0;--acc2:#3cc8f2;--blue:#1d5fd6;--org:#ff8a1f;--org2:#ffb347;--ok:#3ddc97;
+  --gold1:#f6ead0;--gold2:#e6cf9a;
+  --brandf:'Montserrat',system-ui,sans-serif;--font:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{font-family:var(--font);color:var(--ink);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  background:radial-gradient(55% 40% at 85% 0%,rgba(60,200,242,.14),transparent 70%),repeating-linear-gradient(30deg,rgba(47,140,240,.045) 0 1px,transparent 1px 40px),repeating-linear-gradient(150deg,rgba(47,140,240,.045) 0 1px,transparent 1px 40px),var(--bg)}
+a{color:var(--acc2)}
+img{max-width:100%;display:block}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+/* Cabecera */
+.top{position:sticky;top:0;z-index:10;background:rgba(6,13,29,.85);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.top::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--org));opacity:.85}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;height:62px;gap:14px}
+.brand{display:flex;align-items:center;gap:9px;font:800 17px var(--brandf);letter-spacing:.03em;text-decoration:none;color:var(--ink);white-space:nowrap}
+.brand img{width:30px;height:30px;border-radius:8px}
+.brand b{font-weight:800}.brand b span{color:var(--acc2);font-weight:700}
+.nav{display:flex;gap:18px;align-items:center;font-size:14px}
+.nav a{color:var(--mut);text-decoration:none}
+.nav a:hover{color:var(--ink)}
+.nav a.btn,.nav a.btn:hover{color:#1a1408}
+@media (max-width:640px){.nav a.hide-m{display:none}}
+/* Botones (píldora dorada como en StockSoft) */
+.btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 15px var(--font);text-decoration:none;border-radius:999px;padding:11px 20px;border:1px solid rgba(255,255,255,.35);cursor:pointer;color:#1a1408;background:linear-gradient(180deg,var(--gold1),var(--gold2));box-shadow:0 12px 28px -14px rgba(230,207,154,.6),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .2s,box-shadow .3s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 18px 36px -14px rgba(230,207,154,.85)}
+.btn.sec{background:var(--card2);color:var(--ink);border-color:var(--line2);box-shadow:none}
+.btn.sec:hover{border-color:var(--acc2)}
+.btn.sm{padding:7px 14px;font-size:13.5px}
+/* Títulos */
+.hero{padding:40px 0 18px}
+.crumb{font-size:13px;color:var(--faint);margin-bottom:10px}.crumb a{color:var(--mut)}
+h1{font:800 clamp(28px,4.4vw,42px)/1.12 var(--brandf);letter-spacing:-.02em}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--mut);font-size:17px;margin-top:10px;max-width:62ch}
+h2{font:800 22px/1.25 var(--brandf);margin:30px 0 10px}
+h3{font:700 16px var(--brandf);margin:18px 0 6px}
+p+p{margin-top:10px}
+.mut{color:var(--mut)}
+/* Herramienta */
+.layout{display:grid;grid-template-columns:1fr 300px;gap:22px;align-items:start;margin-top:18px}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.tool{position:relative;background:var(--card);border:1px solid var(--line2);border-radius:20px;padding:22px;box-shadow:0 30px 60px -36px #000;overflow:hidden}
+.tool::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--org))}
+label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 0 6px}
+input,select{width:100%;background:#081227;border:1px solid var(--line2);color:var(--ink);border-radius:12px;padding:12px 14px;font:600 18px var(--font);outline:none;font-variant-numeric:tabular-nums}
+input:focus,select:focus{border-color:var(--acc2);box-shadow:0 0 0 4px rgba(60,200,242,.16)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.row{grid-template-columns:1fr}}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.seg button{background:var(--bg2);border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:8px 13px;font:600 14px var(--font);cursor:pointer}
+.seg button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;border-color:transparent}
+.result{position:relative;margin-top:18px;border-radius:16px;padding:18px;background:linear-gradient(135deg,var(--blue),var(--acc) 55%,var(--acc2));box-shadow:0 20px 40px -22px rgba(47,140,240,.9)}
+.result .k{font-size:12.5px;font-weight:700;letter-spacing:.04em;color:rgba(255,255,255,.82);text-transform:uppercase}
+.result .v{font:800 clamp(28px,6vw,38px)/1.1 var(--brandf);color:#fff;font-variant-numeric:tabular-nums;margin-top:4px;word-break:break-word}
+.result .s{color:rgba(255,255,255,.85);font-size:14px;margin-top:4px}
+.lines{margin-top:14px;border-top:1px solid var(--line)}
+.lines div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.lines span{color:var(--mut)}
+.lines b{font-family:var(--brandf)}
+.rate{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;color:var(--mut);margin-top:12px}
+.rate b{color:var(--org2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(61,220,151,.2)}
+.copy{margin-top:12px}
+/* Tarjeta para conocer StockSoft */
+.promo{background:var(--card);border:1px solid var(--line2);border-radius:18px;padding:18px}
+.promo b{font-family:var(--brandf);font-size:17px;display:block;margin-bottom:6px}
+.promo p{color:var(--mut);font-size:14.5px}
+.promo .btn{margin-top:12px;width:100%}
+/* Espacios de anuncios (Google AdSense) */
+.ad{margin:22px 0;min-height:0;text-align:center}
+.ad.preview{min-height:110px;border:1.5px dashed var(--line2);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:13px}
+.side{display:flex;flex-direction:column;gap:16px;position:sticky;top:80px}
+/* Lista de herramientas */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-top:20px}
+.card{display:block;text-decoration:none;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;transition:border-color .2s,transform .2s}
+.card:hover{border-color:var(--acc2);transform:translateY(-3px)}
+.card .ico{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--blue),var(--acc2));font-size:20px;margin-bottom:12px}
+.card:nth-child(even) .ico{background:linear-gradient(135deg,var(--org),var(--org2))}
+.card b{font-family:var(--brandf);font-size:17px}
+.card p{color:var(--mut);font-size:14.5px;margin-top:4px}
+/* Texto explicativo */
+.info{margin-top:30px;max-width:760px}
+.info li{color:var(--mut);margin:4px 0 4px 20px}
+.faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin-top:10px}
+.faq summary{cursor:pointer;font-weight:700}
+.faq p{color:var(--mut);margin-top:8px}
+footer{margin-top:50px;border-top:1px solid var(--line);padding:26px 0;color:var(--faint);font-size:13.5px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between}
+footer a{color:var(--mut)}
+@media print{.top,.side,.ad,footer,.info,.hero .lead,.noprint{display:none!important}body{background:#fff;color:#000}.tool{box-shadow:none;border:0}}

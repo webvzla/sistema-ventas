@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generador de códigos de barras gratis (EAN-13 y Code 128) · StockSoft</title>
+<meta name="description" content="Crea códigos de barras EAN-13 o Code 128 gratis para tus productos, descárgalos en PNG o imprímelos. Ideal para comercios y bodegas.">
+<link rel="canonical" href="https://stocksoft.web.app/herramientas/codigo-de-barras/">
+<meta property="og:title" content="Generador de códigos de barras gratis · StockSoft">
+<meta property="og:description" content="EAN-13 o Code 128, descarga en PNG o imprime.">
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+<style>.bc{background:#fff;border-radius:14px;padding:16px;margin-top:18px;text-align:center}.bc svg{max-width:100%;height:auto}.err{color:#ff9a9a;font-size:14px;margin-top:8px;min-height:20px}</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/herramientas/">Herramientas</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/herramientas/">Herramientas</a> › Códigos de barras</div>
+    <h1>Generador de <em>códigos de barras</em></h1>
+    <p class="lead">Crea el código de barras de tus productos, descárgalo como imagen o imprímelo para pegarlo. Funciona con cualquier lector de códigos.</p>
+  </section>
+
+  <div class="layout">
+    <div>
+      <div class="tool">
+        <div class="row">
+          <div><label for="code">Código</label><input id="code" inputmode="numeric" placeholder="Ej: 7591234567890" autocomplete="off"></div>
+          <div><label for="fmt">Tipo</label><select id="fmt"><option value="EAN13">EAN-13 (13 números, el de los supermercados)</option><option value="CODE128">Code 128 (letras y números)</option></select></div>
+        </div>
+        <label for="name">Texto debajo (opcional)</label><input id="name" placeholder="Ej: Harina de maíz 1 kg" autocomplete="off" style="font-size:16px;font-weight:500">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px" class="noprint"><button class="btn sec sm" id="rnd" type="button">Generar código nuevo</button><button class="btn sm" id="dl" type="button">Descargar PNG</button><button class="btn sec sm" id="pr" type="button">Imprimir</button></div>
+        <div class="err" id="err"></div>
+        <div class="bc"><svg id="bc"></svg><div id="lbl" style="color:#111;font:600 15px Inter,sans-serif;margin-top:4px"></div></div>
+      </div>
+      <div class="ad" data-slot=""></div>
+      <section class="info">
+        <h2>¿Qué tipo de código uso?</h2>
+        <p><b>EAN-13</b> es el estándar de los productos de supermercado: 12 números más un dígito de control que se calcula solo. <b>Code 128</b> admite letras y números y es útil para códigos internos de tu tienda.</p>
+        <p class="mut">Los códigos que generes aquí sirven para tu inventario interno. Para vender productos con código propio en cadenas de supermercados necesitas códigos asignados por GS1 Venezuela.</p>
+        <h2>Preguntas frecuentes</h2>
+        <div class="faq">
+          <details><summary>¿Funciona con mi lector de códigos?</summary><p>Sí. Cualquier lector USB, Bluetooth o la cámara del móvil leen EAN-13 y Code 128.</p></details>
+          <details><summary>¿Puedo hacer etiquetas para todo mi inventario?</summary><p><a href="/">StockSoft</a> crea e imprime etiquetas en hoja A4 o en impresora térmica para todos tus productos a la vez, con el precio en $ y Bs.</p></details>
+        </div>
+      </section>
+    </div>
+    <aside class="side">
+      <div class="promo"><b>Etiquetas para todo tu inventario</b><p>StockSoft genera los códigos, imprime las etiquetas y vende escaneando con el móvil o un lector.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer class="noprint"><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/herramientas/">Todas las herramientas</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+<script src="/app/vendor/JsBarcode.all.min.js"></script>
+<script>
+const ean = d12 => { let s = 0; for (let i = 0; i < 12; i++) s += (+d12[i]) * (i % 2 ? 3 : 1); return d12 + ((10 - s % 10) % 10); };
+function draw(){
+  let c = $('#code').value.trim(), f = $('#fmt').value; $('#err').textContent = '';
+  $('#lbl').textContent = $('#name').value.trim();
+  if (!c){ $('#bc').innerHTML = ''; return; }
+  if (f === 'EAN13'){
+    c = c.replace(/\D/g, '');
+    if (c.length === 12) c = ean(c);
+    if (c.length !== 13){ $('#err').textContent = 'El EAN-13 lleva 12 o 13 números (el último se calcula solo).'; $('#bc').innerHTML = ''; return; }
+    if (ean(c.slice(0, 12)) !== c){ $('#err').textContent = 'El último dígito no es correcto. Debería ser ' + ean(c.slice(0, 12)).slice(-1) + '.'; }
+  }
+  try { JsBarcode('#bc', c, {format:f, width:2.2, height:90, fontSize:20, margin:8, background:'#ffffff', lineColor:'#000000'}); }
+  catch(e){ $('#err').textContent = 'No se pudo crear el código con ese texto.'; $('#bc').innerHTML = ''; }
+}
+$('#rnd').addEventListener('click', () => { $('#fmt').value = 'EAN13'; let d = '20'; for (let i = 0; i < 10; i++) d += Math.floor(Math.random() * 10); $('#code').value = ean(d); draw(); });
+$('#dl').addEventListener('click', () => {
+  const svg = $('#bc'); if (!svg.innerHTML) return;
+  const xml = new XMLSerializer().serializeToString(svg), img = new Image(), lbl = $('#name').value.trim();
+  img.onload = () => { const s = 2, w = img.width * s, h = img.height * s + (lbl ? 44 : 0); const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, img.height * s); if (lbl){ x.fillStyle = '#111'; x.font = '600 26px Inter, Arial'; x.textAlign = 'center'; x.fillText(lbl, w / 2, h - 14); } const a = document.createElement('a'); a.download = 'codigo-' + ($('#code').value.trim() || 'barras') + '.png'; a.href = cv.toDataURL('image/png'); a.click(); };
+  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+});
+$('#pr').addEventListener('click', () => window.print());
+['code', 'name'].forEach(id => $('#' + id).addEventListener('input', draw)); $('#fmt').addEventListener('change', draw);
+$('#rnd').click();
+</script>
+</body>
+</html>
