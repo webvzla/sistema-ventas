@@ -12,6 +12,10 @@ on:
         description: 'Solo probar (no envía correos)'
         type: boolean
         default: true
+      test_to:
+        description: 'Enviar solo un correo de prueba a esta dirección'
+        required: false
+        default: ''
 
 concurrency:
   group: avisos
@@ -26,6 +30,7 @@ jobs:
       SMTP_PASS: ${{ secrets.SMTP_PASS }}
       SMTP_HOST: ${{ secrets.SMTP_HOST }}
       SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      TEST_TO: ${{ github.event.inputs.test_to }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,7 +46,7 @@ jobs:
         run: |
           mkdir -p /tmp/av && cd /tmp/av && npm init -y >/dev/null && npm install --no-audit --no-fund firebase-admin@12 nodemailer@6
           echo "NODE_PATH=/tmp/av/node_modules" >> $GITHUB_ENV
-      - if: steps.chk.outputs.ok == 'true' && github.event.inputs.dry != 'true'
+      - if: steps.chk.outputs.ok == 'true' && (github.event.inputs.dry != 'true' || github.event.inputs.test_to != '')
         run: node scripts/avisos.js
-      - if: steps.chk.outputs.ok == 'nomail' || github.event.inputs.dry == 'true'
+      - if: steps.chk.outputs.ok == 'nomail' || (github.event.inputs.dry == 'true' && github.event.inputs.test_to == '')
         run: node scripts/avisos.js --dry

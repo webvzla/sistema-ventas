@@ -67,6 +67,12 @@ async function send(to, subject, html){
 }
 
 async function run(){
+  // Prueba de conexión: envía un solo correo a la dirección indicada y termina (no toca ningún negocio).
+  const testTo = String(process.env.TEST_TO || '').trim();
+  if (testTo){
+    const ok = await send(testTo, '✅ Prueba de avisos de StockSoft', page('Los avisos por correo funcionan', 'StockSoft', '<p>Este es un correo de prueba. A partir de ahora, los negocios que activen "Mandármelo solo al correo" en Ajustes → Inventario inteligente recibirán aquí sus avisos: productos que se agotan, pedido sugerido de los lunes e informe del mes.</p>'));
+    if (!ok) process.exit(1); return;
+  }
   const bizs = await fs.collection('biz').get();
   let sent = 0;
   for (const bd of bizs.docs){
