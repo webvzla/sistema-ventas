@@ -1622,7 +1622,7 @@ async function checkout(){
     customer = {clientId:c.id, name:C.name, rif:C.rif, addr:C.addr || '', phone:C.phone || ''};
   } else if (fiscal) customer = {clientId:'', name:C.name, rif:C.rif, addr:'', phone:''};
   const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, disc:discUsd(), tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0,
-    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:'', customer, user:me ? me.u : '', userName:me ? me.name : ''};
+    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:fiscal ? nextInvNo() : '', customer, user:me ? me.u : '', userName:me ? me.name : ''};
   if (P.mode === 'mixto'){
     sale.payments = st.lines.map(l => ({m:l.m, usd:l.usd, raw:l.raw}));
     if (st.rest < -0.009) sale.change = {usd:r2(-st.rest), cur:P.changeCur || 'usd', raw:r2(toCur(-st.rest, P.changeCur || 'usd'))};
@@ -1670,8 +1670,8 @@ function showSale(id, justDone){
   <div class="card" style="margin-top:10px;padding:6px 14px"><div class="sub" style="font-weight:600">${isRet ? 'Reembolso' : 'Pagos'}</div>${pays.map(p => `<div class="mv"><span>${METHODS[p.m] || p.m}</span><b>${fmtCur(p.raw, p.cur)}${p.cur !== 'usd' ? ` <span class="sub">(${usd(p.usd)})</span>` : ''}</b></div>`).join('')}${s.change ? `<div class="mv"><span>Vuelto entregado</span><b>${fmtCur(s.change.raw, s.change.cur)}</b></div>` : ''}</div>
   ${s.rate ? `<p class="note">Total en bolívares (tasa de ese día): <b>${bs(num(s.total), s.rate)}</b></p>` : ''}
   ${rets.length ? `<p class="note" style="color:var(--warn)">Tiene ${rets.length} devolución(es): ${rets.map(([rid, r]) => `<a href="#" onclick="showSale('${rid}');return false">${usd(num(r.total))}</a>`).join(', ')}</p>` : ''}
-  ${fiscal ? `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">${s.fiscalNo ? 'Factura Nº ' + esc(s.fiscalNo) : 'Emite la factura en tu máquina fiscal'}</div>
-    <p class="note">${s.fiscalNo ? 'Puedes corregir el número si hace falta.' : 'Usa estos datos en la máquina fiscal y anota aquí el número de factura que imprime, para tenerlo registrado.'}</p>
+  ${fiscal ? `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">${s.fiscalNo ? 'Factura Nº ' + esc(s.fiscalNo) : 'Factura sin número'}</div>
+    <p class="note">${s.fiscalNo ? 'El número se puso solo. Si usas otro (el de tu máquina fiscal o talonario), cámbialo aquí; las siguientes facturas seguirán a partir del más alto.' : 'Escribe el número de la factura.'}</p>
     <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>
     <button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver factura</button>`
   : s.doc === 'nota' ? `<button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver nota de entrega</button>` : ''}
@@ -1774,6 +1774,16 @@ const showLogo = () => !!(cfg.logo && cfg.logoOn !== false);
 function imgSize(url){ return new Promise(r => { const i = new Image(); i.onload = () => r({w:i.width, h:i.height}); i.onerror = () => r(null); i.src = url; }); }
 const payCond = s => salePayments(s).some(p => p.m === 'fiado') ? 'Crédito' : 'Contado';
 
+/* ---- Numeración automática de facturas ----
+   Sigue al número más alto ya usado (o al "próximo número" que el administrador ponga en Ajustes).
+   No escribe en la configuración, así funciona igual para vendedores. Ej: 000053 → 000054. */
+function invNoParts(){
+  let max = 0, len = 6;
+  for (const x of Object.values(S.sales)) if (x.doc === 'fiscal' && x.fiscalNo){ const d = String(x.fiscalNo).replace(/\D/g, ''); if (d){ const n = parseInt(d, 10); if (n > max) max = n; len = Math.max(len, d.length); } }
+  const start = parseInt(String(cfg.invNext || '').replace(/\D/g, ''), 10) || 0;
+  return {n:Math.max(max + 1, start || 1), len:Math.max(len, String(cfg.invNext || '').replace(/\D/g, '').length || 0)};
+}
+function nextInvNo(){ const {n, len} = invNoParts(); return String(n).padStart(len, '0'); }
 /* ---- Vista previa de la factura / nota (antes de descargarla) ---- */
 function facturaHTML(s){
   const fiscal = s.doc === 'fiscal', rate = num(s.rate), inBs = rate > 0;
@@ -2370,6 +2380,8 @@ VIEWS.mas = {
           <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${cfg.logo ? 'Cambiar logo' : 'Subir logo'}<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this.files[0])"></label><button type="button" class="btn sm sec" id="logoDel" style="${cfg.logo ? '' : 'display:none'}" onclick="removeLogo()">Quitar</button></div></div>
         <label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="aLg" class="chk" ${cfg.logoOn !== false ? 'checked' : ''}> Mostrar el logo en facturas y notas de entrega</label>
         <p class="note">Nombre, RIF, dirección, teléfono, correo y logo salen arriba en todas tus facturas y notas. Se guardan aquí una sola vez.</p>
+        <label>Próximo número de factura</label><input id="aF" inputmode="numeric" value="${esc(nextInvNo())}" placeholder="000001">
+        <p class="note">Se pone solo en cada factura y va subiendo (000053 → 000054). Cámbialo si quieres empezar desde otro número, por ejemplo el siguiente de tu talonario.</p>
         <label>Documento por defecto al cobrar</label><select id="aDoc"><option value="fiscal" ${cfg.docDefault !== 'nota' ? 'selected' : ''}>Factura fiscal</option><option value="nota" ${cfg.docDefault === 'nota' ? 'selected' : ''}>Nota de entrega</option></select>
         <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="aI" class="chk" ${cfg.igtf ? 'checked' : ''}> Cobrar IGTF 3% en pagos en divisas (efectivo $, efectivo €, Zelle)</label>
         <p class="note">Actívalo si tu negocio está obligado a cobrar el IGTF (consúltalo con tu contador). Se suma al total y aparece desglosado.</p>
@@ -2404,7 +2416,7 @@ async function saveSmart(){
   if (await putCfg({smart})){ logA('admin', 'Ajustes modificados', 'Inventario inteligente'); toast('Inventario inteligente guardado'); }
 }
 async function saveSettings(){
-  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
+  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, invNext:($('#aF').value.trim() === nextInvNo() ? (cfg.invNext || '') : $('#aF').value.replace(/\D/g, '')), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
 }
 function fillReports(){
   const ranges = {hoy:'Hoy', '7':'7 días', '30':'30 días', mes:'Este mes'};
