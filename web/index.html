@@ -426,6 +426,8 @@ function renderNav(){
 }
 function go(v, s = ''){ if (ADMIN_ONLY.includes(v) && !isAdmin()) v = 'inicio'; if (v === 'inicio' && isAdmin()) v = 'panel'; if (v === 'tasas' && view !== 'tasas') setTimeout(() => autoRates(), 300); view = v; sub = s; shellFor = ''; window.scrollTo(0, 0); render(); }
 function render(){
+  // Durante una importación por lotes no se repinta la app en cada lote (con miles de productos congelaba la pantalla); se pinta una vez al final.
+  if (window.impHold){ window.impHoldPending = true; return; }
   if (!me){ if ($('#login').classList.contains('on')){ authScreen(); $('#lgBrand').innerHTML = esc(cfg.name || 'Mi Negocio'); $('#lgBtn').disabled = !loaded; if (loaded && $('#lgMsg').textContent === 'Cargando datos…') $('#lgMsg').textContent = ''; } return; }
   checkSession(); if (!me) return;
   $('#userChip').textContent = '👤 ' + (me.name === 'Administrador' ? 'Admin' : me.name.split(' ')[0]);
@@ -3029,11 +3031,32 @@ function fillQuotes(){
 }
 
 /* ============ Importar productos desde Excel / CSV ============ */
+/* Lector inteligente v2 (auditoría 24 nov 2026). Reglas: nunca borra datos que el archivo no trae,
+   no fusiona productos dudosos, no asume moneda ni IVA, guarda por lotes y permite deshacer. */
 let xlsxP = null;
 function loadXLSX(){ if (window.XLSX) return Promise.resolve(true); return xlsxP || (xlsxP = new Promise(res => { const s = document.createElement('script'); s.src = (window.LIBS && LIBS.xlsx) || 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = () => res(!!window.XLSX); s.onerror = () => { xlsxP = null; res(false); }; document.head.appendChild(s); })); }
-function parseNum(v){ let s = String(v ?? '').trim().replace(/[^\d.,-]/g, ''); if (!s) return NaN; if (s.includes('.') && s.includes(',')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''); else if (s.includes(',')) s = s.replace(',', '.'); return parseFloat(s); }
-function parseCSV(text){
-  const first = text.split(/\r?\n/)[0] || '', sep = (first.match(/;/g) || []).length >= (first.match(/,/g) || []).length ? ';' : ',';
+const IMP_MAX = 10000, IMP_CHUNK = 400, IMP_BIG = 3000, IMP_MB = 25;
+const impSleep = () => new Promise(r => setTimeout(r, 0));
+const normH = h => String(h ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const impR2 = n => !isFinite(n) ? n : Math.abs(n) < 1e-6 || Math.abs(n) >= 1e15 ? Math.round(n * 100) / 100 : Math.sign(n) * Number(Math.round(Number(Math.abs(n) + 'e2')) + 'e-2');
+// Clave de nombre: sin acentos/mayúsculas/puntos; une siglas (P.A.N. = PAN) y cantidades (1 kg = 1kg).
+const impNameKey = s => normH(s).replace(/\b(?:[a-z0-9] )+[a-z0-9]\b/g, m => m.replace(/ /g, '')).replace(/(\d) (kg|kgs|g|gr|grs|l|lt|lts|ml|cc|und|unid)\b/g, '$1$2');
+const impEq = (x, y) => JSON.stringify(x === undefined ? null : x) === JSON.stringify(y === undefined ? null : y);
+// Números escritos como texto. dec = separador decimal del archivo ('.' o ','), o '' si no se sabe (se asume el venezolano).
+function parseNum(v, dec){
+  if (typeof v === 'number') return isFinite(v) ? v : NaN;
+  let s = String(v ?? '').trim().replace(/[^\d.,-]/g, ''); if (!/\d/.test(s)) return NaN;
+  const hasD = s.includes('.'), hasC = s.includes(',');
+  if (hasD && hasC) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (hasC) s = (s.split(',').length > 2 || (dec === '.' && /^-?\d{1,3}(,\d{3})+$/.test(s))) ? s.replace(/,/g, '') : s.replace(',', '.');
+  else if (hasD && (s.split('.').length > 2 || (dec !== '.' && /^-?\d{1,3}(\.\d{3})+$/.test(s)))) s = s.replace(/\./g, '');
+  return parseFloat(s);
+}
+const impIsNum = v => typeof v === 'number' || (typeof v === 'string' && /^[\s$€]*-?[\d.,]+\s*(bs\.?|\$|€|%)?$/i.test(v.trim()) && /\d/.test(v));
+const impAmbig = v => typeof v === 'string' && /^\s*-?\d{1,3}[.,]\d{3}\s*$/.test(v);
+function impDetectDec(m){ let c = 0, d = 0; for (const r of m) for (const v of r || []){ if (typeof v !== 'string' || !impIsNum(v)) continue; const s = v.trim(); if (/\d,\d{1,2}(\D*)$/.test(s) || /\d\.\d{3},\d/.test(s)) c++; else if (/\d\.\d{1,2}(\D*)$/.test(s) || /\d,\d{3}\.\d/.test(s)) d++; } return c > d ? ',' : d > c ? '.' : ''; }
+/* --- CSV: detecta el separador (; , tabulador) y repara decimales con coma sin comillas --- */
+function impCSVParse(text, sep){
   const rows = []; let row = [], cur = '', q = false;
   for (let i = 0; i < text.length; i++){ const ch = text[i];
     if (q){ if (ch === '"'){ if (text[i + 1] === '"'){ cur += '"'; i++; } else q = false; } else cur += ch; }
@@ -3041,70 +3064,457 @@ function parseCSV(text){
   if (cur || row.length){ row.push(cur); rows.push(row); }
   return rows.filter(r => r.some(c => String(c).trim()));
 }
-const normH = h => String(h || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-const HMAP = [['name', /^(nombre|producto|descripcion|articulo|item)/], ['code', /(codigo|barra|barcode|sku|ean)/], ['cat', /^(categoria|rubro|departamento|grupo|familia)/], ['price', /^(precio|pvp|precio venta|venta)/], ['cur', /^(moneda|divisa)/], ['cost', /^(costo|coste|precio compra|compra)/], ['stock', /^(stock|existencia|cantidad|inventario|unidades)/], ['min', /(minimo|min)/], ['unit', /^(unidad|medida)/], ['brand', /^(marca|modelo)/], ['iva', /^(iva|impuesto)/]];
-function mapRows(rows){
-  const head = rows[0].map(normH), idx = {};
-  head.forEach((h, i) => { for (const [k, re] of HMAP) if (idx[k] == null && re.test(h)){ idx[k] = i; break; } });
-  if (idx.name == null || idx.price == null) return {error:'No encontré las columnas "Nombre" y "Precio". Usa la plantilla.'};
-  const out = [], errs = [];
-  rows.slice(1).forEach((r, n) => {
-    const g = k => idx[k] == null ? '' : String(r[idx[k]] ?? '').trim();
-    const name = g('name'), price = parseNum(g('price'));
-    if (!name){ return; } if (!(price > 0)){ errs.push('Fila ' + (n + 2) + ': ' + name + ' sin precio'); return; }
-    const ivaS = g('iva').toLowerCase(), iva = /ex/.test(ivaS) ? 0 : (parseNum(ivaS) === 8 ? 8 : (ivaS === '0' ? 0 : 16));
-    const cur = /eur|€/i.test(g('cur')) ? 'eur' : 'usd';
-    const unitS = normH(g('unit')), unit = ['kg', 'g', 'lt', 'paquete', 'caja'].find(u => unitS.startsWith(u.slice(0, 2))) || 'unidad';
-    out.push({name, code:g('code').replace(/\s+/g, '').replace(/\.0$/, ''), cat:g('cat'), price:r2(price), cur, cost:r2(parseNum(g('cost')) || 0), stock:r3(parseNum(g('stock')) || 0), min:g('min') === '' ? '' : r3(parseNum(g('min')) || 0), unit, brand:g('brand'), iva});
+function parseCSV(text){
+  text = String(text || '').replace(/^﻿/, '');
+  let best = null;
+  for (const sep of [';', ',', '\t']){ const rs = impCSVParse(text.slice(0, 200000), sep); if (!rs.length) continue; const n = rs[0].length, same = rs.filter(r => r.length === n).length / rs.length, sc = (n >= 2 ? 1 : 0) + same + Math.min(n, 20) / 100; if (!best || sc > best.sc) best = {sep, sc}; }
+  const sep = best ? best.sep : ';'; let rows = impCSVParse(text, sep), fixed = 0;
+  if (sep === ',' && rows.length){ const n = rows[0].length;
+    rows = rows.map((r, i) => { if (!i || r.length <= n) return r; r = r.slice(); let k;
+      while (r.length > n && (k = r.findIndex((c, j) => j + 1 < r.length && /^-?\d+$/.test(String(c).trim()) && /^\d{1,2}$/.test(String(r[j + 1]).trim()))) >= 0) r.splice(k, 2, String(r[k]).trim() + ',' + String(r[k + 1]).trim());
+      if (r.length === n) fixed++; return r; }); }
+  rows.sep = sep; rows.fixed = fixed; return rows;
+}
+/* --- Reconocer columnas --- */
+const IMP_F = [['name', 'Nombre del producto', 1], ['price', 'Precio de venta', 1], ['code', 'Código / barras'], ['cat', 'Categoría'], ['cost', 'Costo'], ['stock', 'Stock (existencia)'], ['min', 'Stock mínimo'], ['unit', 'Unidad'], ['brand', 'Marca'], ['iva', 'IVA'], ['exp', 'Fecha de vencimiento'], ['sup', 'Proveedor'], ['wPrice', 'Precio al mayor'], ['wQty', 'Cantidad para precio al mayor'], ['cur', 'Moneda']];
+const IMP_SKIP = /(valor|total|estado|status|margen|ganancia|utilidad|rentab|porcentaje|observ|nota|comentario|ubicacion|foto|imagen)/;
+const IMP_RULES = [['exp', /(venc|caduc|expir)/], ['wQty', /((cant|cantidad|minimo|desde).*mayor|mayor.*(cant|desde|minimo))/], ['wPrice', /(mayor|mayoreo|mayorista)/],
+  ['min', /(minimo|\bmin\b|reorden|punto de pedido|alerta)/], ['cost', /(costo|coste|compra)/], ['price', /(precio|pvp|\bp v p\b|\bventa\b|\bpv\b)/],
+  ['code', /(codigo|\bcod\b|barra|barcode|\bsku\b|\bean\b|\bupc\b|\bref\b|referencia)/], ['name', /(nombre|producto|descripcion|articulo|\bitem\b|detalle|mercancia)/],
+  ['stock', /(stock|existencia|cantidad|inventario|unidades|disponible|\bcant\b|\bqty\b)/], ['cat', /(categoria|rubro|departamento|grupo|familia|seccion|linea|\btipo\b)/],
+  ['unit', /(unidad|medida|presentacion|empaque|\bu m\b|\bum\b)/], ['brand', /(marca|fabricante)/], ['iva', /(iva|impuesto|exento|alicuota|\btax\b)/],
+  ['cur', /(moneda|divisa)/], ['sup', /(proveedor|suplidor|distribuidor)/]];
+function impCur(raw){ const r = String(raw ?? ''), h = normH(r); if (/\b(bs|ves|bsf|bsd|bss|bolivar|bolivares)\b/.test(h)) return 'bs'; if (/€|\beur\b|euro/i.test(r)) return 'eur'; if (/\$|\busd\b|dolar|dolares/i.test(r)) return 'usd'; return ''; }
+function impField(raw){ const h = normH(raw); if (!h || h.length > 60) return null; const money = /(precio|pvp|costo|coste|venta)/.test(h) && !/(total|subtotal)/.test(h); if (IMP_SKIP.test(h) && !money) return null; for (const [k, re] of IMP_RULES) if (re.test(h)) return k; return null; }
+function impScoreRow(row){ const seen = new Set(); let txt = 0; (row || []).forEach(c => { if (typeof c === 'string' && c.trim()) txt++; const f = impField(c); if (f) seen.add(f); }); return (seen.has('name') || seen.has('price')) && txt >= 2 ? seen.size : 0; }
+const impT = m => { const w = Math.max(0, ...m.map(r => (r || []).length)); return Array.from({length:w}, (_, j) => m.map(r => (r || [])[j] ?? '')); };
+function impVal(v){ if (v instanceof Date || typeof v === 'boolean') return v; return typeof v === 'number' ? v : String(v ?? '').trim(); }
+const impColName = j => (j >= 26 ? String.fromCharCode(64 + Math.floor(j / 26)) : '') + String.fromCharCode(65 + j % 26);
+// Tasa escrita en el archivo, SOLO encima de la fila de títulos, y nunca la del euro.
+function impRate(m, upTo){ for (let i = 0; i < Math.min(upTo, 30); i++){ const r = m[i] || []; for (let j = 0; j < r.length; j++){ const raw = String(r[j] ?? ''), h = normH(raw); if (!h || /\b(eur|euro|euros)\b/.test(h) || raw.includes('€')) continue;
+  if (/(tasa|bcv|cambio|dolar|usd)/.test(h)) for (let k = j + 1; k < Math.min(r.length, j + 5); k++) if (impIsNum(r[k])){ const n = parseNum(r[k]); if (n > 0) return {rate:n, label:raw.trim()}; } } } return null; }
+function impGuess(m){
+  const w = Math.max(0, ...m.map(r => (r || []).length)), st = [];
+  for (let j = 0; j < w; j++){ const vs = m.map(r => impVal((r || [])[j])).filter(v => v !== '' && !(v instanceof Date)); const n = vs.length || 1;
+    const nums = vs.filter(impIsNum).map(v => parseNum(v)), txt = vs.filter(v => !impIsNum(v));
+    st.push({j, fill:vs.length, txt:txt.length / n, len:txt.reduce((a, v) => a + String(v).length, 0) / (txt.length || 1), num:nums.length / n, dec:nums.filter(x => x % 1).length / (nums.length || 1), big:nums.filter(x => Math.abs(x) >= 1e6).length / (nums.length || 1), mean:nums.reduce((a, x) => a + x, 0) / (nums.length || 1), codeish:vs.filter(v => /^[a-z]{0,4}[-_]?\d{2,}$/i.test(String(v)) || (typeof v === 'number' && v >= 1e6 && v % 1 === 0)).length / n}); }
+  const map = {}, used = new Set(), take = (k, c) => { if (c){ map[k] = c.j; used.add(c.j); } };
+  const live = st.filter(s => s.fill >= Math.max(2, m.length * 0.3));
+  take('code', live.filter(s => s.codeish > 0.7).sort((a, b) => b.codeish - a.codeish)[0]);
+  take('name', live.filter(s => !used.has(s.j) && s.txt > 0.6 && s.len > 4).sort((a, b) => b.len - a.len)[0]);
+  const dec = live.filter(s => !used.has(s.j) && s.num > 0.7 && s.dec > 0.3 && !s.big);
+  if (dec.length >= 2){ const two = dec.slice(0, 2).sort((a, b) => a.mean - b.mean); take('cost', two[0]); take('price', two[1]); } else take('price', dec[0]);
+  take('stock', live.filter(s => !used.has(s.j) && s.num > 0.7 && s.dec <= 0.3 && !s.big)[0]);
+  take('cat', live.filter(s => !used.has(s.j) && s.txt > 0.6 && s.len <= 25)[0]);
+  return map;
+}
+function impAnalyze(raw, off = 0, coff = 0){
+  const clean = raw.map(r => (r || []).map(impVal));
+  let best = {score:0};
+  for (const tr of [false, true]){ const m = tr ? impT(clean) : clean;
+    for (let i = 0; i < Math.min(m.length, 40); i++){ const s = impScoreRow(m[i]); if (s > best.score) best = {score:s, row:i, tr}; } }
+  const m = best.tr ? impT(clean) : clean;
+  const a = {m, tr:!!best.tr, row:best.score >= 2 ? best.row : -1, cols:[], map:{}, colCur:{}, off:best.tr ? coff : off, coff:best.tr ? off : coff};
+  const w = Math.max(0, ...m.map(r => (r || []).length));
+  if (a.row >= 0){
+    const head = m[a.row];
+    for (let j = 0; j < w; j++){ const f = impField(head[j]), c = impCur(head[j]); if (c) a.colCur[j] = c;
+      if (!f) continue;
+      if (f === 'price' || f === 'cost'){ const prev = a.map[f]; if (prev == null || (a.colCur[prev] === 'bs' && c !== 'bs')) a.map[f] = j; }
+      else if (a.map[f] == null) a.map[f] = j; }
+    if (a.map.price == null || a.map.name == null){ const used = new Set(Object.values(a.map)), g = impGuess(m.slice(a.row + 1)); for (const k in g) if (a.map[k] == null && !used.has(g[k])){ a.map[k] = g[k]; used.add(g[k]); a.guessed = true; } }
+  } else { a.map = impGuess(m); a.guessed = true; }
+  for (let j = 0; j < w; j++){ const h = a.row >= 0 ? String(m[a.row][j] ?? '').trim() : ''; const sample = m.slice(a.row + 1).map(r => (r || [])[j]).find(v => v !== '' && v != null);
+    if (h || sample != null) a.cols.push({j, label:h || 'Columna ' + impColName(j), sample:sample == null ? '' : (sample instanceof Date ? impDate(sample).iso : String(sample)).slice(0, 30)}); }
+  a.rateF = a.tr ? null : impRate(m, a.row);
+  a.cur = a.colCur[a.map.price] || '';
+  a.dec = impDetectDec(m.slice(a.row + 1, a.row + 2001));
+  return a;
+}
+/* --- Valores --- */
+function impDate(v){
+  const yr = new Date().getFullYear(), ok = (y, m, d) => { const t = new Date(y, m - 1, d); return t.getFullYear() === y && t.getMonth() === m - 1 && t.getDate() === d; };
+  const fin = (y, m, d, w) => { if (!ok(y, m, d)) return {iso:'', warn:'la fecha "' + (v instanceof Date ? '' : v) + '" no existe'}; if (y < yr - 10 || y > yr + 20) return {iso:'', warn:'año ' + y + ' fuera de rango ("' + (v instanceof Date ? y : v) + '")'}; return {iso:y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'), warn:w || ''}; };
+  if (v instanceof Date) return isNaN(v) ? {iso:'', warn:'fecha no válida'} : fin(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  if (typeof v === 'number'){ if (v > 20000 && v < 80000){ const t = new Date(Math.round((v - 25569) * 864e5)); return fin(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()); } return {iso:'', warn:'"' + v + '" no es una fecha'}; }
+  const s = String(v ?? '').trim(); let x;
+  if ((x = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/))) return fin(+x[1], +x[2], +x[3]);
+  if ((x = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/))){ const p = +x[1], q = +x[2], y = x[3].length === 2 ? 2000 + +x[3] : +x[3];
+    if (p <= 12 && q > 12) return fin(y, p, q, '"' + s + '" leída como mes/día');
+    return fin(y, q, p, p <= 12 && q <= 12 && p !== q ? 'AMB' : ''); }
+  if ((x = s.match(/^(\d{1,2})[-/.](\d{4})$/))){ const mo = +x[1], y = +x[2]; return mo >= 1 && mo <= 12 ? fin(y, mo, new Date(y, mo, 0).getDate(), '"' + s + '": solo mes y año, se usa el último día') : {iso:'', warn:'"' + s + '" no es una fecha'}; }
+  return {iso:'', warn:'"' + s + '" no es una fecha'};
+}
+// IVA: devuelve 0, 8 o 16; undefined si la celda está vacía; null si no se entiende (nunca se adivina).
+function impIva(v){
+  if (v === true) return 16; if (v === false) return 0;
+  const s = normH(v); if (!s) return undefined;
+  if (/^(true|verdadero)$/.test(s)) return 16; if (/^(false|falso)$/.test(s)) return 0;
+  if (/^(e|ex|exento|exenta|exentos|no|n|sin iva|exonerado|exonerada)$/.test(s) || /exent|exoner/.test(s)) return 0;
+  if (/^(si|s|gravado|gravada|general|g)$/.test(s)) return 16; if (/reducid/.test(s)) return 8;
+  let n = parseNum(v); if (isNaN(n)) return null; if (n > 0 && n < 1) n = r2(n * 100); return n === 0 ? 0 : n === 8 ? 8 : n === 16 ? 16 : null;
+}
+function impUnit(v){ const s = normH(v); if (!s) return 'unidad'; if (/^(kg|kilo|kgs|kilogramo)/.test(s)) return 'kg'; if (/^(g|gr|grs|gramo)/.test(s)) return 'g'; if (/^(l|lt|lts|litro)/.test(s)) return 'lt'; if (/^(paq|paquete|bulto|pack|fardo)/.test(s)) return 'paquete'; if (/^(caja|cj|cja|bandeja)/.test(s)) return 'caja'; return 'unidad'; }
+const impCode = c => { let s = String(c ?? '').replace(/\s+/g, '').toUpperCase(); if (/^\d+$/.test(s)) s = s.replace(/^0+(?=\d)/, ''); return s; };
+const supKey = s => normH(s).replace(/\s+(c a|ca|s a|sa|s r l|srl|cia|c i a|ltda|inc|corp|s a s|sas)$/, '').trim();
+// Índices del inventario actual (una vez por archivo): código → ids, nombre → ids, proveedores.
+function impIdx(){
+  const code = new Map(), name = new Map(), sup = new Map(), prices = [];
+  for (const [id, p] of Object.entries(S.products)){ const c = impCode(p.code); if (c){ if (!code.has(c)) code.set(c, []); code.get(c).push(id); } const n = impNameKey(p.name); if (n){ if (!name.has(n)) name.set(n, []); name.get(n).push(id); } const u = toUsd(p.price, curOf(p)); if (u > 0) prices.push(u); }
+  for (const [id, s] of Object.entries(S.suppliers)){ const k = supKey(s.name); if (k && !sup.has(k)) sup.set(k, id); }
+  prices.sort((a, b) => a - b);
+  // Categorías: misma forma de escribirlas que ya usa el negocio (como sameCat, pero sin recorrer el inventario en cada fila).
+  const cats = new Map(); for (const c of categories()){ const k = catKey(c); if (!cats.has(k)) cats.set(k, c); }
+  return {code, name, sup, cats, med:prices.length >= 5 ? prices[prices.length >> 1] : 0};
+}
+/* --- Convertir filas en altas y cambios. o = decisiones del usuario. --- */
+function impBuild(a, o, idx){
+  const map = o.map, W = {}, add = (k, line, t) => (W[k] = W[k] || []).push(line + ': ' + t);
+  const items = [], seen = new Map(), newSups = new Map(), C = {codeName:0, nameCode:0, multi:0}, raws = [];
+  const rate = num(o.rate), eurR = num(cfg.eur), bcv = num(cfg.bcv), dec = a.dec;
+  let needCur = 0, needRate = 0, needIva = 0, needIncl = 0, usesBs = false, amb = 0, newNoIva = 0, stockUpd = 0;
+  const col = k => map[k] == null || map[k] === '' ? null : +map[k];
+  const conv = (v, from, to) => { if (from === to) return v; const u = from === 'bs' ? (rate > 0 ? v / rate : NaN) : from === 'eur' ? (eurR && bcv ? v * eurR / bcv : NaN) : v; return to === 'eur' ? (eurR && bcv ? u * bcv / eurR : NaN) : u; };
+  if (col('name') == null || col('price') == null) return {items, W, C, newSups, raws, blocked:true};
+  const headName = a.row >= 0 ? normH(a.m[a.row][col('name')]) : '';
+  const cats = new Map(idx.cats), catOf = c => { c = String(c).trim(); const k = catKey(c); if (!cats.has(k)) cats.set(k, c); return cats.get(k); };
+  a.m.slice(a.row + 1).forEach((r, n) => {
+    const line = a.tr ? 'Columna ' + impColName(a.row + 1 + n + a.off) : 'Fila ' + (a.row + 2 + n + a.off);
+    if (!r || !r.some(c => String(c ?? '').trim())) return;
+    if (r.some(c => typeof c === 'string' && /^(total|totales|subtotal|gran total)\b/.test(normH(c)))) return;
+    const raw = k => col(k) == null ? '' : impVal(r[col(k)]), has = k => { const v = raw(k); return v !== '' && v != null; };
+    const name = String(raw('name')).replace(/\s+/g, ' ').trim();
+    if (!name){ add('skip', line, 'sin nombre'); return; }
+    const nn = normH(name), nk = impNameKey(name);
+    if (!/[a-z]/.test(nn)){ add('skip', line, '"' + name + '" no parece un nombre de producto'); return; }
+    if (headName && nn === headName) return;
+    let rc = o.cur || '';
+    if (has('cur')){ const c = impCur(raw('cur')); if (c) rc = c; else add('price', line, 'moneda "' + raw('cur') + '" no reconocida; se usa la elegida abajo'); }
+    const prRaw = raw('price'), pr = parseNum(prRaw, dec);
+    if (!(pr > 0)){ add('skip', line, name + ': sin precio'); return; }
+    raws.push(pr);
+    if (impAmbig(prRaw)) add('num', line, '"' + prRaw + '" se leyó como ' + nf2.format(pr));
+    if (!rc) needCur++; if (rc === 'bs'){ usesBs = true; if (!(rate > 0)) needRate++; }
+    const pcur = rc === 'eur' ? 'eur' : 'usd';
+    const f = {};
+    if (has('code')){ const v = raw('code'); if (typeof v === 'number' && !Number.isSafeInteger(v)) add('code', line, 'el código ' + v + ' llegó dañado desde Excel (más de 15 cifras): no se usa'); else { const c = String(v).replace(/\s+/g, ''); if (c) f.code = c; } }
+    if (has('cat')) f.cat = String(raw('cat')).trim();
+    if (has('brand')) f.brand = String(raw('brand')).trim();
+    if (has('unit')) f.unit = impUnit(raw('unit'));
+    const qty = (k, lbl) => { if (!has(k)) return undefined; const v = raw(k), x = parseNum(v, dec);
+      if (isNaN(x)){ add('qty', line, name + ': ' + lbl + ' "' + v + '" no es un número'); return undefined; }
+      if (x < 0){ add('qty', line, name + ': ' + lbl + ' negativo (' + v + ')'); return undefined; }
+      if (x > 1e7){ add('qty', line, name + ': ' + lbl + ' demasiado grande (' + v + ')'); return undefined; }
+      if (impAmbig(v)) add('num', line, '"' + v + '" se leyó como ' + nfq.format(x)); return r3(x); };
+    const st = qty('stock', 'stock'); if (st !== undefined) f.stock = st;
+    const mn = qty('min', 'mínimo'); if (mn !== undefined) f.min = mn;
+    if (has('cost')){ const c = parseNum(raw('cost'), dec);
+      if (c >= 0){ const cc = a.colCur[col('cost')] || rc; if (cc === 'bs') usesBs = true; const v = cc ? conv(c, cc, pcur) : c; if (isNaN(v)) add('price', line, name + ': no hay tasa para convertir el costo; no se cambia'); else f.cost = impR2(v); }
+      else add('qty', line, name + ': costo "' + raw('cost') + '" no válido'); }
+    let iva; if (has('iva')){ const v = impIva(raw('iva')); if (v === null) add('iva', line, name + ': "' + raw('iva') + '"'); else iva = v; }
+    if (has('exp')){ const d = impDate(raw('exp')); if (d.warn === 'AMB') amb++; else if (d.warn) add('date', line, name + ': ' + d.warn); if (d.iso) f.exp = d.iso; }
+    if (has('wPrice') && has('wQty')){ const wp = parseNum(raw('wPrice'), dec), wq = parseNum(raw('wQty'), dec); if (wp > 0 && wq > 0){ const wc = a.colCur[col('wPrice')] || rc; f.wPrice = wc ? conv(wp, wc, pcur) : wp; f.wQty = r3(wq); } }
+    if (has('sup')) f.sup = String(raw('sup')).replace(/\s+/g, ' ').trim();
+    // ¿Qué producto es?
+    let ex = null, conf = '';
+    const ck = f.code ? impCode(f.code) : '', byC = ck ? (idx.code.get(ck) || []) : [], byN = idx.name.get(nk) || [];
+    if (byC.length){ ex = byC[0]; if (byC.length > 1) add('code', line, 'el código ' + f.code + ' lo tienen ' + byC.length + ' productos de tu inventario; se usa "' + S.products[ex].name + '"'); if (impNameKey(S.products[ex].name) !== nk) conf = 'codeName'; }
+    else if (byN.length === 1){ if (ck && impCode(S.products[byN[0]].code)) conf = 'nameCode'; else ex = byN[0]; }
+    else if (byN.length > 1) conf = 'multi';
+    if (conf === 'codeName'){ C.codeName++; add('conf', line, '"' + name + '" trae el código ' + f.code + ', que en tu inventario es "' + S.products[ex].name + '"'); if (o.res.codeName === 'skip') return; }
+    if (conf === 'nameCode'){ const P = S.products[byN[0]]; C.nameCode++; add('conf', line, '"' + name + '" (código ' + f.code + ') se llama igual que tu producto con código ' + P.code); if (o.res.nameCode === 'skip') return; if (o.res.nameCode === 'update') ex = byN[0]; }
+    if (conf === 'multi'){ C.multi++; add('conf', line, '"' + name + '": tienes ' + byN.length + ' productos con ese nombre'); if (o.res.multi === 'skip') return; }
+    const P = ex ? S.products[ex] : null;
+    const fiva = iva !== undefined ? iva : (P ? undefined : (o.ivaDef ?? null));
+    if (!P && iva === undefined){ newNoIva++; if (o.ivaDef == null) needIva++; }
+    const effIva = fiva != null ? fiva : (P ? num(P.iva ?? 16) : 0);
+    if (effIva > 0 && !o.ivaIncl) needIncl++;
+    let fp = rc ? conv(pr, rc, pcur) : pr;
+    if (rc && isNaN(fp)) fp = 0;
+    if (o.ivaIncl === 'no' && effIva > 0){ fp *= 1 + effIva / 100; if (f.wPrice) f.wPrice *= 1 + effIva / 100; }
+    fp = impR2(fp); if (f.wPrice != null) f.wPrice = impR2(f.wPrice);
+    if (rc && !(rc === 'bs' && !(rate > 0)) && fp < 0.01){ add('skip', line, name + ': el precio queda en menos de 0,01'); return; }
+    if (fp > 100000) add('price', line, name + ': precio ' + nf2.format(fp) + ' muy alto');
+    if (f.cost > fp && fp > 0) add('price', line, name + ': el costo (' + nf2.format(f.cost) + ') es mayor que el precio (' + nf2.format(fp) + ')');
+    const it = {line, name, ex, f};
+    if (P){
+      const ch = {}, setIf = (k, v) => { if (v !== undefined && !impEq(P[k], v)) ch[k] = v; };
+      if (rc){ setIf('price', fp); if (curOf(P) !== pcur) ch.cur = pcur; }
+      if (conf === 'codeName' && o.res.codeName === 'rename') setIf('name', name);
+      if (f.code !== undefined && (!impCode(P.code) || conf === 'nameCode')) setIf('code', f.code);
+      ['cost', 'brand', 'unit', 'min'].forEach(k => setIf(k, f[k]));
+      if (f.cat !== undefined) setIf('cat', catOf(f.cat));
+      if (fiva !== undefined) setIf('iva', fiva);
+      if (f.stock !== undefined){ stockUpd++; if (o.stockMode === 'add') setIf('stock', r3(num(P.stock) + f.stock)); else if (o.stockMode !== 'keep') setIf('stock', f.stock); }
+      if (f.wPrice !== undefined){ setIf('wPrice', f.wPrice); setIf('wQty', f.wQty); }
+      if (f.exp){ const stk = ch.stock !== undefined ? ch.stock : num(P.stock); setIf('lots', activeLots({stock:stk, lots:[...(P.lots || []).filter(l => l && l.exp !== f.exp), {exp:f.exp, qty:f.stock !== undefined ? f.stock : stk}]})); }
+      const fpF = ch.price !== undefined ? ch.price : num(P.price), wpF = ch.wPrice !== undefined ? ch.wPrice : P.wPrice;
+      if (num(wpF) > 0 && num(wpF) >= fpF){ ch.wPrice = ''; ch.wQty = ''; add('wp', line, name + ': el precio al mayor (' + nf2.format(num(wpF)) + ') no era menor que el precio (' + nf2.format(fpF) + ')'); }
+      it.ch = ch;
+    } else {
+      const d = {created:Date.now(), track:true, name, code:f.code || '', cat:f.cat ? catOf(f.cat) : (o.cat ? catOf(o.cat) : ''), brand:f.brand || '', cur:pcur, price:fp, cost:f.cost || 0, stock:f.stock || 0, min:f.min ?? '', unit:f.unit || 'unidad', iva:fiva};
+      if (f.wPrice > 0){ if (f.wPrice < fp){ d.wPrice = f.wPrice; d.wQty = f.wQty; } else add('wp', line, name + ': precio al mayor no menor que el precio; no se guarda'); }
+      if (f.exp && d.stock > 0) d.lots = [{exp:f.exp, qty:d.stock}];
+      it.doc = d;
+    }
+    if (f.stock !== undefined && f.stock % 1 && ['unidad', 'paquete', 'caja'].includes(f.unit || (P && P.unit) || 'unidad')) add('qty', line, name + ': stock con decimales (' + nfq.format(f.stock) + ') en un producto por unidad');
+    if (f.sup){ const k = supKey(f.sup), sid = idx.sup.get(k);
+      if (sid){ if (P){ if (P.supplierId !== sid) it.ch.supplierId = sid; } else it.doc.supplierId = sid; }
+      else if (k && o.mkSup){ it.newSup = k; if (!newSups.has(k)) newSups.set(k, f.sup); }
+      else if (k) add('sup', line, '"' + f.sup + '" no existe y elegiste no crear proveedores'); }
+    it.act = P ? (Object.keys(it.ch).length || it.newSup ? 'upd' : 'same') : 'new';
+    const key = ex ? 'id:' + ex : ck ? 'c:' + ck : 'n:' + nk;
+    if (seen.has(key)){ const i = seen.get(key), prev = items[i]; add('dup', line, '"' + name + '" es el mismo producto que la ' + prev.line.toLowerCase() + ' ("' + prev.name + '"); se usa esta fila'); items[i] = it; }
+    else { seen.set(key, items.length); items.push(it); }
   });
-  return {rows:out, errs};
+  if (amb) (W.date = W.date || []).unshift(amb + ' fecha' + (amb === 1 ? '' : 's') + ' como 05/03/2027 se leyeron como día/mes (formato de Venezuela)');
+  raws.sort((x, y) => x - y);
+  return {items, W, C, newSups, med:raws.length ? raws[raws.length >> 1] : 0, needCur, needRate, needIva, needIncl, usesBs, newNoIva, stockUpd};
 }
+/* --- Estado de la pantalla e información de la tasa --- */
+let impS = null, impRun = null;
+function impRateInfo(s, b){
+  const warns = []; let needOk = false;
+  if (!b.usesBs) return {warns, needOk};
+  const r = num(s.rate), ref = num(cfg.bcv);
+  if (!(r > 0)) return {warns:['Escribe la tasa para convertir los bolívares.'], needOk:false, bad:true};
+  if (s.rateSrc === 'bcv' && ratesStale()){ warns.push('La tasa BCV guardada en StockSoft no está al día' + (cfg.ratesDate ? ' (' + cfg.ratesDate + ')' : '') + '. Actualízala en Tasas o escribe la de hoy.'); needOk = true; }
+  if (ref && Math.abs(r / ref - 1) > 0.3){ warns.push('La tasa ' + nf2.format(r) + ' se aleja más de un 30 % de la BCV guardada (' + nf2.format(ref) + ').'); needOk = true; }
+  if (!ref && s.rateSrc !== 'bcv'){ warns.push('No hay tasa BCV en StockSoft para comparar.'); needOk = true; }
+  return {warns, needOk};
+}
+function impBlockers(s, b){
+  const out = [], ri = impRateInfo(s, b);
+  if (s.map.name == null || s.map.price == null) out.push('Elige qué columna es el nombre y cuál el precio.');
+  if (b.blocked) return out;
+  if (b.needCur) out.push('Elige en qué moneda están los precios.');
+  if (b.usesBs && (ri.bad || b.needRate)) out.push('Escribe la tasa para convertir los bolívares.');
+  else if (ri.needOk && !s.rateOk) out.push('Confirma que la tasa es correcta.');
+  if (b.needIva) out.push('Elige el IVA de los productos nuevos que no lo indican.');
+  if (b.needIncl) out.push('Indica si los precios incluyen IVA.');
+  const w = impWrites(b); if (!w && !b.needCur && !b.needRate && !b.needIncl) out.push('No hay nada nuevo que guardar: todo está igual que en tu inventario.');
+  if (w > IMP_BIG && remoteDB() && !s.bigOk) out.push('Confirma el número de escrituras en la nube.');
+  return out;
+}
+const impWrites = b => b.items.filter(x => x && x.act !== 'same').length + b.newSups.size;
 function importForm(){
-  openSheet(`<h2>Importar productos</h2><p class="note" style="margin-top:0">Carga todo tu inventario de una vez desde Excel. Columnas que entiende: <b>Nombre, Precio</b> (obligatorias), Código, Categoría, Moneda (USD/EUR), Costo, Stock, Mínimo, Unidad, Marca, IVA (16, 8 o Exento).</p>
-  <button class="btn sec full" style="margin-top:6px" onclick="importTemplate()">Descargar plantilla de Excel (CSV)</button>
-  <label>Archivo (.xlsx, .xls o .csv)</label><input type="file" accept=".xlsx,.xls,.csv,text/csv" onchange="importFile(this.files[0])">
+  if (impRun && impRun.active){ impProgress(true); return; }
+  impS = null;
+  openSheet(`<h2>Importar productos</h2><p class="note" style="margin-top:0">Sube tu inventario <b>tal como lo tengas en Excel</b>. StockSoft busca solo el nombre, el precio, el stock y lo demás. Antes de guardar te enseña lo que entendió, y <b>nunca borra datos que tu archivo no trae</b>.</p>
+  <div id="impUndoBox"></div>
+  <label>Archivo (.xlsx, .xls o .csv)</label><input type="file" accept=".xlsx,.xls,.xlsm,.ods,.csv,.txt,text/csv" onchange="importFile(this.files[0])">
   <div id="impPrev" style="margin-top:12px"></div>
+  <p class="sub" style="margin-top:10px">¿Empiezas de cero? <a href="#" onclick="importTemplate();return false">Descarga una plantilla de ejemplo</a>.</p>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+  impLoadUndo().then(r => { const el = $('#impUndoBox'); if (el && r) el.innerHTML = `<div class="warnbox" style="margin-bottom:8px">Última importación: ${esc(new Date(r.ts).toLocaleString('es-VE'))} (${Object.keys(r.created).length} nuevos, ${Object.keys(r.changed).length} cambiados). <a href="#" onclick="impUndo();return false">Deshacer</a> · <a href="#" onclick="impBackup();return false">Descargar copia</a></div>`; });
 }
-function importTemplate(){ saveFile('plantilla-productos.csv', csv([['Nombre', 'Código', 'Categoría', 'Precio', 'Moneda', 'Costo', 'Stock', 'Mínimo', 'Unidad', 'Marca', 'IVA'], ['Harina de maíz 1 kg', '7591234567890', 'Alimentos', '1,20', 'USD', '0,90', '50', '10', 'unidad', 'Marca X', '0'], ['Refresco 2 L', '', 'Bebidas', '2,50', 'USD', '1,80', '24', '6', 'unidad', '', '16']])); }
-let impRows = null;
+async function importTemplate(){
+  const rows = [['Nombre', 'Código', 'Categoría', 'Precio', 'Moneda', 'Costo', 'Stock', 'Mínimo', 'Unidad', 'Marca', 'IVA', 'Vence', 'Proveedor'], ['Harina de maíz 1 kg', '7591234567890', 'Víveres', 1.2, 'USD', 0.9, 50, 10, 'unidad', 'Marca X', 'Exento', '', ''], ['Refresco 2 L', '', 'Bebidas', 2.5, 'USD', 1.8, 24, 6, 'unidad', '', 16, '', ''], ['Queso blanco', '', 'Charcutería', 6.5, 'USD', 5, 3.5, 1, 'kg', '', 'Exento', '30/12/2026', '']];
+  if (await loadXLSX()){ const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = rows[0].map((h, i) => ({wch:i === 0 ? 26 : 12})); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Productos'); saveFile('plantilla-productos.xlsx', new Blob([XLSX.write(wb, {bookType:'xlsx', type:'array'})], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); }
+  else saveFile('plantilla-productos.csv', csv(rows));
+}
 async function importFile(file){
   if (!file) return;
-  const el = $('#impPrev'); el.innerHTML = '<div class="sub">Leyendo…</div>';
-  let rows;
+  const el = $('#impPrev'); el.innerHTML = '<div class="sub">Leyendo y analizando tu archivo…</div>';
+  if (file.size > IMP_MB * 1048576){ el.innerHTML = `<div class="warnbox">El archivo pesa más de ${IMP_MB} MB. Divídelo en partes más pequeñas.</div>`; return; }
+  await impSleep();
+  let sheets = [], csvInfo = null;
   try {
-    if (/\.xlsx?$/i.test(file.name)){ if (!(await loadXLSX())){ el.innerHTML = '<div class="warnbox">No se pudo cargar el lector de Excel. Guarda el archivo como CSV e inténtalo de nuevo.</div>'; return; } const wb = XLSX.read(await file.arrayBuffer(), {type:'array'}); rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''}); }
-    else rows = parseCSV((await file.text()).replace(/^﻿/, ''));
-  } catch(e){ el.innerHTML = '<div class="warnbox">No se pudo leer el archivo.</div>'; return; }
-  if (!rows || rows.length < 2){ el.innerHTML = '<div class="warnbox">El archivo está vacío.</div>'; return; }
-  const m = mapRows(rows); if (m.error){ el.innerHTML = `<div class="warnbox">${esc(m.error)}</div>`; return; }
-  impRows = m.rows.map(r => { const ex = (r.code && findByCode(r.code)) || products().find(p => normH(p.name) === normH(r.name)); return {...r, exId:ex ? ex.id : null}; });
-  const nNew = impRows.filter(r => !r.exId).length, nUpd = impRows.length - nNew;
-  el.innerHTML = `<div class="card"><div class="name" style="font-size:14px">${impRows.length} productos leídos</div><p class="note">${nNew} nuevos · ${nUpd} ya existen y se actualizarán (precio, costo, stock y datos)${m.errs.length ? ` · <span style="color:var(--warn)">${m.errs.length} filas con error</span>` : ''}</p>
-  ${m.errs.length ? `<div class="sub" style="max-height:80px;overflow:auto">${m.errs.slice(0, 20).map(esc).join('<br>')}</div>` : ''}
-  <div class="sub" style="margin-top:6px">${impRows.slice(0, 5).map(r => `${esc(r.name)} · ${r.cur === 'eur' ? '€' : '$'}${nf2.format(r.price)} · stock ${nfq.format(r.stock)}`).join('<br>')}${impRows.length > 5 ? '<br>…' : ''}</div>
-  <button class="btn full" style="margin-top:10px" ${impRows.length ? '' : 'disabled'} onclick="doImport()">Importar ${impRows.length} productos</button></div>`;
+    if (/\.(xlsx|xls|xlsm|ods)$/i.test(file.name)){
+      if (!(await loadXLSX())){ el.innerHTML = '<div class="warnbox">No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.</div>'; return; }
+      const wb = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:true});
+      sheets = wb.SheetNames.map(n => { const ws = wb.Sheets[n], rg = ws && ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : {s:{r:0, c:0}}; return {name:n, rows:ws ? XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:'', blankrows:true}) : [], off:rg.s.r, coff:rg.s.c}; });
+    } else { const rows = parseCSV(await file.text()); csvInfo = {sep:rows.sep, fixed:rows.fixed}; sheets = [{name:file.name, rows, off:0, coff:0}]; }
+  } catch(e){ el.innerHTML = '<div class="warnbox">No se pudo leer el archivo. ¿Es un Excel o CSV de verdad? ¿Está abierto en Excel o protegido con contraseña?</div>'; return; }
+  sheets = sheets.filter(s => s.rows.some(r => (r || []).some(c => String(c ?? '').trim())));
+  if (!sheets.length){ el.innerHTML = '<div class="warnbox">El archivo está vacío o no es una hoja de cálculo que StockSoft pueda leer.</div>'; return; }
+  await impSleep();
+  const an = sheets.map(s => impAnalyze(s.rows, s.off, s.coff));
+  const score = a => a.map.name == null || a.map.price == null ? 0 : a.m.slice(a.row + 1).filter(r => r && /[a-z]/i.test(String(r[a.map.name] ?? '')) && parseNum(r[a.map.price], a.dec) > 0).length;
+  let si = 0, top = -1; an.forEach((a, i) => { const s = score(a); if (s > top){ top = s; si = i; } });
+  if (top <= 0 && !an.some(a => a.map.name != null)){ el.innerHTML = '<div class="warnbox">No encontré productos en este archivo. Comprueba que tenga una columna con el nombre y otra con el precio.</div>'; return; }
+  const rowsN = an[si].m.length - an[si].row - 1;
+  if (rowsN > IMP_MAX){ el.innerHTML = `<div class="warnbox">El archivo tiene ${nf0.format(rowsN)} filas. El máximo por importación es ${nf0.format(IMP_MAX)}: divídelo en partes.</div>`; return; }
+  impS = {sheets, an, si, idx:impIdx(), fileName:file.name, csvInfo, iva:null};
+  impPick(si);
+}
+function impPick(i){ const a = impS.an[i]; Object.assign(impS, {si:i, map:{...a.map}, cur:a.cur, rate:a.rateF ? a.rateF.rate : (num(cfg.bcv) || ''), rateSrc:a.rateF ? 'archivo' : (num(cfg.bcv) ? 'bcv' : ''), rateLbl:a.rateF ? a.rateF.label : '', rateOk:false, ivaDef:null, ivaIncl:null, stockMode:'set', mkSup:true, bigOk:false, cat:'', res:{codeName:'keep', nameCode:'new', multi:'skip'}}); impRender(); }
+function impSet(k, v){
+  if (!impS) return;
+  if (k === 'map'){ const [f, j] = v; if (j === '') delete impS.map[f]; else { for (const x in impS.map) if (impS.map[x] === +j && x !== f) delete impS.map[x]; impS.map[f] = +j; } }
+  else if (k.startsWith('res.')) impS.res[k.slice(4)] = v;
+  else { impS[k] = v; if (k === 'rate'){ impS.rateSrc = 'manual'; impS.rateOk = false; } if (k === 'cur') impS.rateOk = false; }
+  impRender();
+}
+function impRender(){
+  const el = $('#impPrev'); if (!el || !impS) return;
+  const s = impS, a = s.an[s.si], b = s.b = impBuild(a, s, s.idx), blk = impBlockers(s, b), ri = impRateInfo(s, b);
+  const colOpts = f => `<option value="">— No está en mi archivo —</option>` + a.cols.map(c => `<option value="${c.j}" ${s.map[f] === c.j ? 'selected' : ''}>${esc(c.label)}${c.sample ? ' · ej. ' + esc(c.sample) : ''}</option>`).join('');
+  const sel = ([f, l, req]) => `<div><label>${l}${req ? ' *' : ''}</label><select onchange="impSet('map',['${f}',this.value])">${colOpts(f)}</select></div>`;
+  const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? '') === String(v) ? 'selected' : ''}>${l}</option>`;
+  const found = IMP_F.filter(([f]) => s.map[f] != null), miss = IMP_F.filter(([f]) => s.map[f] == null);
+  const where = a.row < 0 ? 'No había títulos: adiviné cada columna por su contenido. <b>Revísalas.</b>' : (a.tr ? 'Los títulos estaban en la columna ' + impColName(a.row) + ' (productos hacia la derecha).' : 'Los títulos estaban en la fila ' + (a.row + 1 + a.off) + '.') + (a.guessed && a.row >= 0 ? ' Algunas columnas las adiviné por su contenido.' : '');
+  const items = b.items.filter(Boolean), nNew = items.filter(x => x.act === 'new').length, nUpd = items.filter(x => x.act === 'upd').length, nSame = items.filter(x => x.act === 'same').length, writes = impWrites(b);
+  const fc = {}; items.forEach(x => x.ch && Object.keys(x.ch).forEach(k => fc[k] = (fc[k] || 0) + 1));
+  const FL = {price:'precio', cur:'moneda', stock:'stock', cost:'costo', code:'código', iva:'IVA', cat:'categoría', brand:'marca', unit:'unidad', min:'mínimo', lots:'vencimiento', supplierId:'proveedor', wPrice:'precio al mayor', wQty:'cant. al mayor', name:'nombre'};
+  const hintBs = b.med && ((s.idx.med && b.med / s.idx.med > 15) || (!s.idx.med && b.med > 40));
+  const curTxt = {usd:'dólares', eur:'euros', bs:'bolívares'};
+  let h = `<div class="card"><div class="name" style="font-size:14px">1. Así entendí tu archivo</div>
+  <p class="note" style="margin:4px 0 0">${s.sheets.length > 1 ? `Hoja <b>${esc(s.sheets[s.si].name)}</b>. ` : ''}${where}${s.csvInfo && s.csvInfo.fixed ? ` En ${s.csvInfo.fixed} fila${s.csvInfo.fixed === 1 ? '' : 's'} uní números con coma decimal que estaban sin comillas.` : ''}</p>
+  ${s.sheets.length > 1 ? `<label>Hoja</label><select onchange="impPick(+this.value)">${s.sheets.map((x, i) => opt(i, s.si, esc(x.name))).join('')}</select>` : ''}
+  <div class="grid2">${found.map(sel).join('')}</div>
+  ${miss.length ? `<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Elegir otras columnas (${miss.map(x => x[1].toLowerCase()).slice(0, 4).join(', ')}${miss.length > 4 ? '…' : ''})</summary><div class="grid2">${miss.map(sel).join('')}</div></details>` : ''}</div>`;
+  if (!b.blocked){
+    h += `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">2. Confirma estos datos</div>
+    <label>Los precios del archivo están en${s.map.cur != null ? ' (cuando la columna Moneda está vacía)' : ''}</label><select onchange="impSet('cur',this.value)">${!s.cur ? opt('', '', '— Elige la moneda —') : ''}${opt('usd', s.cur, 'Dólares ($)')}${opt('eur', s.cur, 'Euros (€)')}${opt('bs', s.cur, 'Bolívares (Bs) → pasar a $')}</select>
+    ${a.cur && s.cur === a.cur ? `<p class="sub">Lo dice el título de la columna de precio.</p>` : ''}
+    ${hintBs && s.cur !== 'bs' ? `<div class="warnbox" style="margin-top:6px">Ojo: el precio típico de tu archivo es ${nf2.format(b.med)}${s.idx.med ? `, ${nf0.format(b.med / s.idx.med)} veces el de tu inventario (${usd(s.idx.med)})` : ''}. <b>¿No estarán en bolívares?</b></div>` : ''}
+    ${b.usesBs ? `<label>Tasa para convertir (Bs por $)</label><input inputmode="decimal" value="${s.rate ? nf2.format(s.rate) : ''}" onchange="impSet('rate',parseNum(this.value))">
+      <p class="sub">${s.rateSrc === 'archivo' ? 'Tasa encontrada en tu archivo («' + esc(s.rateLbl) + '»).' : s.rateSrc === 'bcv' ? 'Tasa BCV guardada en StockSoft' + (cfg.ratesDate ? ' (' + esc(cfg.ratesDate) + ')' : '') + '.' : s.rateSrc === 'manual' ? 'Tasa escrita por ti.' : ''}</p>
+      ${ri.warns.map(w => `<div class="warnbox" style="margin-top:6px">${esc(w)}</div>`).join('')}
+      ${ri.needOk ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" style="width:auto" ${s.rateOk ? 'checked' : ''} onchange="impSet('rateOk',this.checked)"> He revisado la tasa y es correcta</label>` : ''}` : ''}
+    ${b.newNoIva ? `<label>IVA de los productos nuevos que no lo indican (${b.newNoIva})</label><select onchange="impSet('ivaDef',this.value===''?null:+this.value)">${s.ivaDef == null ? opt('', '', '— Elige el IVA —') : ''}${opt(16, s.ivaDef, '16 %')}${opt(8, s.ivaDef, '8 %')}${opt(0, s.ivaDef, 'Exento')}</select>` : ''}
+    ${b.needIncl || s.ivaIncl ? `<label>¿Los precios del archivo ya incluyen el IVA?</label><select onchange="impSet('ivaIncl',this.value||null)">${!s.ivaIncl ? opt('', '', '— Elige —') : ''}${opt('si', s.ivaIncl, 'Sí, ya incluyen IVA (precio final)')}${opt('no', s.ivaIncl, 'No, súmale el IVA a cada precio')}</select>` : ''}
+    ${b.stockUpd ? `<label>Stock de los productos que ya tienes (${b.stockUpd})</label><select onchange="impSet('stockMode',this.value)">${opt('set', s.stockMode, 'Poner el stock del archivo')}${opt('add', s.stockMode, 'Sumarlo al stock actual (mercancía que llegó)')}${opt('keep', s.stockMode, 'No cambiar el stock')}</select>` : ''}
+    ${s.map.cat == null && nNew ? `<label>Categoría para los productos nuevos</label><input value="${esc(s.cat || '')}" placeholder="Opcional" onchange="impSet('cat',this.value.trim())">` : ''}
+    ${b.newSups.size || (!s.mkSup && s.map.sup != null) ? `<label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${s.mkSup ? 'checked' : ''} onchange="impSet('mkSup',this.checked)"> Crear ${b.newSups.size || ''} proveedor${b.newSups.size === 1 ? '' : 'es'} nuevo${b.newSups.size === 1 ? '' : 's'}${b.newSups.size ? ' (' + [...b.newSups.values()].slice(0, 3).map(esc).join(', ') + (b.newSups.size > 3 ? '…' : '') + ')' : ''}</label>` : ''}
+    </div>`;
+    const WL = [['conf', 'Productos dudosos'], ['dup', 'Filas repetidas en el archivo'], ['iva', 'IVA que no entendí (se deja el actual o el elegido arriba)'], ['price', 'Precios para revisar'], ['num', 'Números que se pueden leer de dos formas'], ['qty', 'Cantidades no válidas (no se cambian)'], ['date', 'Fechas de vencimiento'], ['code', 'Códigos'], ['wp', 'Precio al mayor quitado'], ['sup', 'Proveedores'], ['skip', 'Filas que no se importan']].filter(([k]) => b.W[k] && b.W[k].length);
+    if (WL.length) h += `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">3. Revisa antes de importar</div>
+    ${b.C.codeName ? `<label>Mismo código pero otro nombre (${b.C.codeName})</label><select onchange="impSet('res.codeName',this.value)">${opt('keep', s.res.codeName, 'Actualizar sin cambiar el nombre')}${opt('rename', s.res.codeName, 'Actualizar y poner el nombre del archivo')}${opt('skip', s.res.codeName, 'No tocarlos')}</select>` : ''}
+    ${b.C.nameCode ? `<label>Mismo nombre pero otro código (${b.C.nameCode})</label><select onchange="impSet('res.nameCode',this.value)">${opt('new', s.res.nameCode, 'Son productos distintos: crearlos nuevos')}${opt('update', s.res.nameCode, 'Es el mismo: actualizarlo y cambiar su código')}${opt('skip', s.res.nameCode, 'No tocarlos')}</select>` : ''}
+    ${b.C.multi ? `<label>Nombre que tienes repetido en tu inventario (${b.C.multi})</label><select onchange="impSet('res.multi',this.value)">${opt('skip', s.res.multi, 'No tocarlos')}${opt('new', s.res.multi, 'Crearlos como productos nuevos')}</select>` : ''}
+    ${WL.map(([k, l]) => `<details style="margin-top:8px" ${k === 'conf' || k === 'dup' ? 'open' : ''}><summary class="sub" style="cursor:pointer"><b>${l}</b> (${b.W[k].length})</summary><div class="sub" style="max-height:120px;overflow:auto">${b.W[k].slice(0, 60).map(esc).join('<br>')}${b.W[k].length > 60 ? '<br>… y ' + (b.W[k].length - 60) + ' más' : ''}</div></details>`).join('')}</div>`;
+    const prev = items.filter(x => x.act !== 'same').slice(0, 6);
+    const cv = (p, c) => (c === 'eur' ? '€' : '$') + nf2.format(p);
+    h += `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">4. Resumen</div>
+    <p class="note"><b>${nNew}</b> nuevos · <b>${nUpd}</b> cambian · ${nSame} ya estaban iguales (no se tocan)${b.newSups.size && s.mkSup ? ` · ${b.newSups.size} proveedores nuevos` : ''}${Object.keys(fc).length ? '<br>Cambios: ' + Object.entries(fc).map(([k, n]) => (FL[k] || k) + ' ' + n).join(', ') : ''}<br>Solo se cambian los datos que trae tu archivo; lo demás se respeta.</p>
+    <div class="list">${prev.map(x => `<div class="item"><div class="name" style="font-size:13px">${esc(x.name)} <span class="pill ${x.act === 'new' ? 'ok' : 'low'}">${x.act === 'new' ? 'nuevo' : 'cambia'}</span></div><div class="sub">${x.doc ? `${s.cur || x.f ? cv(x.doc.price, x.doc.cur) : ''} · stock ${nfq.format(x.doc.stock)} ${unitLbl(x.doc.unit)} · ${x.doc.iva == null ? 'IVA por elegir' : x.doc.iva ? 'IVA ' + x.doc.iva + ' %' : 'Exento'}${x.doc.cat ? ' · ' + esc(x.doc.cat) : ''}${x.doc.lots ? ' · vence ' + esc(x.doc.lots[0].exp) : ''}` : Object.entries(x.ch).filter(([k]) => FL[k]).map(([k, v]) => { const o = S.products[x.ex][k]; const f = z => k === 'lots' ? (z && z.length ? z.map(l => l.exp).join(',') : '—') : k === 'supplierId' ? esc((S.suppliers[z] || {}).name || '—') : esc(z === '' || z == null ? '—' : typeof z === 'number' ? nfq.format(z) : z); return FL[k] + ' ' + f(o) + ' → ' + f(v); }).join(' · ') || 'proveedor nuevo'}</div></div>`).join('')}</div>
+    ${nNew + nUpd > prev.length ? `<p class="sub">… y ${nNew + nUpd - prev.length} más</p>` : ''}
+    ${writes > IMP_BIG && remoteDB() ? `<label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" style="width:auto;margin-top:3px" ${s.bigOk ? 'checked' : ''} onchange="impSet('bigOk',this.checked)"> Esta importación hará ${nf0.format(writes)} escrituras en la nube (el plan gratis de StockSoft tiene un límite diario compartido). Entiendo y quiero seguir.</label>` : ''}
+    ${blk.length ? `<div class="warnbox" style="margin-top:8px">${blk.map(esc).join('<br>')}</div>` : ''}
+    <button class="btn full" style="margin-top:10px" ${blk.length ? 'disabled' : ''} onclick="doImport()">Importar: ${nNew} nuevos y ${nUpd} cambios</button>
+    <p class="sub" style="margin-top:6px">Podrás deshacer esta importación después.</p></div>`;
+  } else h += `<div class="warnbox" style="margin-top:10px">${blk.map(esc).join('<br>')}</div>`;
+  el.innerHTML = h;
+}
+/* --- Guardar por lotes (atómicos en la nube), con cancelación y registro para deshacer --- */
+const impMerge = (p, ch) => { const o = {...(p || {})}; for (const k in ch){ if (ch[k] === null) delete o[k]; else o[k] = ch[k]; } return o; };
+const impFV = d => { const o = {}; for (const k in d) o[k] = d[k] === null && window.firebase && firebase.firestore ? firebase.firestore.FieldValue.delete() : d[k]; return o; };
+async function impCommit(ops){
+  if (!ops.length) return {ok:true};
+  try {
+    if (backend === 'cloud' && FB && FB.fs){ const bt = FB.fs.batch(); for (const o of ops){ const ref = DB.collection(o.col).doc(o.id); if (o.type === 'set') bt.set(ref, o.data); else if (o.type === 'update') bt.update(ref, impFV(o.data)); else bt.delete(ref); } await bt.commit(); }
+    else if (backend === 'db'){ for (const o of ops){ const ref = DB.collection(o.col).doc(o.id); if (o.type === 'delete') await ref.delete(); else await ref.set(o.type === 'update' ? impMerge(S[o.col][o.id], o.data) : o.data); } }
+    for (const o of ops){ if (o.type === 'delete') delete S[o.col][o.id]; else S[o.col][o.id] = o.type === 'set' ? o.data : impMerge(S[o.col][o.id], o.data); }
+    if (!remoteDB()) saveLocal();
+    return {ok:true};
+  } catch(e){ return {ok:false, msg:e && e.code === 'permission-denied' ? 'No tienes permiso para guardar productos.' : fbMsg(e)}; }
+}
+const IMP_DB = 'stocksoft-imports', impKey = () => 'last:' + (bizId || 'local');
+let impMem = {}, impMemOnly = false;
+function impIDB(){ return new Promise((res, rej) => { try { const q = indexedDB.open(IMP_DB, 1); q.onupgradeneeded = () => q.result.createObjectStore('undo'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); } catch(e){ rej(e); } }); }
+async function impSaveUndo(rec){ impMem[impKey()] = rec; try { const db = await impIDB(); await new Promise((res, rej) => { const t = db.transaction('undo', 'readwrite'); t.objectStore('undo').put(rec, impKey()); t.oncomplete = res; t.onerror = () => rej(t.error); }); db.close(); impMemOnly = false; return true; } catch(e){ impMemOnly = true; return false; } }
+async function impLoadUndo(){ try { const db = await impIDB(); const r = await new Promise((res, rej) => { const q = db.transaction('undo').objectStore('undo').get(impKey()); q.onsuccess = () => res(q.result || null); q.onerror = () => rej(q.error); }); db.close(); return r || impMem[impKey()] || null; } catch(e){ return impMem[impKey()] || null; } }
+async function impClearUndo(){ delete impMem[impKey()]; try { const db = await impIDB(); await new Promise(res => { const t = db.transaction('undo', 'readwrite'); t.objectStore('undo').delete(impKey()); t.oncomplete = res; t.onerror = res; }); db.close(); } catch(e){} }
+async function impBackup(){ const r = await impLoadUndo(); if (!r){ toast('No hay copia de la última importación'); return; } saveFile('copia-importacion-' + new Date(r.ts).toISOString().slice(0, 16).replace(/[T:]/g, '-') + '.json', JSON.stringify(r, null, 1)); }
+function impProgress(open){
+  const r = impRun; if (!r) return;
+  const pct = r.total ? Math.round(r.done / r.total * 100) : 100;
+  const html = `<h2>Importando…</h2><p class="note" id="impPTxt">${r.wait ? 'Esperando respuesta de la nube… si no hay internet, se guardará al volver la conexión. No cierres la app.' : `Guardados ${nf0.format(r.saved)} de ${nf0.format(r.total)} productos.`}</p>
+  <div style="height:10px;border-radius:6px;background:var(--line,#334);overflow:hidden;margin:10px 0"><div style="height:100%;width:${pct}%;background:var(--acc,#2f8cf0)"></div></div>
+  <p class="sub">Se guarda en lotes de ${IMP_CHUNK}. Si cancelas, se termina el lote en curso y podrás deshacer lo ya guardado.</p>
+  <div class="sheet-actions"><button class="btn sec" ${r.cancel ? 'disabled' : ''} onclick="if(impRun){impRun.cancel=true;impProgress(true)}">${r.cancel ? 'Cancelando…' : 'Cancelar'}</button></div>`;
+  if (open || $('#impPTxt')) openSheet(html);
 }
 async function doImport(){
-  if (!impRows) return; const rows = impRows; impRows = null;
-  $('#impPrev').innerHTML = '<div class="sub" id="impProg">Importando…</div>';
-  let n = 0;
-  for (const r of rows){
-    const {exId, ...d} = r; const base = exId ? S.products[exId] : {created:Date.now(), track:true};
-    if (d.code && findByCode(d.code, exId || undefined)) d.code = '';
-    await put('products', exId || uid(), {...base, ...d, updated:Date.now()});
-    if (++n % 10 === 0){ const p = $('#impProg'); if (p) p.textContent = 'Importando… ' + n + ' de ' + rows.length; }
-  }
-  logA('inventario', 'Productos importados', n + ' productos desde archivo'); closeSheet(); toast(n + ' productos importados'); shellFor = ''; render();
+  if (!impS || !impS.b || (impRun && impRun.active)) return;
+  const s = impS, b = s.b; if (impBlockers(s, b).length){ impRender(); return; }
+  if (readOnly){ toast('Modo solo lectura'); return; }
+  if (remoteDB() && navigator.onLine === false){ toast('Necesitas conexión a internet para importar'); return; }
+  const work = b.items.filter(x => x && x.act !== 'same'), supIds = new Map();
+  for (const k of b.newSups.keys()) supIds.set(k, uid());
+  const rec = {v:2, ts:Date.now(), biz:bizId || 'local', file:s.fileName, user:(me && me.name) || '', created:{}, changed:{}, sups:[], state:'en curso'};
+  const run = impRun = {active:true, cancel:false, total:work.filter(x => x.doc || x.ex).length, saved:0, done:0, gone:0, err:'', rec, nNew:0, nUpd:0};
+  impS = null; impProgress(true);
+  const made = new Set();
+  // Cada lote tiene como mucho IMP_CHUNK + 1 operaciones (Firestore admite 500 por lote).
+  window.impHold = true;
+  try { for (let i = 0; i < work.length && !run.cancel; ){
+    const ops = [], add = {created:{}, changed:{}, sups:[]}; let nN = 0, nU = 0;
+    while (i < work.length && ops.length < IMP_CHUNK){ const it = work[i++];
+      const extra = {};
+      if (it.newSup){ const sid = supIds.get(it.newSup); if (!made.has(sid)){ ops.push({col:'suppliers', id:sid, type:'set', data:{created:Date.now(), name:b.newSups.get(it.newSup)}}); made.add(sid); add.sups.push(sid); } extra.supplierId = sid; }
+      if (it.doc){ const id = uid(), d = {...it.doc, ...extra}; ops.push({col:'products', id, type:'set', data:{...d, created:Date.now(), updated:Date.now()}}); add.created[id] = d; nN++; }
+      else { const P = S.products[it.ex]; if (!P){ run.gone++; continue; } const ch = {...it.ch, ...extra}, before = {}; for (const k in ch) before[k] = P[k] === undefined ? null : P[k]; ops.push({col:'products', id:it.ex, type:'update', data:{...ch, updated:Date.now()}}); add.changed[it.ex] = {b:before, a:ch}; nU++; }
+    }
+    // El registro para deshacer se guarda ANTES de escribir (si se corta la luz, se sabe qué pudo cambiar).
+    await impSaveUndo({...rec, created:{...rec.created, ...add.created}, changed:{...rec.changed, ...add.changed}, sups:[...rec.sups, ...add.sups]});
+    const t = setTimeout(() => { run.wait = true; impProgress(); }, 10000);
+    const res = await impCommit(ops); clearTimeout(t); run.wait = false;
+    if (!res.ok){ run.err = res.msg; await impSaveUndo(rec); break; }
+    Object.assign(rec.created, add.created); Object.assign(rec.changed, add.changed); rec.sups.push(...add.sups);
+    run.saved += nN + nU; run.nNew += nN; run.nUpd += nU; run.done = Math.min(run.total, i);
+    impProgress(); await impSleep();
+  } } catch(e){ run.err = 'Error inesperado: ' + (e && e.message || e); } finally { window.impHold = false; }
+  rec.state = run.err ? 'error' : run.cancel ? 'cancelada' : 'completa';
+  if (run.saved || rec.sups.length) await impSaveUndo(rec); else await impClearUndo();
+  run.active = false; shellFor = ''; render();
+  logA('inventario', 'Productos importados', `${run.nNew} nuevos y ${run.nUpd} cambiados de ${run.total} desde ${s.fileName}` + (rec.sups.length ? ` · ${rec.sups.length} proveedores nuevos` : '') + (run.err ? ' · ERROR: ' + run.err : run.cancel ? ' · CANCELADA' : ''));
+  impResult(run);
+}
+function impResult(run){
+  const ok = !run.err && !run.cancel, rec = run.rec;
+  openSheet(`<h2>${ok ? 'Importación terminada' : run.cancel ? 'Importación cancelada' : 'La importación se detuvo'}</h2>
+  ${ok ? '' : `<div class="warnbox">${run.err ? 'Error: ' + esc(run.err) + '<br>' : ''}Se guardaron <b>${nf0.format(run.saved)} de ${nf0.format(run.total)}</b> productos. Los demás no se tocaron. Puedes deshacer lo guardado o dejarlo así.</div>`}
+  <p class="note">${nf0.format(run.nNew)} productos nuevos y ${nf0.format(run.nUpd)} actualizados${rec.sups.length ? ` · ${rec.sups.length} proveedores nuevos` : ''}${run.gone ? ` · ${run.gone} se omitieron porque se borraron mientras tanto` : ''}.</p>
+  ${impMemOnly ? '<div class="warnbox">Este navegador no deja guardar el registro para deshacer: descarga la copia ahora.</div>' : ''}
+  <div class="list" style="margin-top:8px">${run.saved || rec.sups.length ? `<div class="item tap" onclick="impUndo()"><div class="name">Deshacer esta importación</div><div class="sub">Vuelve los productos como estaban (respeta ventas posteriores)</div></div>` : ''}
+  ${run.saved ? `<div class="item tap" onclick="impBackup()"><div class="name">Descargar copia de seguridad</div><div class="sub">Archivo con los datos anteriores a la importación</div></div>` : ''}</div>
+  <div class="sheet-actions"><button class="btn" onclick="closeSheet()">Cerrar</button></div>`);
+  toast(ok ? run.saved + ' productos importados' : 'Importación detenida: ' + run.saved + ' de ' + run.total + ' guardados');
+}
+/* --- Deshacer la última importación (por campos: no pisa ventas ni cambios posteriores) --- */
+function impUndoPlan(rec){
+  const ops = [], kept = [], del = new Set(); let nRev = 0;
+  for (const [id, c] of Object.entries(rec.changed)){ const P = S.products[id]; if (!P) continue; const ch = {}; let later = 0;
+    for (const k in c.a){ if (impEq(P[k], c.a[k])) ch[k] = c.b[k]; else later++; }
+    if (later) kept.push(P.name); if (Object.keys(ch).length){ ops.push({col:'products', id, type:'update', data:ch}); nRev++; } }
+  for (const [id, d] of Object.entries(rec.created)){ const P = S.products[id]; if (!P) continue;
+    if (['name', 'price', 'stock', 'cost', 'code', 'iva'].every(k => impEq(P[k], d[k]))){ ops.push({col:'products', id, type:'delete'}); del.add(id); } else kept.push(P.name + ' (nuevo, ya cambió)'); }
+  // Proveedores que seguirán en uso después de deshacer (un solo recorrido, con índices).
+  const supAfter = new Map(); for (const o of ops) if (o.type === 'update' && o.data && 'supplierId' in o.data) supAfter.set(o.id, o.data.supplierId);
+  const inUse = new Set(); for (const [id, p] of Object.entries(S.products)) if (!del.has(id)) inUse.add(supAfter.has(id) ? supAfter.get(id) : p.supplierId);
+  for (const x of [...Object.values(S.purchases || {}), ...Object.values(S.pmovs || {})]) inUse.add(x.supplierId);
+  for (const sid of rec.sups){ if (!S.suppliers[sid]) continue; if (!inUse.has(sid)) ops.push({col:'suppliers', id:sid, type:'delete'}); else kept.push('proveedor ' + S.suppliers[sid].name + ' (ya se usa)'); }
+  return {ops, kept, nRev, nDel:del.size, nSup:ops.filter(o => o.col === 'suppliers').length};
+}
+async function impUndo(){
+  if (impRun && impRun.active){ toast('Espera a que termine la importación'); return; }
+  const rec = await impLoadUndo(); if (!rec){ toast('No hay ninguna importación para deshacer en este dispositivo'); return; }
+  if (rec.biz !== (bizId || 'local')){ toast('Esa importación es de otro negocio'); return; }
+  const p = impUndoPlan(rec);
+  ask('Deshacer importación', `Importación del ${new Date(rec.ts).toLocaleString('es-VE')} (${rec.file || 'archivo'}). Se devolverán ${p.nRev} productos a como estaban, se borrarán ${p.nDel} productos creados y ${p.nSup} proveedores nuevos.` + (p.kept.length ? ` ${p.kept.length} productos o proveedores cambiaron después (por ejemplo, una venta): esos datos se respetan.` : ''), 'Deshacer', () => impUndoRun(rec, p));
+}
+async function impUndoRun(rec, p){
+  openSheet('<h2>Deshaciendo…</h2><p class="note" id="impPTxt">Un momento.</p>');
+  let done = 0;
+  window.impHold = true;
+  try { for (let i = 0; i < p.ops.length; i += IMP_CHUNK){ const r = await impCommit(p.ops.slice(i, i + IMP_CHUNK)); if (!r.ok){ window.impHold = false; closeSheet(); toast('No se pudo deshacer: ' + r.msg + ' (' + done + ' cambios hechos). Puedes intentarlo otra vez.'); render(); return; } done += Math.min(IMP_CHUNK, p.ops.length - i); const el = $('#impPTxt'); if (el) el.textContent = done + ' de ' + p.ops.length; await impSleep(); } }
+  finally { window.impHold = false; }
+  await impClearUndo(); logA('inventario', 'Importación deshecha', `${p.nRev} revertidos, ${p.nDel} borrados, ${p.nSup} proveedores borrados` + (p.kept.length ? ', ' + p.kept.length + ' respetados' : ''));
+  closeSheet(); shellFor = ''; render(); toast('Importación deshecha');
 }
 
 function moreInv(){
   openSheet(`<h2>Inventario</h2><div class="list" style="margin-top:6px">
-  <div class="item tap" onclick="importForm()"><div class="name">Importar desde Excel</div><div class="sub">Carga muchos productos de una vez</div></div>
+  <div class="item tap" onclick="importForm()"><div class="name">Importar desde Excel</div><div class="sub">Sube tu Excel tal como lo tengas: StockSoft lo entiende solo</div></div>
   <div class="item tap" onclick="priceAdjForm()"><div class="name">Ajustar precios en bloque</div><div class="sub">Sube o baja precios por categoría en %</div></div>
   <div class="item tap" onclick="closeSheet();ui.labelMode=true;ui.selLabels.clear();VIEWS.inventario.fill()"><div class="name">Imprimir etiquetas</div><div class="sub">Con precio y código de barras</div></div>
-  <div class="item tap" onclick="closeSheet();csvInv()"><div class="name">Exportar inventario a Excel</div><div class="sub">Archivo CSV</div></div></div>
+  <div class="item tap" onclick="closeSheet();csvInv()"><div class="name">Exportar inventario a Excel</div><div class="sub">Archivo CSV</div></div>
+  <div class="item tap" id="impUndoItem" style="display:none" onclick="impUndo()"><div class="name">Deshacer última importación</div><div class="sub" id="impUndoSub"></div></div></div>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+  impLoadUndo().then(r => { const it = $('#impUndoItem'); if (it && r){ it.style.display = ''; $('#impUndoSub').textContent = new Date(r.ts).toLocaleString('es-VE') + ' · ' + Object.keys(r.created).length + ' nuevos, ' + Object.keys(r.changed).length + ' cambiados'; } });
 }
 /* ============ Ajustar precios en bloque ============ */
 function priceAdjForm(){
@@ -3196,7 +3606,8 @@ async function saveFile(name, data){
   }
   toast('No se pudo descargar el archivo en esta vista');
 }
-const csvCell = v => { const s = String(v ?? ''); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+// Neutraliza fórmulas (=, +, @, -texto) para que el CSV exportado no ejecute nada al abrirlo en Excel.
+const csvCell = v => { let s = String(v ?? ''); if (/^[=+@\t\r]/.test(s) || /^-[^\d.,]/.test(s)) s = "'" + s; return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 const csv = rows => '﻿' + rows.map(r => r.map(csvCell).join(';')).join('\n');
 const dec = n => String(r2(num(n))).replace('.', ',');
 function csvInv(){ saveFile('inventario.csv', csv([['Producto', 'Categoría', 'Marca/modelo', 'Código', 'Moneda', 'Precio', 'Costo', 'Precio Bs', 'Stock', 'Unidad', 'Mínimo', 'Garantía'], ...products().map(p => [p.name, p.cat, p.brand, p.code, curOf(p) === 'eur' ? 'EUR' : 'USD', dec(p.price), dec(p.cost), dec(pBs(p)), String(num(p.stock)).replace('.', ','), p.unit, p.min, p.warranty])])); }
