@@ -3041,66 +3041,198 @@ function parseCSV(text){
   if (cur || row.length){ row.push(cur); rows.push(row); }
   return rows.filter(r => r.some(c => String(c).trim()));
 }
-const normH = h => String(h || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-const HMAP = [['name', /^(nombre|producto|descripcion|articulo|item)/], ['code', /(codigo|barra|barcode|sku|ean)/], ['cat', /^(categoria|rubro|departamento|grupo|familia)/], ['price', /^(precio|pvp|precio venta|venta)/], ['cur', /^(moneda|divisa)/], ['cost', /^(costo|coste|precio compra|compra)/], ['stock', /^(stock|existencia|cantidad|inventario|unidades)/], ['min', /(minimo|min)/], ['unit', /^(unidad|medida)/], ['brand', /^(marca|modelo)/], ['iva', /^(iva|impuesto)/]];
-function mapRows(rows){
-  const head = rows[0].map(normH), idx = {};
-  head.forEach((h, i) => { for (const [k, re] of HMAP) if (idx[k] == null && re.test(h)){ idx[k] = i; break; } });
-  if (idx.name == null || idx.price == null) return {error:'No encontré las columnas "Nombre" y "Precio". Usa la plantilla.'};
-  const out = [], errs = [];
-  rows.slice(1).forEach((r, n) => {
-    const g = k => idx[k] == null ? '' : String(r[idx[k]] ?? '').trim();
-    const name = g('name'), price = parseNum(g('price'));
-    if (!name){ return; } if (!(price > 0)){ errs.push('Fila ' + (n + 2) + ': ' + name + ' sin precio'); return; }
-    const ivaS = g('iva').toLowerCase(), iva = /ex/.test(ivaS) ? 0 : (parseNum(ivaS) === 8 ? 8 : (ivaS === '0' ? 0 : 16));
-    const cur = /eur|€/i.test(g('cur')) ? 'eur' : 'usd';
-    const unitS = normH(g('unit')), unit = ['kg', 'g', 'lt', 'paquete', 'caja'].find(u => unitS.startsWith(u.slice(0, 2))) || 'unidad';
-    out.push({name, code:g('code').replace(/\s+/g, '').replace(/\.0$/, ''), cat:g('cat'), price:r2(price), cur, cost:r2(parseNum(g('cost')) || 0), stock:r3(parseNum(g('stock')) || 0), min:g('min') === '' ? '' : r3(parseNum(g('min')) || 0), unit, brand:g('brand'), iva});
-  });
-  return {rows:out, errs};
+/* --- Lector inteligente: entiende el Excel tal como lo tenga el negocio --- */
+const normH = h => String(h ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+// Campos de StockSoft que sabe rellenar, en el orden en que se muestran.
+const IMP_F = [['name', 'Nombre del producto', 1], ['price', 'Precio de venta', 1], ['code', 'Código / barras'], ['cat', 'Categoría'], ['cost', 'Costo'], ['stock', 'Stock (existencia)'], ['min', 'Stock mínimo'], ['unit', 'Unidad'], ['brand', 'Marca'], ['iva', 'IVA'], ['exp', 'Fecha de vencimiento'], ['sup', 'Proveedor'], ['wPrice', 'Precio al mayor'], ['wQty', 'Cantidad para precio al mayor'], ['cur', 'Moneda']];
+// Columnas que son cálculos o informes: no se importan.
+const IMP_SKIP = /(valor|total|estado|status|margen|ganancia|utilidad|rentab|porcentaje|observ|nota|comentario|ubicacion|foto|imagen)/;
+const IMP_RULES = [['exp', /(venc|caduc|expir)/], ['wQty', /((cant|cantidad|minimo|desde).*mayor|mayor.*(cant|desde|minimo))/], ['wPrice', /(mayor|mayoreo|mayorista)/],
+  ['min', /(minimo|\bmin\b|reorden|punto de pedido|alerta)/], ['cost', /(costo|coste|compra)/], ['price', /(precio|pvp|\bp v p\b|\bventa\b|\bpv\b)/],
+  ['code', /(codigo|\bcod\b|barra|barcode|\bsku\b|\bean\b|\bupc\b|\bref\b|referencia)/], ['name', /(nombre|producto|descripcion|articulo|\bitem\b|detalle|mercancia)/],
+  ['stock', /(stock|existencia|cantidad|inventario|unidades|disponible|\bcant\b|\bqty\b)/], ['cat', /(categoria|rubro|departamento|grupo|familia|seccion|linea|\btipo\b)/],
+  ['unit', /(unidad|medida|presentacion|empaque|\bu m\b|\bum\b)/], ['brand', /(marca|fabricante)/], ['iva', /(iva|impuesto|exento|alicuota|\btax\b)/],
+  ['cur', /(moneda|divisa)/], ['sup', /(proveedor|suplidor|distribuidor)/]];
+function impCur(raw){ const r = String(raw ?? ''), h = normH(r); if (/\b(bs|ves|bsf|bsd|bolivar|bolivares)\b/.test(h)) return 'bs'; if (/€|\beur|euro/i.test(r)) return 'eur'; if (/\$|usd|dolar|divisa/i.test(r)) return 'usd'; return ''; }
+function impField(raw){ const h = normH(raw); if (!h || h.length > 40) return null; if (IMP_SKIP.test(h)) return null; for (const [k, re] of IMP_RULES) if (re.test(h)) return k; return null; }
+// Puntúa una fila como posible fila de títulos: cuántos campos distintos reconoce.
+function impScoreRow(row){ const seen = new Set(); let txt = 0; row.forEach(c => { if (typeof c === 'string' && c.trim()) txt++; const f = impField(c); if (f) seen.add(f); }); const core = seen.has('name') || seen.has('price'); return core && txt >= 2 ? seen.size : 0; }
+const impT = m => { const w = Math.max(0, ...m.map(r => r.length)); return Array.from({length:w}, (_, j) => m.map(r => r[j] ?? '')); };
+function impVal(v){ if (v instanceof Date) return v; return typeof v === 'number' ? v : String(v ?? '').trim(); }
+const impIsNum = v => typeof v === 'number' || (typeof v === 'string' && /^[\s$€]*-?[\d.,]+\s*(bs\.?|\$|€|%)?$/i.test(v.trim()) && /\d/.test(v));
+// Busca la tasa del dólar escrita en la hoja ("Tasa BCV: 48,5").
+function impRate(m, upTo){ for (let i = 0; i < Math.min(m.length, Math.max(upTo, 12)); i++){ const r = m[i] || []; for (let j = 0; j < r.length; j++){ if (/(tasa|bcv|cambio|dolar)/.test(normH(r[j]))){ for (let k = j + 1; k < Math.min(r.length, j + 5); k++){ const n = parseNum(r[k]); if (n > 1 && n < 1e7 && impIsNum(r[k])) return n; } } } } return 0; }
+// Sin fila de títulos: adivina por el contenido de cada columna.
+function impGuess(m){
+  const w = Math.max(0, ...m.map(r => r.length)), st = [];
+  for (let j = 0; j < w; j++){ const vs = m.map(r => impVal(r[j])).filter(v => v !== '' && !(v instanceof Date)); const n = vs.length || 1;
+    const nums = vs.filter(impIsNum).map(parseNum), txt = vs.filter(v => !impIsNum(v));
+    st.push({j, fill:vs.length, txt:txt.length / n, len:txt.reduce((a, v) => a + String(v).length, 0) / (txt.length || 1), num:nums.length / n, dec:nums.filter(x => x % 1).length / (nums.length || 1), big:nums.filter(x => Math.abs(x) >= 1e6).length / (nums.length || 1), mean:nums.reduce((a, x) => a + x, 0) / (nums.length || 1), codeish:vs.filter(v => /^[a-z]{0,4}[-_]?\d{2,}$/i.test(String(v)) || (typeof v === 'number' && v >= 1e6 && v % 1 === 0)).length / n}); }
+  const map = {}, used = new Set(), take = (k, c) => { if (c){ map[k] = c.j; used.add(c.j); } };
+  const live = st.filter(s => s.fill >= Math.max(2, m.length * 0.3));
+  take('code', live.filter(s => s.codeish > 0.7).sort((a, b) => b.codeish - a.codeish)[0]);
+  take('name', live.filter(s => !used.has(s.j) && s.txt > 0.6 && s.len > 4).sort((a, b) => b.len - a.len)[0]);
+  const dec = live.filter(s => !used.has(s.j) && s.num > 0.7 && s.dec > 0.3 && !s.big);
+  if (dec.length >= 2){ const two = dec.slice(0, 2).sort((a, b) => a.mean - b.mean); take('cost', two[0]); take('price', two[1]); } else take('price', dec[0]);
+  take('stock', live.filter(s => !used.has(s.j) && s.num > 0.7 && s.dec <= 0.3 && !s.big)[0]);
+  take('cat', live.filter(s => !used.has(s.j) && s.txt > 0.6 && s.len <= 25)[0]);
+  return map;
 }
+// Analiza una hoja: dónde están los títulos (fila o columna), qué columna es cada cosa, la tasa y la moneda.
+function impAnalyze(raw){
+  const clean = raw.map(r => (r || []).map(impVal));
+  let best = {score:0};
+  for (const tr of [false, true]){ const m = tr ? impT(clean) : clean;
+    for (let i = 0; i < Math.min(m.length, 40); i++){ const s = impScoreRow(m[i]); if (s > best.score) best = {score:s, row:i, tr}; } }
+  const m = best.tr ? impT(clean) : clean;
+  const a = {m, tr:!!best.tr, row:best.score >= 2 ? best.row : -1, cols:[], map:{}, colCur:{}};
+  const w = Math.max(0, ...m.map(r => r.length));
+  if (a.row >= 0){
+    const head = m[a.row];
+    for (let j = 0; j < w; j++){ const f = impField(head[j]), c = impCur(head[j]); if (c) a.colCur[j] = c;
+      if (!f) continue;
+      if (f === 'price' || f === 'cost'){ // Si hay precio en $ y en Bs, se queda con el de divisa.
+        const prev = a.map[f]; if (prev == null || (a.colCur[prev] === 'bs' && c !== 'bs')) a.map[f] = j;
+      } else if (a.map[f] == null) a.map[f] = j; }
+    if (a.map.price == null || a.map.name == null){ const used = new Set(Object.values(a.map)), g = impGuess(m.slice(a.row + 1)); for (const k in g) if (a.map[k] == null && !used.has(g[k])){ a.map[k] = g[k]; used.add(g[k]); } }
+  } else a.map = impGuess(m);
+  for (let j = 0; j < w; j++){ const h = a.row >= 0 ? String(m[a.row][j] ?? '').trim() : ''; const sample = m.slice(a.row + 1).map(r => r[j]).find(v => v !== '' && v != null);
+    if (h || sample != null) a.cols.push({j, label:h || 'Columna ' + impColName(j), sample:sample == null ? '' : (sample instanceof Date ? impDate(sample) : String(sample)).slice(0, 30)}); }
+  a.rate = impRate(m, a.row) || 0;
+  a.cur = a.colCur[a.map.price] || 'usd';
+  return a;
+}
+const impColName = j => (j >= 26 ? String.fromCharCode(64 + Math.floor(j / 26)) : '') + String.fromCharCode(65 + j % 26);
+function impDate(v){
+  if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+  if (typeof v === 'number' && v > 20000 && v < 80000){ const d = new Date(Math.round((v - 25569) * 864e5)); return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0'); }
+  const s = String(v ?? '').trim(); let x;
+  if ((x = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) return x[1] + '-' + x[2].padStart(2, '0') + '-' + x[3].padStart(2, '0');
+  if ((x = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/))){ const y = x[3].length === 2 ? '20' + x[3] : x[3]; return y + '-' + x[2].padStart(2, '0') + '-' + x[1].padStart(2, '0'); }
+  if ((x = s.match(/^(\d{1,2})[-/.](\d{4})$/))) return x[2] + '-' + x[1].padStart(2, '0') + '-28';
+  return '';
+}
+function impIva(v, def){ if (v === '' || v == null) return def; const s = normH(v); if (/^(e|ex|exento|exenta|no|n|sin iva|exonerado)$/.test(s) || /exent/.test(s)) return 0; if (/^(si|s|gravado|general)$/.test(s)) return 16;
+  let n = parseNum(v); if (!(n >= 0)) return def; if (n > 0 && n < 1) n = r2(n * 100); return n === 0 ? 0 : n === 8 ? 8 : n === 16 ? 16 : def; }
+function impUnit(v){ const s = normH(v); if (!s) return 'unidad'; if (/^(kg|kilo|kgs|kilogramo)/.test(s)) return 'kg'; if (/^(g|gr|grs|gramo)/.test(s)) return 'g'; if (/^(l|lt|lts|litro)/.test(s)) return 'lt'; if (/^(paq|paquete|bulto|pack|fardo)/.test(s)) return 'paquete'; if (/^(caja|cj|cja|bandeja)/.test(s)) return 'caja'; return 'unidad'; }
+// Convierte las filas de la hoja en productos de StockSoft según el mapa (que el usuario puede corregir).
+function impBuild(a, o){
+  const map = o.map, out = [], skip = [], seen = {};
+  const rate = num(o.rate), conv = (n, cur) => cur === 'bs' ? (rate > 0 ? n / rate : NaN) : n;
+  const priceCur = o.cur, costCur = (map.cost != null && a.colCur[map.cost]) || (priceCur === 'bs' ? 'bs' : priceCur);
+  const rows = a.m.slice(a.row + 1);
+  rows.forEach((r, n) => {
+    const line = a.tr ? 'Columna ' + impColName(a.row + 1 + n) : 'Fila ' + (a.row + 2 + n);
+    if (r.some(c => /^(total|totales|subtotal|gran total)\b/.test(normH(c)))) return;
+    const g = k => map[k] == null || map[k] === '' ? '' : impVal(r[map[k]]);
+    const name = String(g('name')).replace(/\s+/g, ' ').trim();
+    if (!name || impIsNum(name) && map.name != null && !String(name).match(/[a-z]/i)) { if (r.some(c => String(c ?? '').trim())) skip.push(line + ': sin nombre'); return; }
+    const nn = normH(name); if (/^(total|totales|subtotal|suma|gran total)\b/.test(nn) || (a.row >= 0 && nn === normH(a.m[a.row][map.name]))) return;
+    const pr = parseNum(g('price'));
+    if (!(pr > 0)){ const others = r.filter((c, j) => j !== map.name && String(c ?? '').trim()).length; skip.push(line + ': ' + name + (others ? ' sin precio' : ' (parece un título, no un producto)')); return; }
+    let price = conv(pr, priceCur); if (!(price > 0)){ skip.push(line + ': ' + name + ' — falta la tasa para pasar de Bs a $'); return; }
+    const cRaw = parseNum(g('cost')), cost = cRaw > 0 ? conv(cRaw, costCur) || 0 : 0;
+    const stock = parseNum(g('stock')), minS = g('min'), minN = parseNum(minS);
+    const curCol = String(g('cur')); const cur = priceCur === 'bs' ? 'usd' : (map.cur != null && curCol ? (/eur|€/i.test(curCol) ? 'eur' : 'usd') : priceCur);
+    const exp = map.exp != null ? impDate(g('exp')) : '';
+    const wP = parseNum(g('wPrice')), wQ = parseNum(g('wQty'));
+    const p = {name, code:String(g('code')).replace(/\s+/g, '').replace(/\.0+$/, ''), cat:String(g('cat')).trim() || o.cat || '', price:r2(price), cur, cost:r2(cost), stock:r3(stock > 0 ? stock : 0), min:String(minS).trim() === '' || isNaN(minN) ? '' : r3(Math.max(0, minN)),
+      unit:impUnit(g('unit')), brand:String(g('brand')).trim(), iva:impIva(g('iva'), num(o.iva))};
+    if (wP > 0 && wQ > 0){ const w = conv(wP, priceCur); if (w > 0 && w < price){ p.wPrice = r2(w); p.wQty = r3(wQ); } }
+    if (exp && p.stock > 0) p.lots = [{exp, qty:p.stock}];
+    const sup = String(g('sup')).trim(); if (sup) p.supName = sup;
+    const key = p.code ? 'c:' + p.code : 'n:' + nn;
+    if (seen[key] != null){ out[seen[key]] = p; skip.push(line + ': ' + name + ' repetido (se usa la última fila)'); } else { seen[key] = out.length; out.push(p); }
+  });
+  return {rows:out, skip};
+}
+/* --- Pantalla de importar --- */
+let impS = null;
 function importForm(){
-  openSheet(`<h2>Importar productos</h2><p class="note" style="margin-top:0">Carga todo tu inventario de una vez desde Excel. Columnas que entiende: <b>Nombre, Precio</b> (obligatorias), Código, Categoría, Moneda (USD/EUR), Costo, Stock, Mínimo, Unidad, Marca, IVA (16, 8 o Exento).</p>
-  <button class="btn sec full" style="margin-top:6px" onclick="importTemplate()">Descargar plantilla de Excel (CSV)</button>
-  <label>Archivo (.xlsx, .xls o .csv)</label><input type="file" accept=".xlsx,.xls,.csv,text/csv" onchange="importFile(this.files[0])">
+  impS = null;
+  openSheet(`<h2>Importar productos</h2><p class="note" style="margin-top:0">Sube tu inventario <b>tal como lo tengas en Excel</b>. StockSoft busca solo dónde están el nombre, el precio, el stock y lo demás, aunque los títulos no estén en la primera fila. Antes de guardar te enseña lo que entendió para que lo corrijas si hace falta.</p>
+  <label>Archivo (.xlsx, .xls o .csv)</label><input type="file" accept=".xlsx,.xls,.xlsm,.ods,.csv,text/csv" onchange="importFile(this.files[0])">
   <div id="impPrev" style="margin-top:12px"></div>
+  <p class="sub" style="margin-top:10px">¿Empiezas de cero? <a href="#" onclick="importTemplate();return false">Descarga una plantilla de ejemplo</a>.</p>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
-function importTemplate(){ saveFile('plantilla-productos.csv', csv([['Nombre', 'Código', 'Categoría', 'Precio', 'Moneda', 'Costo', 'Stock', 'Mínimo', 'Unidad', 'Marca', 'IVA'], ['Harina de maíz 1 kg', '7591234567890', 'Alimentos', '1,20', 'USD', '0,90', '50', '10', 'unidad', 'Marca X', '0'], ['Refresco 2 L', '', 'Bebidas', '2,50', 'USD', '1,80', '24', '6', 'unidad', '', '16']])); }
-let impRows = null;
+async function importTemplate(){
+  const rows = [['Nombre', 'Código', 'Categoría', 'Precio', 'Moneda', 'Costo', 'Stock', 'Mínimo', 'Unidad', 'Marca', 'IVA', 'Vence', 'Proveedor'], ['Harina de maíz 1 kg', '7591234567890', 'Víveres', 1.2, 'USD', 0.9, 50, 10, 'unidad', 'Marca X', 'Exento', '', ''], ['Refresco 2 L', '', 'Bebidas', 2.5, 'USD', 1.8, 24, 6, 'unidad', '', 16, '', ''], ['Queso blanco', '', 'Charcutería', 6.5, 'USD', 5, 3.5, 1, 'kg', '', 'Exento', '30/12/2026', '']];
+  if (await loadXLSX()){ const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = rows[0].map((h, i) => ({wch:i === 0 ? 26 : 12})); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Productos'); saveFile('plantilla-productos.xlsx', new Blob([XLSX.write(wb, {bookType:'xlsx', type:'array'})], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); }
+  else saveFile('plantilla-productos.csv', csv(rows));
+}
 async function importFile(file){
   if (!file) return;
-  const el = $('#impPrev'); el.innerHTML = '<div class="sub">Leyendo…</div>';
-  let rows;
+  const el = $('#impPrev'); el.innerHTML = '<div class="sub">Leyendo y analizando tu archivo…</div>';
+  let sheets = [];
   try {
-    if (/\.xlsx?$/i.test(file.name)){ if (!(await loadXLSX())){ el.innerHTML = '<div class="warnbox">No se pudo cargar el lector de Excel. Guarda el archivo como CSV e inténtalo de nuevo.</div>'; return; } const wb = XLSX.read(await file.arrayBuffer(), {type:'array'}); rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''}); }
-    else rows = parseCSV((await file.text()).replace(/^﻿/, ''));
-  } catch(e){ el.innerHTML = '<div class="warnbox">No se pudo leer el archivo.</div>'; return; }
-  if (!rows || rows.length < 2){ el.innerHTML = '<div class="warnbox">El archivo está vacío.</div>'; return; }
-  const m = mapRows(rows); if (m.error){ el.innerHTML = `<div class="warnbox">${esc(m.error)}</div>`; return; }
-  impRows = m.rows.map(r => { const ex = (r.code && findByCode(r.code)) || products().find(p => normH(p.name) === normH(r.name)); return {...r, exId:ex ? ex.id : null}; });
-  const nNew = impRows.filter(r => !r.exId).length, nUpd = impRows.length - nNew;
-  el.innerHTML = `<div class="card"><div class="name" style="font-size:14px">${impRows.length} productos leídos</div><p class="note">${nNew} nuevos · ${nUpd} ya existen y se actualizarán (precio, costo, stock y datos)${m.errs.length ? ` · <span style="color:var(--warn)">${m.errs.length} filas con error</span>` : ''}</p>
-  ${m.errs.length ? `<div class="sub" style="max-height:80px;overflow:auto">${m.errs.slice(0, 20).map(esc).join('<br>')}</div>` : ''}
-  <div class="sub" style="margin-top:6px">${impRows.slice(0, 5).map(r => `${esc(r.name)} · ${r.cur === 'eur' ? '€' : '$'}${nf2.format(r.price)} · stock ${nfq.format(r.stock)}`).join('<br>')}${impRows.length > 5 ? '<br>…' : ''}</div>
-  <button class="btn full" style="margin-top:10px" ${impRows.length ? '' : 'disabled'} onclick="doImport()">Importar ${impRows.length} productos</button></div>`;
+    if (/\.(xlsx|xls|xlsm|ods)$/i.test(file.name)){
+      if (!(await loadXLSX())){ el.innerHTML = '<div class="warnbox">No se pudo cargar el lector de Excel. Revisa la conexión o guarda el archivo como CSV.</div>'; return; }
+      const wb = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:true});
+      sheets = wb.SheetNames.map(n => ({name:n, rows:XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:true, defval:''})}));
+    } else sheets = [{name:file.name, rows:parseCSV((await file.text()).replace(/^﻿/, ''))}];
+  } catch(e){ el.innerHTML = '<div class="warnbox">No se pudo leer el archivo. ¿Está abierto en Excel o protegido con contraseña?</div>'; return; }
+  sheets = sheets.filter(s => s.rows.some(r => r.some(c => String(c ?? '').trim())));
+  if (!sheets.length){ el.innerHTML = '<div class="warnbox">El archivo está vacío.</div>'; return; }
+  // Elige la hoja que más productos tiene.
+  const an = sheets.map(s => impAnalyze(s.rows)), score = a => { try { return impBuild(a, {map:a.map, cur:a.cur, rate:a.rate || cfg.bcv, iva:16}).rows.length; } catch(e){ return 0; } };
+  let si = 0, top = -1; an.forEach((a, i) => { const s = score(a); if (s > top){ top = s; si = i; } });
+  impS = {sheets, an, si}; impPick(si);
+}
+function impPick(i){ const a = impS.an[i]; impS.si = i; impS.map = {...a.map}; impS.cur = a.cur; impS.rate = a.rate || cfg.bcv || ''; impS.rateSrc = a.rate ? 'archivo' : (cfg.bcv ? 'bcv' : ''); impS.iva = impS.iva ?? 16; impS.cat = ''; impRender(); }
+function impSet(k, v){ if (k === 'map'){ const [f, j] = v; if (j === '') delete impS.map[f]; else { for (const x in impS.map) if (impS.map[x] === +j && x !== f) delete impS.map[x]; impS.map[f] = +j; } } else impS[k] = v; impRender(); }
+function impRender(){
+  const el = $('#impPrev'); if (!el || !impS) return;
+  const a = impS.an[impS.si], r = impBuild(a, impS);
+  impS.rows = r.rows.map(p => { const ex = (p.code && findByCode(p.code)) || products().find(x => normH(x.name) === normH(p.name)); return {...p, exId:ex ? ex.id : null}; });
+  const nNew = impS.rows.filter(p => !p.exId).length, nUpd = impS.rows.length - nNew;
+  const colOpts = f => `<option value="">— No está en mi archivo —</option>` + a.cols.map(c => `<option value="${c.j}" ${impS.map[f] === c.j ? 'selected' : ''}>${esc(c.label)}${c.sample ? ' · ej. ' + esc(c.sample) : ''}</option>`).join('');
+  const found = IMP_F.filter(([f]) => impS.map[f] != null), miss = IMP_F.filter(([f]) => impS.map[f] == null);
+  const where = a.row < 0 ? 'No había títulos: adiviné cada columna por su contenido. Revísalo.' : (a.tr ? 'Los títulos estaban en la columna ' + impColName(a.row) + ' (productos hacia la derecha).' : 'Los títulos estaban en la fila ' + (a.row + 1) + '.');
+  const sel = ([f, l, req]) => `<div><label>${l}${req ? ' *' : ''}</label><select onchange="impSet('map',['${f}',this.value])">${colOpts(f)}</select></div>`;
+  const cv = p => (p.cur === 'eur' ? '€' : '$') + nf2.format(p.price);
+  el.innerHTML = `<div class="card">
+  <div class="name" style="font-size:14px">Así entendí tu archivo</div>
+  <p class="note" style="margin:4px 0 0">${impS.sheets.length > 1 ? `Hoja <b>${esc(impS.sheets[impS.si].name)}</b>. ` : ''}${where}</p>
+  ${impS.sheets.length > 1 ? `<label>Hoja</label><select onchange="impPick(+this.value)">${impS.sheets.map((s, i) => `<option value="${i}" ${i === impS.si ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>` : ''}
+  <div class="grid2">${found.map(sel).join('')}</div>
+  <label>Los precios del archivo están en</label><select onchange="impSet('cur',this.value)">${[['usd', 'Dólares ($)'], ['eur', 'Euros (€)'], ['bs', 'Bolívares (Bs) → pasar a $']].map(([k, l]) => `<option value="${k}" ${impS.cur === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+  ${impS.cur === 'bs' ? `<label>Tasa para convertir (Bs por $)</label><input inputmode="decimal" value="${impS.rate ? nf2.format(impS.rate) : ''}" onchange="impSet('rate',parseNum(this.value))"><p class="sub">${impS.rateSrc === 'archivo' ? 'Tasa encontrada en tu archivo.' : impS.rateSrc === 'bcv' ? 'Tasa BCV de hoy.' : 'Escribe la tasa.'}</p>` : ''}
+  ${miss.length ? `<div class="name" style="font-size:13px;margin-top:14px">Lo que no venía en tu archivo</div>
+  <div class="grid2">${impS.map.iva == null ? `<div><label>IVA para todos</label><select onchange="impSet('iva',+this.value)">${[[16, '16 %'], [8, '8 %'], [0, 'Exento']].map(([v, l]) => `<option value="${v}" ${num(impS.iva) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>` : ''}
+  ${impS.map.cat == null ? `<div><label>Categoría para todos</label><input value="${esc(impS.cat || '')}" placeholder="Opcional" onchange="impSet('cat',this.value.trim())"></div>` : ''}</div>
+  <details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Elegir otras columnas (${miss.map(x => x[1].toLowerCase()).slice(0, 4).join(', ')}${miss.length > 4 ? '…' : ''})</summary><div class="grid2">${miss.map(sel).join('')}</div></details>` : ''}
+  </div>
+  <div class="card" style="margin-top:10px">
+  <div class="name" style="font-size:14px">${impS.rows.length} productos listos</div>
+  <p class="note">${nNew} nuevos · ${nUpd} ya existen y se actualizarán (precio, costo, stock y datos)${r.skip.length ? ` · <span style="color:var(--warn)">${r.skip.length} filas omitidas</span>` : ''}</p>
+  <div class="list">${impS.rows.slice(0, 6).map(p => `<div class="item"><div class="name" style="font-size:13px">${esc(p.name)}</div><div class="sub">${cv(p)}${p.cost ? ' · costo ' + nf2.format(p.cost) : ''} · stock ${nfq.format(p.stock)} ${unitLbl(p.unit)} · ${p.iva ? 'IVA ' + p.iva + ' %' : 'Exento'}${p.cat ? ' · ' + esc(p.cat) : ''}${p.lots ? ' · vence ' + esc(p.lots[0].exp) : ''}${p.exId ? ' · <b>actualiza</b>' : ''}</div></div>`).join('')}</div>
+  ${impS.rows.length > 6 ? `<p class="sub">… y ${impS.rows.length - 6} más</p>` : ''}
+  ${r.skip.length ? `<details><summary class="sub" style="cursor:pointer">Ver filas omitidas</summary><div class="sub" style="max-height:110px;overflow:auto">${r.skip.slice(0, 50).map(esc).join('<br>')}</div></details>` : ''}
+  ${impS.map.name == null || impS.map.price == null ? '<div class="warnbox" style="margin-top:8px">Dime qué columna es el <b>nombre</b> y cuál el <b>precio</b> en los selectores de arriba.</div>' : ''}
+  <button class="btn full" style="margin-top:10px" ${impS.rows.length ? '' : 'disabled'} onclick="doImport()">Importar ${impS.rows.length} productos</button></div>`;
 }
 async function doImport(){
-  if (!impRows) return; const rows = impRows; impRows = null;
+  if (!impS || !impS.rows) return; const rows = impS.rows; impS = null;
   $('#impPrev').innerHTML = '<div class="sub" id="impProg">Importando…</div>';
-  let n = 0;
+  // Proveedores: usa el que ya existe con ese nombre o lo crea.
+  const sups = {}; suppliers().forEach(s => sups[normH(s.name)] = s.id);
+  let n = 0, nSup = 0;
   for (const r of rows){
-    const {exId, ...d} = r; const base = exId ? S.products[exId] : {created:Date.now(), track:true};
+    const {exId, supName, ...d} = r; const base = exId ? S.products[exId] : {created:Date.now(), track:true};
     if (d.code && findByCode(d.code, exId || undefined)) d.code = '';
+    if (d.cat) d.cat = sameCat(d.cat);
+    if (supName){ const k = normH(supName); if (!sups[k]){ const sid = uid(); if (await put('suppliers', sid, {created:Date.now(), name:supName})){ sups[k] = sid; nSup++; } } if (sups[k]) d.supplierId = sups[k]; }
+    if (d.lots && base.lots && base.lots.length) d.lots = activeLots({stock:d.stock, lots:[...base.lots.filter(l => l.exp !== d.lots[0].exp), ...d.lots]});
     await put('products', exId || uid(), {...base, ...d, updated:Date.now()});
     if (++n % 10 === 0){ const p = $('#impProg'); if (p) p.textContent = 'Importando… ' + n + ' de ' + rows.length; }
   }
-  logA('inventario', 'Productos importados', n + ' productos desde archivo'); closeSheet(); toast(n + ' productos importados'); shellFor = ''; render();
+  logA('inventario', 'Productos importados', n + ' productos desde archivo' + (nSup ? ' · ' + nSup + ' proveedores nuevos' : '')); closeSheet(); toast(n + ' productos importados' + (nSup ? ' · ' + nSup + ' proveedores' : '')); shellFor = ''; render();
 }
 
 function moreInv(){
   openSheet(`<h2>Inventario</h2><div class="list" style="margin-top:6px">
-  <div class="item tap" onclick="importForm()"><div class="name">Importar desde Excel</div><div class="sub">Carga muchos productos de una vez</div></div>
+  <div class="item tap" onclick="importForm()"><div class="name">Importar desde Excel</div><div class="sub">Sube tu Excel tal como lo tengas: StockSoft lo entiende solo</div></div>
   <div class="item tap" onclick="priceAdjForm()"><div class="name">Ajustar precios en bloque</div><div class="sub">Sube o baja precios por categoría en %</div></div>
   <div class="item tap" onclick="closeSheet();ui.labelMode=true;ui.selLabels.clear();VIEWS.inventario.fill()"><div class="name">Imprimir etiquetas</div><div class="sub">Con precio y código de barras</div></div>
   <div class="item tap" onclick="closeSheet();csvInv()"><div class="name">Exportar inventario a Excel</div><div class="sub">Archivo CSV</div></div></div>
