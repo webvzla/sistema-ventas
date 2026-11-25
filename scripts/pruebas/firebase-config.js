@@ -1,7 +1,7 @@
 // Configuración del ENTORNO DE PRUEBAS: proyecto de Firebase SEPARADO "stocksoft-pruebas"
 // (base de datos, cuentas y reglas propias; nada que ver con los clientes reales).
 // .github/workflows/pruebas.yml la copia sobre public/app/firebase-config.js al publicar la versión de pruebas.
-// Producción sigue usando web/firebase-config.js (proyecto sistema-ventas-e085f), que no se toca.
+// Producción sigue usando web/firebase-config.js (proyecto de producción), que no se toca.
 window.FIREBASE_CONFIG = {
   apiKey: "AIzaSyD_a-uAX_eui_i0xMmssK-U_ypUYnqE8PM",
   authDomain: "stocksoft-pruebas.firebaseapp.com",
