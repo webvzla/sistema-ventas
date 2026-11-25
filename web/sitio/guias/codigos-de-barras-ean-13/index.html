@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. Generado por scripts/sitio.mjs: no editar a mano. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Códigos de barras para tu comercio: EAN-13, Code 128 y códigos internos · StockSoft</title>
+<meta name="description" content="Cómo funcionan los códigos de barras EAN-13 y Code 128, cómo se calcula el dígito de control, cuándo usar códigos internos para productos a granel y cómo imprimir etiquetas que se lean bien.">
+<link rel="canonical" href="https://stocksoft.app/guias/codigos-de-barras-ean-13/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Códigos de barras: cómo funcionan y cómo usarlos en tu comercio">
+<meta property="og:description" content="Cómo funcionan los códigos de barras EAN-13 y Code 128, cómo se calcula el dígito de control, cuándo usar códigos internos para productos a granel y cómo imprimir etiquetas que se lean bien.">
+<meta property="og:url" content="https://stocksoft.app/guias/codigos-de-barras-ean-13/">
+<meta name="google-adsense-account" content="ca-pub-9769351537955799">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9769351537955799" crossorigin="anonymous"></script>
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Códigos de barras: EAN-13, Code 128 y códigos internos","description":"Cómo funcionan los códigos de barras EAN-13 y Code 128, cómo se calcula el dígito de control, cuándo usar códigos internos para productos a granel y cómo imprimir etiquetas que se lean bien.","inLanguage":"es-VE","datePublished":"2026-11-25","dateModified":"2026-11-25","author":{"@type":"Organization","name":"StockSoft"},"publisher":{"@type":"Organization","name":"StockSoft","logo":{"@type":"ImageObject","url":"https://stocksoft.app/icon.png"}},"mainEntityOfPage":"https://stocksoft.app/guias/codigos-de-barras-ean-13/"}</script>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/guias/">Guías</a><a class="hide-m" href="/herramientas/">Utilidades gratis</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/">Inicio</a> › <a href="/guias/">Guías</a> › Códigos de barras</div>
+    <h1>Códigos de barras: <em>EAN-13</em>, Code 128 y códigos internos</h1>
+    <p class="lead">Escanear en vez de buscar acelera la caja y evita errores de precio. Lo que necesitas saber para usar códigos de barras en un comercio pequeño.</p>
+    <p class="byline">Por el equipo de StockSoft · Actualizado el 25 de noviembre de 2026 · 3 min de lectura</p>
+  </section>
+  <div class="layout">
+    <article class="info prose">
+<div class="toc"><b>En esta guía</b><ol>
+<li><a href="#por-que">Por qué usar códigos de barras</a></li>
+<li><a href="#ean">EAN-13: el código de los productos</a></li>
+<li><a href="#digito">Cómo se calcula el dígito de control</a></li>
+<li><a href="#internos">Códigos internos para granel y charcutería</a></li>
+<li><a href="#imprimir">Imprimir etiquetas que se lean bien</a></li>
+<li><a href="#faq">Preguntas frecuentes</a></li>
+</ol></div>
+
+<h2 id="por-que">Por qué usar códigos de barras</h2>
+<p>Buscar un producto por nombre en la caja tarda segundos y se presta a errores ("¿era la harina de 1 kg o la de 500 g?"). Con el código de barras el producto exacto aparece al instante, con su precio actualizado. Además, el inventario se descuenta del artículo correcto, lo que hace que tus conteos cuadren.</p>
+<p>No necesitas un lector caro para empezar: muchos programas de ventas leen códigos con la cámara del teléfono, y un lector USB básico funciona como un teclado que "escribe" el código.</p>
+
+<h2 id="ean">EAN-13: el código de los productos</h2>
+<p>Casi todos los productos de consumo traen un código <b>EAN-13</b>: 13 dígitos que identifican al fabricante y al producto. Los primeros dígitos indican el organismo que asignó el código (los productos registrados en Venezuela suelen empezar por <b>759</b>), luego vienen el fabricante y el artículo, y el último es el <b>dígito de control</b>.</p>
+<p>Ese código lo pone el fabricante y es el mismo en todos los comercios. Tú no tienes que inventarlo: solo registrarlo una vez en tu inventario escaneando el empaque.</p>
+
+<h2 id="digito">Cómo se calcula el dígito de control</h2>
+<p>El dígito de control permite al lector detectar si un código se leyó mal. Para un EAN-13 se calcula así con los 12 primeros dígitos:</p>
+<ol>
+<li>Suma los dígitos en posición impar (1.º, 3.º, 5.º…).</li>
+<li>Suma los dígitos en posición par (2.º, 4.º, 6.º…) y multiplica el resultado por 3.</li>
+<li>Suma los dos resultados.</li>
+<li>El dígito de control es lo que falta para llegar a la siguiente decena (si la suma ya es decena, es 0).</li>
+</ol>
+<div class="callout"><b class="t">Ejemplo con 759123456789</b>
+<p>Impares: 7 + 9 + 2 + 4 + 6 + 8 = 36. Pares: 5 + 1 + 3 + 5 + 7 + 9 = 30 → × 3 = 90.</p>
+<p>36 + 90 = 126. Para llegar a 130 faltan 4 → código completo: <b>7591234567894</b>.</p></div>
+
+<h2 id="internos">Códigos internos para granel y charcutería</h2>
+<p>Los productos que vendes sueltos (granos, queso, embutidos, productos que fraccionas) no traen código. Para ellos tienes dos opciones:</p>
+<ul>
+<li><b>Code 128 con un código propio</b> (por ejemplo, QUESO-BLANCO o INT-0005). Admite letras y números, ideal para uso interno.</li>
+<li><b>EAN-13 interno</b> empezando por 2 (rango reservado para uso interno de las tiendas), si tu sistema o tu balanza trabajan solo con números.</li>
+</ul>
+<p>Lo importante es que el código interno no coincida con el de ningún producto real y que esté registrado en tu inventario.</p>
+
+<h2 id="imprimir">Imprimir etiquetas que se lean bien</h2>
+<ul>
+<li>Imprime en <b>negro sobre blanco</b>; evita fondos de color y tinta gastada.</li>
+<li>Respeta los <b>márgenes blancos</b> a los lados del código: sin ellos el lector falla.</li>
+<li>No lo hagas demasiado pequeño: unos 3 cm de ancho son un buen mínimo para un EAN-13.</li>
+<li>Pon el <b>precio</b> y el nombre en la misma etiqueta para el estante.</li>
+<li>Prueba una etiqueta con tu lector o tu teléfono antes de imprimir cien.</li>
+</ul>
+
+<h2 id="faq">Preguntas frecuentes</h2>
+<div class="faq">
+<details><summary>¿Necesito comprar códigos para mis productos?</summary><p>Solo si fabricas o empacas productos con tu marca para venderlos en otros comercios; en ese caso se tramitan ante el organismo GS1 del país. Para uso dentro de tu tienda, los códigos internos son suficientes.</p></details>
+<details><summary>¿Qué hago si dos productos tienen el mismo código?</summary><p>No debería pasar con EAN-13 reales. Si ocurre, suele ser un código interno repetido o un error al registrar: corrígelo en tu inventario, porque si no, se descontará el producto equivocado.</p></details>
+<details><summary>¿Dónde genero los códigos?</summary><p>Con nuestro <a href="/herramientas/codigo-de-barras/">generador de códigos de barras</a> gratis, que calcula el dígito de control y descarga la imagen para imprimir. En <a href="/">StockSoft</a> puedes escanear con la cámara o un lector e imprimir etiquetas con precio y código de todo tu inventario.</p></details>
+</div>
+
+<div class="ad" data-slot=""></div>
+<p class="mut disclaimer">Esta guía es información general para comercios y no sustituye la asesoría de un contador. Las normas fiscales y de precios pueden cambiar; verifica siempre la normativa vigente del SENIAT, el BCV y la SUNDDE.</p>
+    </article>
+    <aside class="side">
+      <div class="promo"><b>Úsalo ahora</b><p><a href="/herramientas/codigo-de-barras/">Generador de códigos de barras</a></p></div>
+      <div class="promo"><b>Todo esto, solo en cada venta</b><p>StockSoft lleva inventario, ventas, IVA, caja y fiados con la tasa BCV del día.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/guias/">Guías</a> · <a href="/herramientas/">Utilidades gratis</a> · <a href="/quienes-somos/">Quiénes somos</a> · <a href="/contacto/">Contacto</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+</body>
+</html>

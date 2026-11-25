@@ -7,6 +7,8 @@ rm -rf public/app/descargar
 # Herramientas gratuitas en /herramientas/ y archivos para buscadores (robots, sitemap) en la raíz.
 mv public/app/herramientas public/herramientas
 cp web/raiz/* public/ && rm -rf public/app/raiz
+# Páginas de contenido (guías, quiénes somos, contacto) en la raíz: las genera `node scripts/sitio.mjs` en web/sitio/.
+cp -r web/sitio/. public/ && rm -rf public/app/sitio
 cp web/descargar/index.html public/index.html
 cp web/descargar/app-vender.png web/icon.png public/
 sed -i 's#\.\./icon\.png#icon.png#g; s#https://stocksoft\.web\.app/app/"#/app/"#g' public/index.html

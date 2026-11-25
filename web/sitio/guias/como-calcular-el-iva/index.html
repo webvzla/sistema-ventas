@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!-- StockSoft · © 2026 StockSoft. Todos los derechos reservados. Generado por scripts/sitio.mjs: no editar a mano. -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cómo calcular el IVA en Venezuela (16 %, 8 % y exento) con ejemplos · StockSoft</title>
+<meta name="description" content="Aprende a sacar la base imponible y el IVA de un precio, a sumarle el IVA a un costo y a manejar productos al 16 %, al 8 % y exentos en tu comercio, con ejemplos en dólares y bolívares.">
+<link rel="canonical" href="https://stocksoft.app/guias/como-calcular-el-iva/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Cómo calcular el IVA en Venezuela, paso a paso">
+<meta property="og:description" content="Aprende a sacar la base imponible y el IVA de un precio, a sumarle el IVA a un costo y a manejar productos al 16 %, al 8 % y exentos en tu comercio, con ejemplos en dólares y bolívares.">
+<meta property="og:url" content="https://stocksoft.app/guias/como-calcular-el-iva/">
+<meta name="google-adsense-account" content="ca-pub-9769351537955799">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9769351537955799" crossorigin="anonymous"></script>
+<meta name="theme-color" content="#060d1d">
+<link rel="icon" href="/icon.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/herramientas/estilo.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Cómo calcular el IVA en Venezuela, paso a paso","description":"Aprende a sacar la base imponible y el IVA de un precio, a sumarle el IVA a un costo y a manejar productos al 16 %, al 8 % y exentos en tu comercio, con ejemplos en dólares y bolívares.","inLanguage":"es-VE","datePublished":"2026-11-25","dateModified":"2026-11-25","author":{"@type":"Organization","name":"StockSoft"},"publisher":{"@type":"Organization","name":"StockSoft","logo":{"@type":"ImageObject","url":"https://stocksoft.app/icon.png"}},"mainEntityOfPage":"https://stocksoft.app/guias/como-calcular-el-iva/"}</script>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
+  <nav class="nav"><a class="hide-m" href="/guias/">Guías</a><a class="hide-m" href="/herramientas/">Utilidades gratis</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="crumb"><a href="/">Inicio</a> › <a href="/guias/">Guías</a> › IVA</div>
+    <h1>Cómo calcular el <em>IVA</em> en Venezuela, paso a paso</h1>
+    <p class="lead">Las dos operaciones que todo comercio hace a diario: sacar el IVA de un precio que ya lo incluye y sumárselo a uno que no lo tiene. Con ejemplos reales y los errores más comunes.</p>
+    <p class="byline">Por el equipo de StockSoft · Actualizado el 25 de noviembre de 2026 · 5 min de lectura</p>
+  </section>
+  <div class="layout">
+    <article class="info prose">
+<div class="toc"><b>En esta guía</b><ol>
+<li><a href="#que-es">Qué es el IVA y quién lo cobra</a></li>
+<li><a href="#alicuotas">Alícuotas: 16 %, 8 % y exento</a></li>
+<li><a href="#sacar">Sacar el IVA de un precio que ya lo incluye</a></li>
+<li><a href="#sumar">Sumar el IVA a un precio que no lo tiene</a></li>
+<li><a href="#mezcla">Una venta con productos de distinto IVA</a></li>
+<li><a href="#errores">Errores frecuentes</a></li>
+<li><a href="#faq">Preguntas frecuentes</a></li>
+</ol></div>
+
+<h2 id="que-es">Qué es el IVA y quién lo cobra</h2>
+<p>El Impuesto al Valor Agregado (IVA) es un impuesto que paga el consumidor final, pero que <b>recauda el comercio</b>: tú lo cobras en cada venta y luego lo declaras ante el SENIAT, descontando el IVA que pagaste a tus proveedores en las compras. Por eso es tan importante separar bien, en cada precio, cuánto es tu venta real (la <b>base imponible</b>) y cuánto es impuesto.</p>
+<p>Si tu precio de venta es de $11,60 y el producto lleva IVA general, solo $10,00 son tuyos: los otros $1,60 pertenecen al fisco. Confundir el precio final con la base es la forma más rápida de calcular mal la ganancia de un negocio.</p>
+
+<h2 id="alicuotas">Alícuotas: 16 %, 8 % y exento</h2>
+<p>En Venezuela conviven varias alícuotas. Para un comercio de barrio, abasto o bodega, las que aparecen todos los días son estas:</p>
+<div class="tw"><table>
+<tr><th>Alícuota</th><th>Tasa</th><th>Ejemplos habituales</th></tr>
+<tr><td>General</td><td class="n">16 %</td><td>La mayoría de productos: refrescos, chucherías, artículos de limpieza, cuidado personal, ferretería.</td></tr>
+<tr><td>Reducida</td><td class="n">8 %</td><td>Ciertos bienes y servicios que la ley define expresamente.</td></tr>
+<tr><td>Exento</td><td class="n">0 %</td><td>Productos de la cesta básica que la ley exonera (por ejemplo, muchos alimentos de primera necesidad como harina de maíz, arroz o leche, según la lista vigente).</td></tr>
+</table></div>
+<p>La lista exacta de qué va exento o al 8 % la fija la ley y puede cambiar. Si tienes dudas con un producto concreto, revisa la factura de tu proveedor: ahí viene indicado si se lo compraste con IVA o exento, y lo normal es que lo vendas igual.</p>
+
+<h2 id="sacar">Sacar el IVA de un precio que ya lo incluye</h2>
+<p>Es el caso más común en el mostrador: tienes un precio final (el que ve el cliente) y necesitas saber cuánto es la base y cuánto el impuesto, por ejemplo para la factura o para calcular tu ganancia.</p>
+<div class="callout"><b class="t">Fórmula</b>
+<p>Base = Precio con IVA ÷ (1 + alícuota)</p>
+<p>IVA = Precio con IVA − Base</p></div>
+<h3>Ejemplo al 16 %</h3>
+<p>Un producto se vende a $11,60 con IVA incluido.</p>
+<ol>
+<li>Base = 11,60 ÷ 1,16 = <b>$10,00</b></li>
+<li>IVA = 11,60 − 10,00 = <b>$1,60</b></li>
+</ol>
+<h3>Ejemplo al 8 %</h3>
+<p>Un producto se vende a $5,40 con IVA reducido.</p>
+<ol>
+<li>Base = 5,40 ÷ 1,08 = <b>$5,00</b></li>
+<li>IVA = 5,40 − 5,00 = <b>$0,40</b></li>
+</ol>
+<div class="callout warn"><b class="t">Ojo: no se resta el 16 %</b>
+<p>Un error muy común es hacer 11,60 − 16 % = 9,74. Eso está mal: el 16 % se calcula sobre la base, no sobre el precio final. Siempre se <b>divide</b> entre 1,16.</p></div>
+
+<h2 id="sumar">Sumar el IVA a un precio que no lo tiene</h2>
+<p>Cuando partes de una base (por ejemplo, tu proveedor te pasa una lista de precios sin IVA, o calculas tu precio a partir del costo), el IVA se multiplica:</p>
+<div class="callout"><b class="t">Fórmula</b>
+<p>IVA = Base × alícuota</p>
+<p>Precio final = Base + IVA = Base × (1 + alícuota)</p></div>
+<p>Si quieres vender un artículo a una base de $8,00 con IVA general: IVA = 8,00 × 0,16 = $1,28, y el precio final es <b>$9,28</b>. Con la alícuota reducida sería 8,00 × 1,08 = <b>$8,64</b>, y exento se queda en <b>$8,00</b>.</p>
+
+<h3>En bolívares</h3>
+<p>El cálculo es idéntico en bolívares; lo único que cambia es que primero conviertes con la tasa del día. Con una tasa de ejemplo de 50 Bs por dólar, el producto de $11,60 cuesta 580,00 Bs: base 500,00 Bs e IVA 80,00 Bs. Lo importante es convertir el <b>precio final</b> y después separar el IVA, o convertir base e IVA por separado con la <b>misma</b> tasa; si usas tasas distintas en cada línea, la factura no cuadra.</p>
+
+<h2 id="mezcla">Una venta con productos de distinto IVA</h2>
+<p>En un abasto es normal que en la misma venta haya productos exentos y gravados. El IVA se calcula <b>por producto</b> (o por grupo de alícuota), nunca sobre el total:</p>
+<div class="tw"><table>
+<tr><th>Producto</th><th class="n">Precio final</th><th>Alícuota</th><th class="n">Base</th><th class="n">IVA</th></tr>
+<tr><td>Harina de maíz 1 kg</td><td class="n">$1,35</td><td>Exento</td><td class="n">$1,35</td><td class="n">$0,00</td></tr>
+<tr><td>Refresco 2 L</td><td class="n">$2,32</td><td>16 %</td><td class="n">$2,00</td><td class="n">$0,32</td></tr>
+<tr><td>Jabón de baño</td><td class="n">$1,16</td><td>16 %</td><td class="n">$1,00</td><td class="n">$0,16</td></tr>
+<tr><th>Total</th><th class="n">$4,83</th><th></th><th class="n">$4,35</th><th class="n">$0,48</th></tr>
+</table></div>
+<p>Si hubieras dividido el total entre 1,16 habrías declarado $0,67 de IVA, cuando en realidad solo cobraste $0,48. La diferencia parece pequeña, pero repetida en cientos de ventas al mes es dinero que pagas de más.</p>
+
+<h2 id="errores">Errores frecuentes</h2>
+<ul>
+<li><b>Restar el 16 % al precio final</b> en lugar de dividir entre 1,16.</li>
+<li><b>Calcular el IVA sobre el total</b> de una venta mixta (exentos + gravados).</li>
+<li><b>Redondear cada paso</b>: redondea solo al final, al precio que cobras.</li>
+<li><b>Olvidar que el descuento también baja el IVA</b>: si haces un 10 % de descuento sobre un precio con IVA, la base y el impuesto bajan en la misma proporción.</li>
+<li><b>Mezclar tasas de cambio</b> en una misma factura al pasar de dólares a bolívares.</li>
+</ul>
+
+<h2 id="faq">Preguntas frecuentes</h2>
+<div class="faq">
+<details><summary>¿El precio que pongo en el estante debe incluir el IVA?</summary><p>Sí. El consumidor final debe ver el precio total que va a pagar. Internamente tú separas base e IVA para la factura y la declaración.</p></details>
+<details><summary>¿Cómo sé si un producto es exento?</summary><p>La forma más práctica es ver cómo te lo facturó tu proveedor. Si te lo vendió exento, normalmente tú también lo vendes exento. Para casos dudosos, consulta la lista vigente o a tu contador.</p></details>
+<details><summary>¿Qué pasa con el IGTF?</summary><p>El IGTF es otro impuesto distinto, que se aplica en ciertos casos cuando el pago es en divisas. Lo explicamos en <a href="/guias/igtf-pagos-en-divisas/">la guía del IGTF</a>.</p></details>
+<details><summary>¿Hay una forma de no hacer estas cuentas a mano?</summary><p>Puedes usar nuestra <a href="/herramientas/iva-igtf/">calculadora de IVA e IGTF</a> gratis. Y si vendes todo el día, <a href="/">StockSoft</a> aplica el IVA de cada producto (16 %, 8 % o exento) automáticamente en cada venta y lo desglosa en la factura.</p></details>
+</div>
+
+<div class="ad" data-slot=""></div>
+<p class="mut disclaimer">Esta guía es información general para comercios y no sustituye la asesoría de un contador. Las normas fiscales y de precios pueden cambiar; verifica siempre la normativa vigente del SENIAT, el BCV y la SUNDDE.</p>
+    </article>
+    <aside class="side">
+      <div class="promo"><b>Úsalo ahora</b><p><a href="/herramientas/iva-igtf/">Calculadora de IVA e IGTF</a><br><a href="/herramientas/precio-en-bolivares/">Precio de venta en bolívares</a></p></div>
+      <div class="promo"><b>Todo esto, solo en cada venta</b><p>StockSoft lleva inventario, ventas, IVA, caja y fiados con la tasa BCV del día.</p><a class="btn" href="/app/">Probar gratis 7 días</a></div>
+      <div class="ad" data-slot=""></div>
+    </aside>
+  </div>
+</main>
+
+<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/guias/">Guías</a> · <a href="/herramientas/">Utilidades gratis</a> · <a href="/quienes-somos/">Quiénes somos</a> · <a href="/contacto/">Contacto</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>
+<script src="/herramientas/comun.js"></script>
+</body>
+</html>
