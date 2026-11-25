@@ -1,8 +1,13 @@
 name: Versión de pruebas
 
-# Al subir a la rama "pruebas" se publica en un canal de vista previa de Firebase
-# (https://stocksoft--pruebas-hx0q1cm0.web.app). Los clientes no la ven. Cuando Francisco
-# aprueba, se pasa a main y entonces se publica de verdad (construir.yml).
+# Al subir a la rama "pruebas":
+#  1) Se ejecutan TODAS las pruebas con los emuladores de Firebase (proyecto "demo-stocksoft": no puede
+#     conectar con Firebase real).
+#  2) Si pasan, se publica en el proyecto de Firebase SEPARADO "stocksoft-pruebas"
+#     (https://stocksoft-pruebas.web.app/app/), con su propia base de datos, cuentas y reglas.
+# Nunca se publica en el proyecto de producción (sistema-ventas-e085f): se comprueba la cuenta de servicio y
+# que no quede ninguna referencia a producción antes de publicar. Producción solo se publica desde main
+# (construir.yml) y solo con la autorización expresa de Francisco.
 on:
   push:
     branches: [pruebas]
@@ -10,34 +15,81 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 concurrency:
   group: pruebas
   cancel-in-progress: true
 
 jobs:
-  preview:
-    name: Publicar versión de pruebas
+  pruebas:
+    name: Pruebas automáticas (emuladores)
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install --no-audit --no-fund --ignore-scripts
-      - run: npm run vendor && bash scripts/publicar-sitio.sh
-      - id: deploy
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - uses: actions/setup-java@v4
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: sistema-ventas-e085f
-          channelId: pruebas
-          expires: 30d
-      - name: Dirección de la versión de pruebas
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --no-audit --no-fund
+        working-directory: tests
+      - name: Ejecutar las suites (regiones, app, reglas, tienda)
+        working-directory: tests
+        run: npx firebase emulators:exec --config firebase.json --project demo-stocksoft --only firestore,auth "node run-all.js"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pruebas
+          path: tests/results/
+
+  publicar:
+    name: Publicar en el proyecto de pruebas (stocksoft-pruebas)
+    needs: pruebas
+    runs-on: ubuntu-latest
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRUEBAS }}
+      OWNER_UID_PRUEBAS: ${{ vars.OWNER_UID_PRUEBAS }}
+    steps:
+      - name: Comprobar que las credenciales son del proyecto de pruebas
+        id: chk
         run: |
-          echo "### Versión de pruebas" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.deploy.outputs.details_url }}/app/" >> $GITHUB_STEP_SUMMARY
+          if [ -z "$SA" ]; then
+            echo "Falta el secreto FIREBASE_SERVICE_ACCOUNT_PRUEBAS: no se publica (nunca se usa el proyecto de producción)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if ! printf '%s' "$SA" | grep -q '"project_id": *"stocksoft-pruebas"'; then
+            echo "La cuenta de servicio NO es del proyecto stocksoft-pruebas: se detiene sin publicar."; exit 1
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - if: steps.chk.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.chk.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - if: steps.chk.outputs.ok == 'true'
+        run: npm install --no-audit --no-fund --ignore-scripts && npm run vendor && bash scripts/publicar-sitio.sh
+      - name: Configurar el sitio para stocksoft-pruebas (y bloquear cualquier referencia a producción)
+        if: steps.chk.outputs.ok == 'true'
+        run: |
+          OWNER="${OWNER_UID_PRUEBAS:-sin-dueno-de-pruebas}"
+          cp scripts/pruebas/firebase-config.js public/app/firebase-config.js
+          sed -i "s/__OWNER_UID_PRUEBAS__/$OWNER/" public/app/firebase-config.js
+          sed "s/3Wuh1CLsC2XeIS58uXkRSlQIXHJ2/$OWNER/" firestore.rules > firestore.pruebas.rules
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('firebase.json','utf8'));delete j.hosting.site;j.firestore={rules:'firestore.pruebas.rules'};fs.writeFileSync('firebase.json',JSON.stringify(j,null,1))"
+          echo '{"projects":{"default":"stocksoft-pruebas"}}' > .firebaserc
+          if grep -rl "sistema-ventas-e085f" public firebase.json .firebaserc firestore.pruebas.rules; then
+            echo "ERROR: queda una referencia al proyecto de producción. No se publica."; exit 1
+          fi
+          grep -q '"stocksoft-pruebas"' public/app/firebase-config.js || { echo "ERROR: la configuración no es la de pruebas"; exit 1; }
+      - name: Publicar hosting y reglas en stocksoft-pruebas
+        if: steps.chk.outputs.ok == 'true'
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx --yes firebase-tools@13.29.1 deploy --only hosting,firestore:rules --project stocksoft-pruebas --non-interactive
+          rm -f "$RUNNER_TEMP/sa.json"
+          echo "### Versión de pruebas (proyecto aislado)" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://stocksoft-pruebas.web.app/app/" >> "$GITHUB_STEP_SUMMARY"
