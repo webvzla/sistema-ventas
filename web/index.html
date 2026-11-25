@@ -1922,7 +1922,7 @@ function renderCart(){
     <div class="seg" style="margin:0"><button class="${fiscal ? 'on' : ''}" onclick="ui.doc='fiscal';renderCart()">Factura fiscal</button><button class="${!fiscal ? 'on' : ''}" onclick="ui.doc='nota';renderCart()">Nota de entrega (sin factura)</button></div>
     ${fiscal ? `<div class="card" style="margin-top:10px">
       <div class="row between"><div class="name" style="font-size:14px">Datos para la factura</div><button class="btn sm sec" onclick="ui.cust={rif:'V00000000',name:'Consumidor final',addr:'',phone:''};renderCart()">Consumidor final</button></div>
-      <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="f_rif" list="rifList" value="${esc(C.rif)}" placeholder="V12345678 / J123456789" oninput="custInput('rif',this.value)"><datalist id="rifList">${cl.filter(c => c.rif).map(c => `<option value="${esc(c.rif)}">${esc(c.name)}</option>`).join('')}</datalist></div>
+      <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="f_rif" list="rifList" value="${esc(C.rif)}" placeholder="${REG.code === 'VE' ? 'V12345678 / J123456789' : ''}" oninput="custInput('rif',this.value)"><datalist id="rifList">${cl.filter(c => c.rif).map(c => `<option value="${esc(c.rif)}">${esc(c.name)}</option>`).join('')}</datalist></div>
       <div><label>Nombre o razón social</label><input id="f_name" value="${esc(C.name)}" oninput="custInput('name',this.value)"></div></div>
       <div id="rifHint" class="note" style="color:var(--acc)"></div>
       <div class="grid2"><div><label>Dirección fiscal</label><input id="f_addr" value="${esc(C.addr)}" oninput="custInput('addr',this.value)" placeholder="Opcional"></div>
@@ -1967,7 +1967,7 @@ async function checkout(){
   const clientId = st.fiado > 0 ? (($('#payC') || {}).value || P.client) : '';
   if (st.fiado > 0 && !clientId){ toast('Elige el cliente del fiado'); return; }
   const C = {...ui.cust, rif:normRif(ui.cust.rif) ? String(ui.cust.rif).toUpperCase().replace(/\s/g, '') : '', name:(ui.cust.name || '').trim()};
-  if (fiscal && (!C.rif || !C.name)){ toast('Para la factura pon cédula/RIF y nombre'); $('#f_rif') && $('#f_rif').focus(); return; }
+  if (fiscal && (!C.rif || !C.name)){ toast('Para la factura pon ' + (REG.code === 'VE' ? 'cédula/RIF' : REG.taxId) + ' y nombre'); $('#f_rif') && $('#f_rif').focus(); return; }
   busy = true;
   const items = st.items, t = st.t, id = uid(), now = Date.now();
   let customer = null;
@@ -2628,7 +2628,7 @@ function editClient(id, fromPos){
   const c = id ? S.clients[id] : {name:'', phone:'', note:'', rif:'', addr:''};
   openSheet(`<h2>${id ? 'Editar cliente' : 'Nuevo cliente'}</h2>
   <label>Nombre</label><input id="cN" value="${esc(c.name)}" autofocus placeholder="Ej: Sra. Carmen">
-  <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="cR" value="${esc(c.rif || '')}" placeholder="V12345678"></div><div><label>Teléfono (WhatsApp)</label><input id="cP" value="${esc(c.phone)}" inputmode="tel" placeholder="0414 1234567"></div></div>
+  <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="cR" value="${esc(c.rif || '')}" placeholder="${REG.code === 'VE' ? 'V12345678' : ''}"></div><div><label>Teléfono (WhatsApp)</label><input id="cP" value="${esc(c.phone)}" inputmode="tel" placeholder="0414 1234567"></div></div>
   <label>Dirección</label><input id="cA" value="${esc(c.addr || '')}" placeholder="Opcional">
   <label>Nota (opcional)</label><input id="cO" value="${esc(c.note || '')}" placeholder="Ej: vive en la casa 12">
   ${isAdmin() ? `<div class="grid2"><div><label>Tipo de cliente</label><input id="cT" value="${esc(c.type || '')}" placeholder="Ej: Mecánico, Mayorista, VIP" list="cTypes"><datalist id="cTypes">${[...new Set(clients().map(x => x.type).filter(Boolean))].map(t => `<option value="${esc(t)}">`).join('')}</datalist></div><div><label>Descuento fijo (%)</label><input id="cD" inputmode="decimal" value="${c.disc ? nf2.format(num(c.disc)).replace(/,00$/, '') : ''}" placeholder="0"></div></div>
