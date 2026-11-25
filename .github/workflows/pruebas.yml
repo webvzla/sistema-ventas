@@ -5,8 +5,9 @@ name: Versión de pruebas
 #     conectar con Firebase real).
 #  2) Si pasan, se publica en el proyecto de Firebase SEPARADO "stocksoft-pruebas"
 #     (https://stocksoft-pruebas.web.app/app/), con su propia base de datos, cuentas y reglas.
-# Nunca se publica en el proyecto de producción (sistema-ventas-e085f): se comprueba la cuenta de servicio y
-# que no quede ninguna referencia a producción antes de publicar. Producción solo se publica desde main
+# Nunca se publica en el proyecto de producción (sistema-ventas-e085f): la conexión sin clave (Workload Identity
+# Federation) solo existe en stocksoft-pruebas y solo admite este repositorio y la rama "pruebas"; además se
+# comprueba que no quede ninguna referencia a producción antes de publicar. No hay claves guardadas en GitHub. Producción solo se publica desde main
 # (construir.yml) y solo con la autorización expresa de Francisco.
 on:
   push:
@@ -15,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write   # para la conexión SIN CLAVE con Google (Workload Identity Federation)
 
 concurrency:
   group: pruebas
@@ -47,32 +49,17 @@ jobs:
   publicar:
     name: Publicar en el proyecto de pruebas (stocksoft-pruebas)
     needs: pruebas
+    if: github.ref == 'refs/heads/pruebas'
     runs-on: ubuntu-latest
     env:
-      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PRUEBAS }}
       OWNER_UID_PRUEBAS: ${{ vars.OWNER_UID_PRUEBAS }}
     steps:
-      - name: Comprobar que las credenciales son del proyecto de pruebas
-        id: chk
-        run: |
-          if [ -z "$SA" ]; then
-            echo "Falta el secreto FIREBASE_SERVICE_ACCOUNT_PRUEBAS: no se publica (nunca se usa el proyecto de producción)."
-            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          if ! printf '%s' "$SA" | grep -q '"project_id": *"stocksoft-pruebas"'; then
-            echo "La cuenta de servicio NO es del proyecto stocksoft-pruebas: se detiene sin publicar."; exit 1
-          fi
-          echo "ok=true" >> "$GITHUB_OUTPUT"
-      - if: steps.chk.outputs.ok == 'true'
-        uses: actions/checkout@v4
-      - if: steps.chk.outputs.ok == 'true'
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - if: steps.chk.outputs.ok == 'true'
-        run: npm install --no-audit --no-fund --ignore-scripts && npm run vendor && bash scripts/publicar-sitio.sh
+      - run: npm install --no-audit --no-fund --ignore-scripts && npm run vendor && bash scripts/publicar-sitio.sh
       - name: Configurar el sitio para stocksoft-pruebas (y bloquear cualquier referencia a producción)
-        if: steps.chk.outputs.ok == 'true'
         run: |
           OWNER="${OWNER_UID_PRUEBAS:-sin-dueno-de-pruebas}"
           cp scripts/pruebas/firebase-config.js public/app/firebase-config.js
@@ -84,12 +71,14 @@ jobs:
             echo "ERROR: queda una referencia al proyecto de producción. No se publica."; exit 1
           fi
           grep -q '"stocksoft-pruebas"' public/app/firebase-config.js || { echo "ERROR: la configuración no es la de pruebas"; exit 1; }
+      - name: Conexión sin clave con stocksoft-pruebas
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/718618685515/locations/global/workloadIdentityPools/github-pruebas/providers/github
+          service_account: firebase-adminsdk-fbsvc@stocksoft-pruebas.iam.gserviceaccount.com
+          create_credentials_file: true
       - name: Publicar hosting y reglas en stocksoft-pruebas
-        if: steps.chk.outputs.ok == 'true'
         run: |
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           npx --yes firebase-tools@13.29.1 deploy --only hosting,firestore:rules --project stocksoft-pruebas --non-interactive
-          rm -f "$RUNNER_TEMP/sa.json"
           echo "### Versión de pruebas (proyecto aislado)" >> "$GITHUB_STEP_SUMMARY"
           echo "https://stocksoft-pruebas.web.app/app/" >> "$GITHUB_STEP_SUMMARY"
