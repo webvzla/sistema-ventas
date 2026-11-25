@@ -1,0 +1,14 @@
+{
+  "name": "stocksoft-tests",
+  "private": true,
+  "description": "Pruebas de StockSoft (región, BCV, licencias y pagos) contra los emuladores de Firebase. Nunca contra producción.",
+  "scripts": {
+    "test": "node run-all.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "3.0.4",
+    "firebase": "10.14.1",
+    "firebase-admin": "12.7.0",
+    "firebase-tools": "13.29.1"
+  }
+}

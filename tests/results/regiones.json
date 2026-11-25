@@ -1,0 +1,132 @@
+[
+ {
+  "id": "R1",
+  "desc": "Negocio sin país guardado = Venezuela heredada (BCV, IGTF, IVA 16/8/0, USD)",
+  "ok": true
+ },
+ {
+  "id": "R2",
+  "desc": "Sin país y prefijo no venezolano: sigue en VE (sin cambio automático) pero marcado como dudoso",
+  "ok": true
+ },
+ {
+  "id": "R3",
+  "desc": "España: EUR, Europe/Madrid, IVA 21/10/4/0, sin BCV ni IGTF, NIF, Bizum",
+  "ok": true
+ },
+ {
+  "id": "R4",
+  "desc": "EE. UU.: USD, sin BCV, impuesto configurable por el negocio (0 % por defecto)",
+  "ok": true
+ },
+ {
+  "id": "R5",
+  "desc": "Tipos propios: se filtran valores no válidos y siempre existe 0 %",
+  "ok": true
+ },
+ {
+  "id": "R6",
+  "desc": "País desconocido = Venezuela (no se rompe)",
+  "ok": true
+ },
+ {
+  "id": "R7",
+  "desc": "\"Otro país\" con moneda y zona horaria propias",
+  "ok": true
+ },
+ {
+  "id": "R8",
+  "desc": "Zona horaria no válida se ignora",
+  "ok": true
+ },
+ {
+  "id": "R9",
+  "desc": "Ninguna forma de pago usa la misma clave con monedas distintas entre países (las ventas antiguas se leen bien)",
+  "ok": true
+ },
+ {
+  "id": "R10",
+  "desc": "Formatos de dinero: 1234,50 € · $1,234.50 · $1.235 (COP sin decimales)",
+  "ok": true
+ },
+ {
+  "id": "R11",
+  "desc": "Formato EE. UU. con coma de miles y punto decimal",
+  "ok": true
+ },
+ {
+  "id": "R12",
+  "desc": "COP sin decimales",
+  "ok": true
+ },
+ {
+  "id": "R13",
+  "desc": "Vista previa VE→ES: moneda, BCV, IGTF, impuestos, pagos, zona, histórico intacto, productos en € y aviso fiscal",
+  "ok": true
+ },
+ {
+  "id": "R14",
+  "desc": "Vista previa ES→VE avisa de que se activa BCV",
+  "ok": true
+ },
+ {
+  "id": "R15",
+  "desc": "Mismo país: sin cambios",
+  "ok": true
+ },
+ {
+  "id": "P1",
+  "desc": "Precios normales VE: 5,99 · 16,99 · 29,99 · 49,99 USD",
+  "ok": true
+ },
+ {
+  "id": "P2",
+  "desc": "Promoción −20 %: 4,79 · 13,59 · 23,99 · 39,99 USD con precio normal visible",
+  "ok": true
+ },
+ {
+  "id": "P3",
+  "desc": "Antes del inicio de la promoción: precio normal",
+  "ok": true
+ },
+ {
+  "id": "P4",
+  "desc": "Fin de la promoción (día 60): precio normal",
+  "ok": true
+ },
+ {
+  "id": "P5",
+  "desc": "Día 59 de la promoción: todavía con descuento",
+  "ok": true
+ },
+ {
+  "id": "P6",
+  "desc": "Renovación / cliente no nuevo: sin descuento aunque haya promoción",
+  "ok": true
+ },
+ {
+  "id": "P7",
+  "desc": "Sin fecha de inicio configurada: no hay promoción",
+  "ok": true
+ },
+ {
+  "id": "P8",
+  "desc": "Sin precio aprobado para España/EE. UU.: no se inventa (null)",
+  "ok": true
+ },
+ {
+  "id": "P9",
+  "desc": "Duración inexistente o manipulada: null",
+  "ok": true
+ },
+ {
+  "id": "P10",
+  "desc": "Sumar meses: 31 ene + 1 mes = 28 feb; −1 mes = 31 dic",
+  "ok": true
+ },
+ {
+  "id": "P11",
+  "desc": "Formato de precio: $4,79",
+  "ok": true
+ }
+]

@@ -1,0 +1,14 @@
+{
+  "name": "stocksoft-functions",
+  "private": true,
+  "description": "Tienda de licencias de StockSoft (Cloud Functions). No desplegado: requiere plan Blaze y autorización de lanzamiento.",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "scripts": {
+    "compartidos": "node -e \"const fs=require('fs');fs.mkdirSync('compartido',{recursive:true});for(const f of ['precios.js','regiones.js'])fs.copyFileSync('../web/'+f,'compartido/'+f)\""
+  },
+  "dependencies": {
+    "firebase-admin": "12.7.0",
+    "firebase-functions": "6.1.1"
+  }
+}

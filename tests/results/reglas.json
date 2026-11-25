@@ -1,0 +1,177 @@
+[
+ {
+  "id": "S1",
+  "desc": "Administrador cambia el país de su negocio (firmado con su uid)",
+  "ok": true
+ },
+ {
+  "id": "S2",
+  "desc": "Vendedor NO puede cambiar el país",
+  "ok": true
+ },
+ {
+  "id": "S3",
+  "desc": "Administrador no puede firmar el cambio con el uid de otro",
+  "ok": true
+ },
+ {
+  "id": "S4",
+  "desc": "País inexistente rechazado",
+  "ok": true
+ },
+ {
+  "id": "S5",
+  "desc": "Administrador de un negocio no puede cambiar la región de otro",
+  "ok": true
+ },
+ {
+  "id": "B1",
+  "desc": "Negocio venezolano heredado (sin país): vendedor guarda la tasa (como antes)",
+  "ok": true
+ },
+ {
+  "id": "B2",
+  "desc": "Negocio venezolano heredado: escribir rates/ permitido",
+  "ok": true
+ },
+ {
+  "id": "B3",
+  "desc": "Negocio venezolano explícito: rates/ permitido",
+  "ok": true
+ },
+ {
+  "id": "B4",
+  "desc": "Negocio español: vendedor NO puede escribir la tasa BCV en la configuración",
+  "ok": true
+ },
+ {
+  "id": "B5",
+  "desc": "Negocio español: ni el administrador puede escribir claves BCV (petición manipulada)",
+  "ok": true
+ },
+ {
+  "id": "B6",
+  "desc": "Negocio español: escribir rates/ (historial BCV) rechazado, también para el administrador",
+  "ok": true
+ },
+ {
+  "id": "B7",
+  "desc": "Negocio español: el administrador sí guarda sus otros ajustes",
+  "ok": true
+ },
+ {
+  "id": "B8",
+  "desc": "Pasar de España a Venezuela y escribir la tasa en la misma operación: permitido",
+  "ok": true
+ },
+ {
+  "id": "B9",
+  "desc": "Pasar de Venezuela a España dejando una tasa nueva en la misma operación: rechazado",
+  "ok": true
+ },
+ {
+  "id": "B10",
+  "desc": "Pasar de Venezuela a España sin tocar la tasa guardada: permitido (no se borra nada)",
+  "ok": true
+ },
+ {
+  "id": "L1",
+  "desc": "Administrador NO puede escribirse historial de licencia (compras falsas)",
+  "ok": true
+ },
+ {
+  "id": "L2",
+  "desc": "Administrador NO puede alargarse la licencia a mano",
+  "ok": true
+ },
+ {
+  "id": "L3",
+  "desc": "Administrador NO puede marcar paidOnce/courtesy (manipular la promoción)",
+  "ok": true
+ },
+ {
+  "id": "L4",
+  "desc": "Administrador lee su historial de licencia",
+  "ok": true
+ },
+ {
+  "id": "L5",
+  "desc": "Vendedor NO lee el historial de licencia",
+  "ok": true
+ },
+ {
+  "id": "L6",
+  "desc": "Otro negocio NO lee el historial de licencia ajeno",
+  "ok": true
+ },
+ {
+  "id": "L7",
+  "desc": "Dueño del sistema concede cortesía (historial tipo cortesía + vencimiento)",
+  "ok": true
+ },
+ {
+  "id": "L8",
+  "desc": "Dueño del sistema NO puede registrar una cortesía como compra",
+  "ok": true
+ },
+ {
+  "id": "L9",
+  "desc": "Nadie (cliente) puede crear pedidos ni pagos: solo el servidor",
+  "ok": true
+ },
+ {
+  "id": "L10",
+  "desc": "El comprador lee su pedido; otro usuario no",
+  "ok": true
+ },
+ {
+  "id": "L11",
+  "desc": "store/config: lo leen los usuarios y solo lo escribe el dueño",
+  "ok": true
+ },
+ {
+  "id": "G1",
+  "desc": "Administrador sigue gestionando proveedores (colección genérica)",
+  "ok": true
+ },
+ {
+  "id": "G2",
+  "desc": "Vendedor sigue sin acceso a proveedores",
+  "ok": true
+ },
+ {
+  "id": "G3",
+  "desc": "Vendedor sigue pudiendo vender (sales/create)",
+  "ok": true
+ },
+ {
+  "id": "G4",
+  "desc": "Vendedor sigue sin poder cambiar precios (products: solo stock)",
+  "ok": true
+ },
+ {
+  "id": "G5",
+  "desc": "Aislamiento: un negocio no lee ventas de otro",
+  "ok": true
+ },
+ {
+  "id": "G6",
+  "desc": "Administrador sigue guardando numeración y ajustes (noteSeq, igtf)",
+  "ok": true
+ },
+ {
+  "id": "G7",
+  "desc": "Prueba gratis: crear negocio en prueba sigue funcionando",
+  "ok": true
+ },
+ {
+  "id": "G8",
+  "desc": "Negocio nuevo español: config inicial con país firmado; sin tasa",
+  "ok": true
+ },
+ {
+  "id": "G9",
+  "desc": "Regresión: crear la configuración de un negocio español con campos BCV (aunque sean 0) se rechaza",
+  "ok": true
+ }
+]

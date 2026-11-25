@@ -1,0 +1,222 @@
+[
+ {
+  "id": "A1",
+  "desc": "Sin sesión: 401",
+  "ok": true
+ },
+ {
+  "id": "A2",
+  "desc": "Token falso: 401",
+  "ok": true
+ },
+ {
+  "id": "A3",
+  "desc": "Vendedor no puede ver la tienda ni comprar (403)",
+  "ok": true
+ },
+ {
+  "id": "A4",
+  "desc": "Administrador de un negocio no puede comprar para otro negocio (403)",
+  "ok": true
+ },
+ {
+  "id": "A5",
+  "desc": "Negocio bloqueado no puede comprar (403)",
+  "ok": true
+ },
+ {
+  "id": "A6",
+  "desc": "Licencia sin vencimiento: no se le cobra (409)",
+  "ok": true
+ },
+ {
+  "id": "O1",
+  "desc": "Oferta de cliente nuevo en promoción: 4 duraciones con normal y promo (−20 %), estado y vencimiento de la prueba",
+  "ok": true
+ },
+ {
+  "id": "O2",
+  "desc": "Cliente que ya tenía licencia (renovación): precio normal aunque haya promoción",
+  "ok": true
+ },
+ {
+  "id": "O3",
+  "desc": "Negocio de España: sin precio aprobado → no se puede comprar y se explica",
+  "ok": true
+ },
+ {
+  "id": "O4",
+  "desc": "Negocio con cortesía (sin pagos): sigue siendo cliente nuevo para la promoción",
+  "ok": true
+ },
+ {
+  "id": "C1",
+  "desc": "Checkout manipulado (importe 0,01, moneda falsa): se ignora y el pedido lleva el precio del servidor 4,79 USD",
+  "ok": true
+ },
+ {
+  "id": "C2",
+  "desc": "Llegar a la página de \"pago correcto\" no activa nada (la licencia sigue en prueba)",
+  "ok": true
+ },
+ {
+  "id": "C3",
+  "desc": "Duración inexistente rechazada (400)",
+  "ok": true
+ },
+ {
+  "id": "W1",
+  "desc": "Webhook con firma falsa, sin firma o caducada (repetición antigua): 400 y nada cambia",
+  "ok": true
+ },
+ {
+  "id": "W2",
+  "desc": "Webhook firmado pero con importe distinto al del pedido: no activa, pedido \"en revisión\"",
+  "ok": true
+ },
+ {
+  "id": "K1",
+  "desc": "Pago aprobado (1 mes, promo): licencia activada al final de la prueba + 1 mes, pedido pagado, historial y aviso",
+  "ok": true
+ },
+ {
+  "id": "K2",
+  "desc": "Webhook duplicado (mismo evento): \"duplicado\" y la licencia no se amplía dos veces",
+  "ok": true
+ },
+ {
+  "id": "K3",
+  "desc": "Otro evento distinto del mismo pago: \"ya aplicado\", sin segunda activación",
+  "ok": true
+ },
+ {
+  "id": "K4",
+  "desc": "Estado del pedido: el comprador lo ve \"paid\" con la nueva fecha; otra cuenta recibe 403",
+  "ok": true
+ },
+ {
+  "id": "K5",
+  "desc": "Compra de 3 meses tras pagar una vez: precio normal 16,99 (sin promo en renovación) y +3 meses sobre el vencimiento actual",
+  "ok": true
+ },
+ {
+  "id": "K6",
+  "desc": "Compra de 6 meses (29,99) amplía la licencia activa desde su vencimiento",
+  "ok": true
+ },
+ {
+  "id": "K7",
+  "desc": "Compra de 12 meses (49,99) se acumula sobre la anterior",
+  "ok": true
+ },
+ {
+  "id": "K8",
+  "desc": "Licencia vencida hace 30 días: 1 mes contado desde hoy (no desde el vencimiento viejo), precio normal",
+  "ok": true
+ },
+ {
+  "id": "K9",
+  "desc": "Pago rechazado: pedido \"failed\", licencia intacta, historial \"pago rechazado\" y aviso",
+  "ok": true
+ },
+ {
+  "id": "K10",
+  "desc": "Un \"pagado\" que llega después de un rechazo sí activa (la pasarela reintentó y cobró)",
+  "ok": true
+ },
+ {
+  "id": "K11",
+  "desc": "Reembolso total: se descuenta el periodo comprado (licencia vuelve a vencer hoy), pedido \"refunded\", historial y aviso",
+  "ok": true
+ },
+ {
+  "id": "K12",
+  "desc": "Reembolso repetido (otro evento): no descuenta dos veces",
+  "ok": true
+ },
+ {
+  "id": "K13",
+  "desc": "Un pago del negocio A (aunque el evento diga \"bizNuevo\") solo amplía el negocio A",
+  "ok": true
+ },
+ {
+  "id": "K14",
+  "desc": "Webhook de un pedido inexistente: ignorado sin activar nada",
+  "ok": true
+ },
+ {
+  "id": "K15",
+  "desc": "Terminada la promoción (día 61): cliente nuevo paga el precio normal (49,99)",
+  "ok": true
+ },
+ {
+  "id": "K16",
+  "desc": "Más de 5 pedidos abiertos en una hora: 429",
+  "ok": true
+ },
+ {
+  "id": "S1",
+  "desc": "Stripe: la sesión se crea con el importe del servidor (2999), moneda usd, metadatos del pedido e Idempotency-Key",
+  "ok": true
+ },
+ {
+  "id": "S2",
+  "desc": "Stripe: sesión completada pero sin cobrar (pago asíncrono pendiente) no activa",
+  "ok": true
+ },
+ {
+  "id": "S3",
+  "desc": "Stripe: checkout.session.completed pagado y bien firmado activa +6 meses",
+  "ok": true
+ },
+ {
+  "id": "S4",
+  "desc": "Stripe: firma alterada → 400",
+  "ok": true
+ },
+ {
+  "id": "S5",
+  "desc": "Un evento del simulador no puede pagar un pedido de Stripe",
+  "ok": true
+ },
+ {
+  "id": "S6",
+  "desc": "Stripe: reembolso parcial no quita la licencia; queda marcado para revisión",
+  "ok": true
+ },
+ {
+  "id": "S7",
+  "desc": "Stripe: sesión caducada → pedido cancelado",
+  "ok": true
+ },
+ {
+  "id": "S8",
+  "desc": "Stripe: una clave real (sk_live_) se bloquea sin autorización de lanzamiento",
+  "ok": true
+ },
+ {
+  "id": "S9",
+  "desc": "El simulador no puede activarse junto con cobros reales",
+  "ok": true
+ },
+ {
+  "id": "P1",
+  "desc": "Paddle: firma válida → pago normalizado (599 USD, pedido o9); firma alterada → rechazo",
+  "ok": true
+ },
+ {
+  "id": "P2",
+  "desc": "Paddle: el checkout queda deshabilitado (503) hasta tener cuenta aprobada",
+  "ok": true
+ },
+ {
+  "id": "P3",
+  "desc": "PayPal: pendiente, rechaza cualquier webhook",
+  "ok": true
+ },
+ {
+  "id": "U1",
+  "desc": "Página del simulador: muestra importe del servidor y avisa de que no se cobra",
+  "ok": true
+ }
+]

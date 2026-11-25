@@ -14,6 +14,8 @@
 <script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/JsBarcode.all.min.js"></script>
 <script src="firebase-config.js"></script>
+<script src="regiones.js"></script>
+<script src="precios.js"></script>
 <script src="vendor/firebase-app-compat.js"></script>
 <script src="vendor/firebase-auth-compat.js"></script>
 <script src="vendor/firebase-firestore-compat.js"></script>
@@ -232,6 +234,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <div id="suLw"><label>Código de activación (opcional)</label><input id="suL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
   <div class="sub" style="margin-top:4px">Sin código empiezas con <b>7 días de prueba gratis</b>. Luego activas tu licencia con un código.<span id="suWa"></span></div></div>
   <label>Nombre del negocio</label><input id="suB" placeholder="Ej: Comercial La Esquina">
+  <label>País del negocio</label><select id="suC" onchange="suCountryNote()"></select><div class="sub" id="suCn" style="margin-top:4px"></div>
   <h3 style="margin-top:18px">Administrador (tú)</h3>
   <p class="note" style="margin-top:0">Puede hacer todo: inventario, precios, costos, reportes, usuarios y ajustes.</p>
   <label>Tu nombre</label><input id="suN" placeholder="Ej: Carlos">
@@ -252,6 +255,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
   <div class="brand" id="rnTitle">Tu prueba terminó</div><div class="sub" id="rnNote">Tus datos siguen guardados. Activa tu licencia para seguir usando el sistema.</div>
   <label>Código de activación</label><input id="rnL" autocapitalize="characters" autocomplete="off" placeholder="XXXX-XXXX-XXXX" style="letter-spacing:1px">
   <button class="btn full" id="rnBtn" style="margin-top:16px">Activar</button>
+  <button type="button" class="btn sec full" style="margin-top:8px" onclick="storeSheet()">Comprar o renovar la licencia en línea</button>
   <div id="rnMsg" class="note" style="text-align:center;color:var(--warn)"></div>
   <a id="rnWa" class="btn wa full" style="margin-top:8px;display:none" target="_blank" rel="noopener">Pedir un código por WhatsApp</a>
   <div class="sub" style="text-align:center;margin-top:8px;font-size:12.5px">o escríbenos a <a href="mailto:ventas@stocksoft.app?subject=C%C3%B3digo%20de%20activaci%C3%B3n%20StockSoft">ventas@stocksoft.app</a></div>
@@ -279,16 +283,51 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const num = v => { const n = parseFloat(String(v ?? '').replace(/\s/g,'').replace(',', '.')); return isFinite(n) ? n : 0; };
 const r2 = n => Math.round(n * 100) / 100;
 const r3 = n => Math.round(n * 1000) / 1000;
-const nf2 = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
-const nf0 = new Intl.NumberFormat('es-VE', {maximumFractionDigits:0});
-const nfq = new Intl.NumberFormat('es-VE', {maximumFractionDigits:3});
-const usd = n => '$' + nf2.format(n || 0);
+let nf2 = new Intl.NumberFormat('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
+let nf0 = new Intl.NumberFormat('es-VE', {maximumFractionDigits:0});
+let nfq = new Intl.NumberFormat('es-VE', {maximumFractionDigits:3});
+/* ---- Configuración regional del negocio (catálogo y reglas en regiones.js) ----
+   REG = región del negocio abierto. El código pregunta a REG (REG.features.bcv, REG.tax, REG.methods…), nunca "¿es Venezuela?".
+   En los importes, la clave interna 'usd' significa "moneda base del negocio" ($ en Venezuela y EE. UU., € en España…). */
+let REG = SSRegion.get('VE'), MCUR = null;
+const curNow = () => MCUR || REG.currency;
+const nfDecCache = {};
+const nfDec = d => d === 2 ? nf2 : (nfDecCache[REG.locale + d] = nfDecCache[REG.locale + d] || new Intl.NumberFormat(REG.locale, {minimumFractionDigits:d, maximumFractionDigits:d}));
+function setRegionFormats(r){ nf2 = new Intl.NumberFormat(r.locale, {minimumFractionDigits:2, maximumFractionDigits:2}); nf0 = new Intl.NumberFormat(r.locale, {maximumFractionDigits:0}); nfq = new Intl.NumberFormat(r.locale, {maximumFractionDigits:3}); }
+function applyRegion(){
+  const r = SSRegion.fromConfig(cfg);
+  // Aislamiento BCV: un negocio que no es de Venezuela no tiene tasa, ni montos en Bs, ni IGTF.
+  // Es solo en memoria: no se borra nada guardado y, si vuelve a Venezuela, recupera su historial de tasas.
+  if (!r.features.bcv){ cfg.bcv = 0; cfg.eur = 0; }
+  if (!r.features.igtf) cfg.igtf = false;
+  const sig = [r.code, r.locale, r.tz, r.currency.code, r.tax.rates.join('/')].join('|');
+  REG = r;
+  if (applyRegion.sig !== sig){
+    applyRegion.sig = sig; setRegionFormats(r); shellFor = '';
+    try { if (ui.pay && !r.methods[ui.pay.method]) ui.pay.method = Object.keys(r.methods)[0]; } catch(e){}
+  }
+  // Temporizadores de tasa: solo con un negocio de Venezuela abierto y su configuración ya cargada.
+  try { if (r.features.bcv && me) ensureRateTimers(); else stopRateTimers(); } catch(e){}
+}
+// Al ver o imprimir una venta anterior se usan la región y la moneda con las que se hizo: nada se recalcula.
+// Las ventas sin región guardada son anteriores a la configuración regional, es decir, de Venezuela.
+function withSaleRegion(s, fn){
+  if (!s) return fn();
+  const code = s.rg || 'VE', cur = (s.bc && SSRegion.CURRENCIES[s.bc]) || null;
+  if (code === REG.code && (!cur || cur.code === REG.currency.code)) return fn();
+  const prev = {REG, MCUR, nf2, nf0, nfq};
+  const r = SSRegion.get(code); r.tz = REG.tz; REG = r; MCUR = cur || r.currency; setRegionFormats(r);
+  const restore = () => { REG = prev.REG; MCUR = prev.MCUR; nf2 = prev.nf2; nf0 = prev.nf0; nfq = prev.nfq; };
+  try { const out = fn(); if (out && typeof out.then === 'function') return out.finally(restore); restore(); return out; } catch(e){ restore(); throw e; }
+}
+const tzOpt = () => REG.legacy ? {} : {timeZone:REG.tz};
+const usd = n => { const c = curNow(), t = nfDec(c.dec).format(n || 0); return c.pos === 'post' ? t + ' ' + c.symbol : c.symbol + t; };
 const bs = (n, rate = cfg.bcv) => 'Bs ' + nf2.format((n || 0) * (rate || 0));
 const eurF = n => '€' + nf2.format(n || 0);
 const usdToEur = n => (cfg.eur && cfg.bcv) ? n * cfg.bcv / cfg.eur : NaN;
 function conv(n){ const p = []; if (cfg.bcv) p.push(bs(n)); if (cfg.bcv && cfg.eur) p.push('≈ ' + eurF(usdToEur(n))); return p.join(' · '); }
 /* Precios: cada producto tiene su moneda (usd = dólar BCV, eur = euro BCV) */
-const curOf = p => p.cur === 'eur' ? 'eur' : 'usd';
+const curOf = p => p.cur === 'eur' && REG.features.eurPrices ? 'eur' : 'usd';
 function toUsd(v, cur){ v = num(v); if (cur !== 'eur') return v; return (cfg.eur && cfg.bcv) ? v * cfg.eur / cfg.bcv : NaN; }
 const pUsd = p => toUsd(p.price, curOf(p));
 const pBs = p => num(p.price) * (curOf(p) === 'eur' ? (cfg.eur || 0) : (cfg.bcv || 0));
@@ -297,16 +336,16 @@ const bsF = n => 'Bs ' + nf2.format(n || 0);
 function pAlt(p){ const v = num(p.price); if (curOf(p) === 'eur'){ const u = pUsd(p); return isFinite(u) ? '≈ ' + usd(u) : ''; } return (cfg.eur && cfg.bcv) ? '≈ ' + eurF(usdToEur(v)) : ''; }
 function pLine(p){ const b = pBs(p); return [b ? bsF(b) : '', pAlt(p)].filter(Boolean).join(' · '); }
 const dayKey = ts => { const d = new Date(ts); return d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate(); };
-const fmtDate = ts => new Date(ts).toLocaleString('es-VE', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
-const fmtDay = ts => new Date(ts).toLocaleDateString('es-VE', {day:'2-digit', month:'short', year:'numeric'});
+const fmtDate = ts => new Date(ts).toLocaleString(REG.locale, {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', ...tzOpt()});
+const fmtDay = ts => new Date(ts).toLocaleDateString(REG.locale, {day:'2-digit', month:'short', year:'numeric', ...tzOpt()});
 function toast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 2600); }
-function phoneWA(p){ let d = String(p || '').replace(/\D/g, ''); if (!d) return ''; if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = (cfg.cc || '58') + d.slice(1); else if (d.length <= 10) d = (cfg.cc || '58') + d; return d; }
+function phoneWA(p){ let d = String(p || '').replace(/\D/g, ''); if (!d) return ''; if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = (cfg.cc || REG.cc || '58') + d.slice(1); else if (d.length <= 10) d = (cfg.cc || REG.cc || '58') + d; return d; }
 const waLink = (phone, text) => 'https://wa.me/' + phoneWA(phone) + '?text=' + encodeURIComponent(text);
 const unitLbl = u => ({unidad:'und', kg:'kg', g:'g', lt:'lt', paquete:'paq', caja:'caja'}[u] || 'und');
 
 /* ============ Datos (db en la nube o este navegador) ============ */
 function saveLocal(){ try { localStorage.setItem('negocio_v1', JSON.stringify({...S, cfg})); } catch(e){} }
-function loadLocal(){ try { const d = JSON.parse(localStorage.getItem('negocio_v1') || 'null'); if (d){ COLS.forEach(c => S[c] = d[c] || {}); cfg = {...DEF_CFG, ...(d.cfg || {})}; } } catch(e){} }
+function loadLocal(){ try { const d = JSON.parse(localStorage.getItem('negocio_v1') || 'null'); if (d){ COLS.forEach(c => S[c] = d[c] || {}); cfg = {...DEF_CFG, ...(d.cfg || {})}; } } catch(e){} applyRegion(); }
 
 function dbErr(e){
   const c = e && e.code;
@@ -333,7 +372,7 @@ async function del(col, id){
 async function putCfg(data){
   if (readOnly){ toast('Modo solo lectura'); return false; }
   if (backend === 'cloud' && !cfgLoaded){ console.warn('putCfg antes de cargar la configuración', data); return false; }
-  cfg = {...cfg, ...data}; render();
+  cfg = {...cfg, ...data}; applyRegion(); render();
   if (backend === 'cloud'){ try { await DB.doc('config/main').set(data, {merge:true}); } catch(e){ dbErr(e); return false; } }
   else if (backend === 'db'){ try { await DB.doc('config/main').set({...cfg}); } catch(e){ dbErr(e); return false; } }
   else saveLocal();
@@ -369,7 +408,7 @@ async function initData(){
     }, e => { pending.delete(col); if (e.code === 'revoked') readOnly = true; render(); });
   });
   DB.doc('config/main').onSnapshot(snap => {
-    if (snap.exists) cfg = {...DEF_CFG, ...snap.data()};
+    if (snap.exists){ cfg = {...DEF_CFG, ...snap.data()}; applyRegion(); }
     done('cfg', snap); render();
   }, e => { pending.delete('cfg'); render(); });
 }
@@ -384,7 +423,7 @@ const totalDebt = () => r2(clients().reduce((s, c) => s + Math.max(0, balance(c.
 const minStock = p => (p.min === '' || p.min == null) ? num(cfg.lowDefault) : num(p.min);
 function stockState(p){ const s = num(p.stock); if (s <= 0) return 'out'; if (s <= minStock(p)) return 'low'; return 'ok'; }
 const categories = () => [...new Set(products().map(p => (p.cat || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-const ratesStale = () => !cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3;
+const ratesStale = () => REG.features.bcv && !cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3;
 /* Precio al mayor: desde cierta cantidad, otro precio por unidad (en la moneda del producto). */
 const hasW = p => !!p && num(p.wQty) > 0 && num(p.wPrice) > 0;
 const isW = (p, qty) => hasW(p) && num(qty) >= num(p.wQty);
@@ -400,7 +439,7 @@ function activeLots(p){
 }
 const daysTo = iso => Math.floor((new Date(iso + 'T23:59:59').getTime() - Date.now()) / 864e5);
 function expInfo(p){ const l = activeLots(p)[0]; if (!l) return null; const d = daysTo(l.exp); return {exp:l.exp, qty:l.qty, days:d, state:d < 0 ? 'out' : d <= EXP_DAYS() ? 'low' : 'ok'}; }
-const fmtExp = iso => new Date(iso + 'T12:00:00').toLocaleDateString('es-VE', {day:'2-digit', month:'short', year:'numeric'});
+const fmtExp = iso => new Date(iso + 'T12:00:00').toLocaleDateString(REG.locale, {day:'2-digit', month:'short', year:'numeric'});
 const expPill = e => !e || e.state === 'ok' ? '' : ` <span class="pill ${e.state}">${e.days < 0 ? 'Vencido' : e.days === 0 ? 'Vence hoy' : 'Vence en ' + e.days + ' d'}</span>`;
 const expiring = () => products().filter(p => { const e = expInfo(p); return e && e.state !== 'ok'; });
 
@@ -415,7 +454,7 @@ const NAV_ICONS = {
   proveedores:'<path d="M1 6h13v10H1zM14 10h4l3 3v3h-7"/><circle cx="5" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>',
   mas:'<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>'};
 const NAV_LBL = {panel:'Dashboard', inicio:'Inicio', vender:'Vender', inventario:'Inventario', tasas:'Tasas', fiados:'Clientes', proveedores:'Proveed.', mas:'Más'};
-const navFor = () => isAdmin() ? ['panel', 'vender', 'inventario', 'fiados', 'proveedores', 'mas'] : ['inicio', 'vender', 'inventario', 'tasas', 'fiados', 'mas'];
+const navFor = () => isAdmin() ? ['panel', 'vender', 'inventario', 'fiados', 'proveedores', 'mas'] : ['inicio', 'vender', 'inventario', 'tasas', 'fiados', 'mas'].filter(v => v !== 'tasas' || REG.features.bcv);
 const ADMIN_ONLY = ['panel', 'proveedores'];
 function renderNav(){
   const items = navFor(), key = items.join();
@@ -424,7 +463,7 @@ function renderNav(){
   const act = view === 'tasas' && isAdmin() ? 'mas' : view;
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === act));
 }
-function go(v, s = ''){ if (ADMIN_ONLY.includes(v) && !isAdmin()) v = 'inicio'; if (v === 'inicio' && isAdmin()) v = 'panel'; if (v === 'tasas' && view !== 'tasas') setTimeout(() => autoRates(), 300); view = v; sub = s; shellFor = ''; window.scrollTo(0, 0); render(); }
+function go(v, s = ''){ if (v === 'tasas' && !REG.features.bcv) v = 'inicio'; if (ADMIN_ONLY.includes(v) && !isAdmin()) v = 'inicio'; if (v === 'inicio' && isAdmin()) v = 'panel'; if (v === 'tasas' && view !== 'tasas') setTimeout(() => autoRates(), 300); view = v; sub = s; shellFor = ''; window.scrollTo(0, 0); render(); }
 function render(){
   // Durante una importación por lotes no se repinta la app en cada lote (con miles de productos congelaba la pantalla); se pinta una vez al final.
   if (window.impHold){ window.impHoldPending = true; return; }
@@ -434,7 +473,7 @@ function render(){
   $('#brand').innerHTML = esc(cfg.name || 'Mi Negocio').replace(/(\S+)$/, '<span>$1</span>');
   const chip = $('#rateChip');
   chip.innerHTML = cfg.bcv ? '$ <b>' + nf2.format(cfg.bcv) + '</b>' + (cfg.eur ? ' · € <b>' + nf2.format(cfg.eur) + '</b>' : '') : 'Poner tasa';
-  chip.classList.toggle('stale', ratesStale());
+  chip.classList.toggle('stale', ratesStale()); chip.style.display = REG.features.bcv ? '' : 'none';
   renderNav();
   const key = view + ':' + sub;
   const V = VIEWS[view];
@@ -458,12 +497,17 @@ const CLOUD = () => backend === 'cloud';
 const LOCAL_TXT = () => window.desktop ? 'Modo sin nube: los datos se guardan solo en este ordenador (con copia diaria). Cuando se conecte la nube podrás verlos desde el móvil.' : 'Los datos se están guardando solo en este navegador.';
 function fbInit(){
   if (!window.FIREBASE_CONFIG || !window.firebase) return null;
+  // Pruebas locales: en localhost con ?emu=1 la app usa los EMULADORES de Firebase con un proyecto "demo-" (que nunca
+  // puede conectar con Firebase real). En cualquier otro sitio esto no hace nada.
+  const EMU = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && /[?&]emu=1(&|$)/.test(location.search);
+  if (EMU) window.FIREBASE_CONFIG = {...window.FIREBASE_CONFIG, projectId:'demo-stocksoft', apiKey:'demo-key', authDomain:'localhost'};
   try {
     const app = firebase.initializeApp(window.FIREBASE_CONFIG);
     const fs = firebase.firestore();
     fs.settings({ignoreUndefinedProperties:true});
-    fs.enablePersistence({synchronizeTabs:true}).catch(() => {});
+    if (EMU) fs.useEmulator('127.0.0.1', 8080); else fs.enablePersistence({synchronizeTabs:true}).catch(() => {});
     const auth = firebase.auth(); auth.languageCode = 'es'; // correos de verificación y de recuperar contraseña en español
+    if (EMU){ auth.useEmulator('http://127.0.0.1:9099'); window.EMU_MODE = true; }
     return {app, auth, fs};
   } catch(e){ console.error('Firebase', e); return null; }
 }
@@ -480,7 +524,7 @@ function fbMsg(e){
   if (/requires-recent-login/.test(c)) return 'Por seguridad, cierra sesión y vuelve a entrar';
   return 'Error: ' + (e && e.message || c);
 }
-function clearData(){ cfgLoaded = false; lic.unsub.forEach(u => { try { u(); } catch(e){} }); lic.unsub = []; unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; COLS.forEach(c => S[c] = {}); cfg = {...DEF_CFG}; }
+function clearData(){ cfgLoaded = false; lic.unsub.forEach(u => { try { u(); } catch(e){} }); lic.unsub = []; unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = []; COLS.forEach(c => S[c] = {}); cfg = {...DEF_CFG}; applyRegion(); }
 function subscribeAll(){
   unsubs.forEach(u => { try { u(); } catch(e){} }); unsubs = [];
   loaded = false; cfgLoaded = false;
@@ -498,7 +542,7 @@ function subscribeAll(){
     unsubs.push(q.onSnapshot(snap => { const o = {}; snap.docs.forEach(d => { o[d.id] = d.data(); }); S[col] = o; done(col, snap); render(); },
       e => { pending.delete(col); console.warn(col, e); if (e.code === 'revoked') readOnly = true; render(); }));
   });
-  unsubs.push(DB.doc('config/main').onSnapshot(snap => { if (snap.exists) cfg = {...DEF_CFG, ...snap.data()}; if (snap.exists || !snap.metadata.fromCache) cfgLoaded = true; done('cfg', snap); render(); }, e => { pending.delete('cfg'); render(); }));
+  unsubs.push(DB.doc('config/main').onSnapshot(snap => { if (snap.exists){ cfg = {...DEF_CFG, ...snap.data()}; applyRegion(); } if (snap.exists || !snap.metadata.fromCache){ cfgLoaded = true; try { if (REG.features.bcv && me) ensureRateTimers(); } catch(e){} } done('cfg', snap); render(); }, e => { pending.delete('cfg'); render(); }));
 }
 const TRIAL_MS = 7 * 864e5;
 let bizInfo = null;
@@ -553,6 +597,7 @@ function empCredSheet(x){
 async function fbCreateMember(email, pass, name, role){
   const sec = firebase.initializeApp(window.FIREBASE_CONFIG, 'sec' + Date.now());
   try {
+    if (window.EMU_MODE) sec.auth().useEmulator('http://127.0.0.1:9099');
     const cred = await sec.auth().createUserWithEmailAndPassword(email, pass);
     const id = cred.user.uid;
     await FB.fs.doc('users/' + id).set({biz:bizId, role, name, email});
@@ -565,6 +610,7 @@ async function fbCreateMember(email, pass, name, role){
 /* ============ Programa de PC: tasa BCV automática y copias diarias ============ */
 const RATES_URL = location.protocol === 'https:' ? 'tasas.json' : 'https://stocksoft.web.app/app/tasas.json';
 async function fetchRates(){
+  if (!REG.features.bcv) return null; // negocio fuera de Venezuela: ninguna llamada a BCV ni a sus respaldos
   if (window.desktop){ try { const r = await window.desktop.bcv(); if (r && r.usd) return {...r, src:'bcv.org.ve'}; } catch(e){ console.warn('BCV', e); } }
   try {
     const r = await fetch(RATES_URL + '?t=' + Date.now(), {cache:'no-store'});
@@ -584,6 +630,7 @@ async function autoRates(manual){
   if (!me || ratesBusy || backend === 'db') return;
   // Al entrar (sobre todo en una instalación nueva) los datos aún pueden estar cargando: se reintenta en 2 s.
   if (!loaded || (backend === 'cloud' && !cfgLoaded)){ clearTimeout(autoRates.retry); autoRates.retry = setTimeout(() => autoRates(manual), 2000); return; }
+  if (!REG.features.bcv) return; // aislamiento BCV: solo negocios de Venezuela consultan la tasa
   if (!navigator.onLine){ if (manual) toast('Sin conexión a internet'); return; }
   ratesBusy = true; autoRates.last = Date.now();
   try {
@@ -640,17 +687,29 @@ async function checkUpdate(){
 }
 const busyFlag = () => { try { return !!busy; } catch(e){ return false; } };
 let afterLoginDone = false;
+// Las revisiones periódicas de la tasa solo se programan para negocios de Venezuela (y una sola vez).
+// Se apagan en cuanto el negocio abierto no es de Venezuela o se cierra la sesión (no quedan tareas de BCV programadas).
+const rateVis = () => { if (!document.hidden && Date.now() - (autoRates.last || 0) > 5 * 60e3) autoRates(); };
+function ensureRateTimers(){
+  if (!REG.features.bcv || !me || (backend === 'cloud' && !cfgLoaded) || ensureRateTimers.on) return;
+  ensureRateTimers.on = setInterval(() => autoRates(), 15 * 60e3);
+  document.addEventListener('visibilitychange', rateVis);
+}
+function stopRateTimers(){
+  if (ensureRateTimers.on){ clearInterval(ensureRateTimers.on); ensureRateTimers.on = null; }
+  document.removeEventListener('visibilitychange', rateVis); clearTimeout(autoRates.retry);
+}
 function afterLogin(){
+  checkPaymentReturn();
   autoRates(); setTimeout(smartDaily, 8000);
   if (window.desktop) setTimeout(() => autoBackup(), 4000);
   if (afterLoginDone) return; afterLoginDone = true;
   // La tasa puede cambiar varias veces al día: se revisa cada 15 minutos y al volver a la app (si pasaron más de 5).
-  setInterval(() => autoRates(), 15 * 60e3);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - (autoRates.last || 0) > 5 * 60e3) autoRates(); });
+  ensureRateTimers();
   setInterval(() => autoBackup(), 3600e3);
   setInterval(checkUpdate, 20 * 60e3); setTimeout(checkUpdate, 60e3);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
-  window.addEventListener('online', () => { toast('Conexión recuperada'); autoRates(); });
+  window.addEventListener('online', () => { toast('Conexión recuperada'); if (REG.features.bcv) autoRates(); });
   window.addEventListener('offline', () => toast('Sin internet: puedes seguir vendiendo, se sincroniza al volver'));
 }
 
@@ -691,10 +750,13 @@ function showLic(code, d){
 async function bizSet(id, data, msg){ try { await FB.fs.doc('biz/' + id).set(data, {merge:true}); toast(msg); } catch(e){ toast(fbMsg(e)); } }
 function bizMenu(id){
   const b = lic.biz[id] || {}; const exp = bizExp(b), venc = exp && exp < Date.now();
-  openSheet(`<h2>${esc(b.name || 'Negocio')}</h2><div class="sub">Creado ${b.created ? fmtDay(b.created) : '—'}${b.license ? ' · código ' + fmtCode(b.license) : b.trial ? ' · prueba gratis de 7 días' : ' · sin código (anterior a las licencias)'}</div>
+  openSheet(`<h2>${esc(b.name || 'Negocio')}</h2><div class="sub">Creado ${b.created ? fmtDay(b.created) : '—'}${b.license ? ' · código ' + fmtCode(b.license) : b.trial ? ' · prueba gratis de 7 días' : b.paidOnce ? ' · licencia comprada en la tienda' : b.courtesy ? ' · con cortesía' : ' · sin código (anterior a las licencias)'}</div>
   <div class="card" style="margin-top:12px"><div class="mv"><span>Estado</span><b style="color:${b.blocked ? 'var(--bad)' : venc ? 'var(--warn)' : 'var(--acc)'}">${b.blocked ? 'Bloqueado' : venc ? (b.trial ? 'Prueba terminada' : 'Vencido') : b.trial ? 'En prueba' : 'Activo'}</b></div><div class="mv"><span>Vence</span><b>${exp ? fmtDay(exp) : 'Nunca'}</b></div></div>
   <h3>Extender acceso</h3><div class="gap">${[1, 3, 6, 12].map(m => `<button class="btn sm sec" onclick="bizSet('${id}',{trial:false,expires:addMonths(Math.max(Date.now(),${exp || 0}),${m})},'Acceso extendido ${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}');closeSheet()">+${m === 12 ? '1 año' : m + (m === 1 ? ' mes' : ' meses')}</button>`).join('')}<button class="btn sm sec" onclick="bizSet('${id}',{trial:false,expires:0},'Sin vencimiento');closeSheet()">Sin vencimiento</button></div>
+  <h3>Cortesía</h3><button class="btn sm sec" onclick="closeSheet();grantCourtesy('${id}')">Conceder cortesía de 30 días</button><p class="note">No es un pago: queda registrada como cortesía en su historial. No cambia la prueba gratis de los demás.</p>
+  <h3>Historial de licencia</h3><div class="card" id="bzH"><div class="sub">Cargando…</div></div>
   <div class="sheet-actions">${id !== me.u ? (b.blocked ? `<button class="btn" onclick="bizSet('${id}',{blocked:false},'Negocio desbloqueado');closeSheet()">Desbloquear</button>` : `<button class="btn bad" onclick="bizSet('${id}',{blocked:true},'Negocio bloqueado');closeSheet()">Bloquear acceso</button>`) : ''}<button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+  bizHistory(id);
 }
 function fillLicenses(){
   if (!$("#mx")) return;
@@ -702,9 +764,204 @@ function fillLicenses(){
   const bizs = Object.entries(lic.biz).sort((a, b) => num(b[1].created) - num(a[1].created));
   const st = b => b.blocked ? ['Bloqueado', 'out'] : (bizExp(b) && bizExp(b) < Date.now()) ? [b.trial ? 'Prueba terminada' : 'Vencido', 'low'] : b.trial ? ['En prueba', 'low'] : ['Activo', 'ok'];
   $('#mx').innerHTML = `<p class="note" style="margin-top:-4px">Solo tú ves esta sección. Los negocios nuevos tienen 7 días de prueba gratis; después solo siguen con un código tuyo (o si les extiendes el acceso aquí).</p>
-  <button class="btn full" onclick="licForm()">+ Generar código de activación</button>
+  <button class="btn full" onclick="licForm()">+ Generar código de activación</button><div id="stA"></div>
   <h3>Negocios (${bizs.length})</h3><div class="list">${bizs.map(([id, b]) => { const [t, c] = st(b); return `<div class="item tap row" onclick="bizMenu('${id}')"><div class="grow"><div class="name">${esc(b.name || '—')}${id === me.u ? ' <span class="pill">tú</span>' : ''}</div><div class="sub">${bizExp(b) ? (b.trial ? 'Prueba hasta ' : 'Vence ') + fmtDay(bizExp(b)) : 'Sin vencimiento'}${b.created ? ' · desde ' + fmtDay(b.created) : ''}</div></div><span class="pill ${c}">${t}</span></div>`; }).join('') || '<div class="empty">Aún no hay negocios.</div>'}</div>
   <h3>Códigos (${codes.length})</h3><div class="list">${codes.map(([code, d]) => `<div class="item tap row" onclick="showLic('${code}')"><div class="grow"><div class="name" style="letter-spacing:1px">${fmtCode(code)}</div><div class="sub">${esc(d.note || '')}${d.expires ? ' · vence ' + fmtDay(d.expires) : ''}</div></div><span class="pill ${d.used ? '' : 'ok'}">${d.used ? 'Usado' : 'Libre'}</span></div>`).join('') || '<div class="empty">Genera un código para cada cliente nuevo.</div>'}</div>`;
+  storeAdminHtml().then(h => { const el = $('#stA'); if (el) el.innerHTML = h; });
+}
+
+/* ============ Configuración regional: país del negocio, vista previa y cambio ============ */
+function suCountryNote(){ const el = $('#suCn'); if (!el) return; const r = SSRegion.get($('#suC').value); el.innerHTML = esc(r.currency.code + ' · ' + r.tax.name + ' ' + r.tax.rates.map(x => x + '%').join('/') + (r.features.bcv ? ' · tasa BCV y bolívares' : '') + (r.fiscal.validated ? '' : ' · configuración fiscal pendiente de validación')); }
+// Configuración inicial de un negocio nuevo según el país elegido.
+function regionInit(code, byUid, byName){
+  const r = SSRegion.get(SSRegion.isCode(code) ? code : SSRegion.DEFAULT), now = Date.now();
+  return {country:r.code, regionAt:now, regionBy:byUid, regionByName:byName || '', tz:r.tz, cc:r.cc || '58', regionLog:[{from:'', to:r.code, at:now, by:byUid, name:byName || ''}]};
+}
+// Configuración inicial: un negocio que no es de Venezuela no lleva ningún campo de tasa BCV (las reglas lo rechazarían).
+function newBizCfg(extra){ const c = {...DEF_CFG, ...extra}; if (!SSRegion.get(c.country).features.bcv) SSRegion.BCV_KEYS.concat('igtf').forEach(k => delete c[k]); return c; }
+function regionStats(){ const ps = products(); return {products:ps.length, eurProducts:ps.filter(p => p.cur === 'eur').length, sales:Object.keys(S.sales).length}; }
+function regionLogHtml(){
+  const L = (cfg.regionLog || []).slice().reverse().slice(0, 8);
+  if (!L.length) return '';
+  const nm = c => { const r = SSRegion.REGIONS[String(c).slice(0, 2)]; return r ? r.flag + ' ' + r.name + (String(c).length > 2 ? ' (asignado)' : '') : (c || 'sin país'); };
+  return `<div class="sub" style="margin-top:12px;font-weight:600">Historial de cambios</div>${L.map(x => `<div class="mv"><span>${fmtDate(x.at)} · ${esc(x.name || '')}</span><b>${x.from ? esc(nm(x.from)) + ' → ' : ''}${esc(nm(x.to))}</b></div>`).join('')}`;
+}
+function regionCard(){
+  const r = REG;
+  return `<h3 style="margin-top:0">Configuración regional</h3><div class="card">
+  <div class="mv"><span>País</span><b>${r.flag} ${esc(r.name)}${r.legacy ? ' <span class="pill low">sin confirmar</span>' : ''}</b></div>
+  <div class="mv"><span>Moneda de los precios</span><b>${esc(r.currency.code)} (${esc(r.currency.symbol)})</b></div>
+  ${r.local ? `<div class="mv"><span>Cobro en moneda local</span><b>${esc(r.local.code)} con tasa BCV</b></div>` : ''}
+  <div class="mv"><span>Zona horaria</span><b>${esc(r.tz)}</b></div>
+  <div class="mv"><span>Formato</span><b>${esc(nf2.format(1234.5))} · ${esc(fmtDay(Date.now()))}</b></div>
+  <div class="mv"><span>Impuesto</span><b>${esc(r.tax.name)} ${r.tax.rates.map(x => nfq.format(x) + '%').join(' / ')}${r.features.igtf ? ' · IGTF' : ''}</b></div>
+  <div class="mv"><span>Formas de pago</span><b style="text-align:right">${Object.values(r.methods).map(esc).join(', ')}</b></div>
+  <div class="mv"><span>Tasa BCV</span><b>${r.features.bcv ? 'Activa' : 'No aplica'}</b></div>
+  ${r.legacy ? `<p class="note">Tu negocio se creó antes de la configuración regional y sigue en <b>Venezuela</b>, como siempre.${r.uncertain ? ' <b style="color:var(--warn)">Tu código telefónico no es de Venezuela: revisa si este es tu país.</b>' : ''}</p>` : ''}
+  <p class="note">${esc(r.fiscal.status)}</p>
+  ${r.tax.custom ? `<label>Tus tipos de ${esc(r.tax.name.toLowerCase())} (%), separados por coma</label><input id="aTx" inputmode="decimal" value="${esc(r.tax.rates.filter(x => x).join(', '))}" placeholder="Ej: 8.875"><p class="note">Se guarda con el botón Guardar de abajo.</p>` : ''}
+  <div class="gap" style="margin-top:12px">${r.legacy ? `<button class="btn sm" onclick="confirmRegion()">Confirmar Venezuela</button>` : ''}<button class="btn sm sec" onclick="regionForm()">Cambiar país</button></div>
+  ${regionLogHtml()}</div>`;
+}
+function regionForm(){
+  if (!isAdmin()){ toast('Solo el administrador puede cambiar el país'); return; }
+  openSheet(`<h2>Cambiar país del negocio</h2><p class="note" style="margin-top:0">Ahora: <b>${REG.flag} ${esc(REG.name)}</b>. Los cambios se aplican a las ventas y operaciones <b>nuevas</b>; lo anterior queda como está.</p>
+  <label>Nuevo país</label><select id="rgC" onchange="regionPreview()">${SSRegion.list().map(r => `<option value="${r.code}" ${r.code === REG.code ? 'selected' : ''}>${r.flag} ${esc(r.name)}</option>`).join('')}</select>
+  <div id="rgXw" style="display:none"><label>Moneda</label><select id="rgX">${Object.keys(SSRegion.CURRENCIES).map(c => `<option ${c === (cfg.currency || 'USD') ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+  <label>Zona horaria</label><input id="rgT" placeholder="Ej: Europe/Madrid">
+  <div id="rgP" style="margin-top:12px"></div>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" id="rgOk" onclick="regionConfirm()">Revisar y cambiar</button></div>`);
+  regionPreview();
+}
+function regionPreview(){
+  const code = $('#rgC').value, r = SSRegion.get(code);
+  $('#rgXw').style.display = code === 'XX' ? 'block' : 'none';
+  if (!$('#rgT').dataset.touched) $('#rgT').value = code === REG.code ? REG.tz : r.tz;
+  $('#rgT').oninput = () => { $('#rgT').dataset.touched = 1; };
+  const d = SSRegion.diff(cfg, code, regionStats());
+  $('#rgP').innerHTML = !d.length ? '<div class="note">Es el país actual. Puedes cambiar la zona horaria o la moneda (en "Otro país").</div>'
+    : `<div class="card" style="padding:8px 14px"><div class="sub" style="font-weight:600">Vista previa de los cambios</div><ul style="margin:6px 0 0 18px;font-size:13.5px;line-height:1.5">${d.map(x => `<li>${esc(x.t)}</li>`).join('')}</ul></div>`;
+}
+function regionConfirm(){
+  const code = $('#rgC').value, r = SSRegion.get(code), tz = $('#rgT').value.trim() || r.tz, cur = code === 'XX' ? $('#rgX').value : null;
+  if (!SSRegion.tzOk(tz)){ toast('Esa zona horaria no es válida (ej: America/Caracas)'); return; }
+  const same = code === REG.code && !REG.legacy;
+  ask(same ? 'Guardar configuración regional' : '¿Cambiar a ' + r.name + '?', same ? 'Se guardarán la zona horaria y la moneda.' : 'Las ventas, facturas, cobros y movimientos anteriores no cambian. Los precios de tus productos conservan su número. ¿Seguro?', same ? 'Guardar' : 'Sí, cambiar país', () => changeRegion(code, {tz, ...(cur ? {currency:cur} : {})}), false);
+}
+async function changeRegion(code, extra){
+  if (!isAdmin()){ toast('Solo el administrador puede cambiar el país'); return false; }
+  if (!SSRegion.isCode(code)) return false;
+  const r = SSRegion.get(code), now = Date.now(), from = REG.code + (REG.legacy ? '*' : '');
+  const log = [...(cfg.regionLog || []), {from, to:code, at:now, by:me.u, name:me.name}].slice(-20);
+  const data = {country:code, regionAt:now, regionBy:me.u, regionByName:me.name, tz:r.tz, cc:r.cc || cfg.cc || '', regionLog:log, ...(extra || {})};
+  if (!(await putCfg(data))) return false;
+  logA('admin', 'Configuración regional cambiada', SSRegion.REGIONS[from.slice(0, 2)].name + (from.length > 2 ? ' (asignado)' : '') + ' → ' + r.name);
+  closeSheet(); shellFor = ''; const mx = $('#mx'); if (mx) delete mx.dataset.done; render();
+  toast('Configuración regional: ' + r.name);
+  if (r.features.bcv) setTimeout(() => autoRates(), 500);
+  return true;
+}
+function confirmRegion(){
+  ask('Confirmar Venezuela', 'Tu negocio quedará configurado en Venezuela (como hasta ahora). No cambia nada en el funcionamiento.', 'Confirmar', () => changeRegion('VE', {tz:cfg.tz || REG.tz}), false);
+}
+
+/* ============ Tienda de licencias (Más → Mi licencia) ============
+   La app solo enseña precios y abre el pago. El precio lo decide el servidor y la licencia la activa el servidor
+   cuando la pasarela confirma el pago con un webhook firmado. Volver a la app con "?pago=ok" no activa nada. */
+const LIC_API = () => { let a = window.LIC_API || ''; try { if (!a && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)){ const q = new URLSearchParams(location.search).get('api'); if (q) sessionStorage.setItem('ss_api', q); a = sessionStorage.getItem('ss_api') || ''; } } catch(e){} return a; };
+async function licApi(path, body){
+  const base = LIC_API(); if (!base || !FB || !FB.auth.currentUser) throw new Error('El pago en línea aún no está activado');
+  const tok = await FB.auth.currentUser.getIdToken();
+  const r = await fetch(base.replace(/\/$/, '') + path, {method:'POST', headers:{'Content-Type':'application/json', Authorization:'Bearer ' + tok}, body:JSON.stringify(body || {})});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
+  return j;
+}
+const licBizId = () => bizId || (FB && FB.auth.currentUser ? FB.auth.currentUser.uid : '');
+const licStatusTxt = {activa:'Activa', prueba:'Prueba gratis', vencida:'Vencida', prueba_terminada:'Prueba terminada', bloqueado:'Suspendida'};
+const HIST_TXT = {compra:'Compra', cortesia:'Cortesía', reembolso:'Reembolso', pago_fallido:'Pago rechazado', codigo:'Código de activación'};
+async function storeCfg(){ try { const d = await FB.fs.doc('store/config').get(); return d.exists ? d.data() : {}; } catch(e){ return {}; } }
+async function localOffer(){
+  const b = bizInfo || (ui.renew || {}).biz || {}, exp = bizExp(b);
+  const isNew = !b.paidOnce && !b.license && (b.trial === true || b.courtesy === true);
+  const offers = SSPrices.offers(REG.code, {now:Date.now(), store:CLOUD() ? await storeCfg() : {}, isNew});
+  const st = b.blocked ? 'bloqueado' : exp && exp < Date.now() ? (b.trial ? 'prueba_terminada' : 'vencida') : b.trial ? 'prueba' : 'activa';
+  let history = [];
+  if (CLOUD() && licBizId()){ try { const q = await FB.fs.collection('biz/' + licBizId() + '/licHistory').orderBy('at', 'desc').limit(30).get(); history = q.docs.map(d => ({id:d.id, ...d.data()})); } catch(e){} }
+  return {biz:{name:b.name || cfg.name, expires:exp, trial:!!b.trial, status:st}, region:REG.code, plan:SSPrices.PLAN, offers, available:false, local:true,
+    reason:!offers.length ? 'Todavía no hay precio aprobado para ' + REG.name + '. Escríbenos y te ayudamos.' : 'El pago en línea aún no está activado. Para renovar, pide tu código por WhatsApp.', history};
+}
+function storeHtml(o){
+  const b = o.biz || {}, money = (c, cur) => SSPrices.fmt(c, cur);
+  const promo = o.offers.find(x => x.promo);
+  const wa = window.APP_WA ? 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero renovar la licencia de StockSoft de ' + (b.name || 'mi negocio') + '.') : '';
+  return `${o.test ? '<div class="warnbox">Modo de pruebas: pasarela simulada o de prueba, no se cobra dinero real.</div>' : ''}
+  <div class="card"><div class="mv"><span>Negocio</span><b>${esc(b.name || '')}</b></div>
+  <div class="mv"><span>Estado</span><b style="color:${b.status === 'activa' || b.status === 'prueba' ? 'var(--acc)' : 'var(--warn)'}">${licStatusTxt[b.status] || '—'}</b></div>
+  <div class="mv"><span>${b.status === 'vencida' || b.status === 'prueba_terminada' ? 'Venció' : 'Vence'}</span><b>${b.expires ? fmtDay(b.expires) : 'Sin vencimiento'}</b></div></div>
+  <h3>${esc(o.plan.name)}: todo incluido</h3><p class="note" style="margin-top:0">Un solo plan con todas las funciones. Solo eliges cuánto tiempo.</p>
+  ${promo ? `<div class="warnbox" style="background:var(--ok-bg);border-color:var(--ok-line);color:var(--tx)"><b>Promoción de lanzamiento: −${promo.pct} %</b> para clientes nuevos, hasta el ${fmtDay(promo.promoEnds)}.</div>` : ''}
+  ${o.offers.length ? `<div class="grid2">${o.offers.map(x => `<div class="card" style="text-align:center"><div class="name">${esc(x.label)}</div>
+    ${x.promo ? `<div class="sub" style="text-decoration:line-through">${money(x.normal, x.currency)}</div>` : '<div class="sub">&nbsp;</div>'}
+    <div style="font-size:24px;font-weight:800">${money(x.final, x.currency)}</div>${x.promo ? `<span class="pill ok">−${x.pct} %</span>` : ''}
+    <div class="sub">${x.months > 1 ? money(Math.round(x.final / x.months), x.currency) + ' al mes' : '&nbsp;'}</div>
+    <button class="btn sm full" style="margin-top:8px" ${o.available ? `onclick="buyLicense('${x.dur}')"` : 'disabled'}>Comprar</button></div>`).join('')}</div>` : ''}
+  ${!o.available ? `<p class="note">${esc(o.reason || '')}</p>${wa ? `<a class="btn wa full" href="${wa}" target="_blank" rel="noopener">Pedir mi licencia por WhatsApp</a>` : ''}` : `<p class="note">El pago se hace en la página segura de la pasarela. La licencia se activa sola cuando el pago queda confirmado y se suma a tu fecha de vencimiento actual.</p>`}
+  <ul class="note" style="margin:10px 0 0 18px">${o.plan.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+  <h3>Historial</h3><div class="card">${(o.history || []).length ? o.history.map(h => `<div class="mv"><span>${fmtDay(h.at)} · ${HIST_TXT[h.type] || esc(h.type)}${h.label ? ' ' + esc(h.label) : h.days ? ' ' + h.days + ' días' : ''}${h.test ? ' <span class="pill">prueba</span>' : ''}</span><b>${h.amount ? money(h.amount, h.currency) : h.type === 'cortesia' ? 'Gratis' : ''}${h.to ? ' · hasta ' + fmtDay(h.to) : ''}</b></div>`).join('') : '<div class="empty">Todavía no hay compras.</div>'}</div>`;
+}
+async function fillLicense(target){
+  const el = target || $('#mx'); if (!el) return;
+  el.innerHTML = '<div class="empty">Cargando…</div>';
+  let o = null, err = '';
+  if (CLOUD() && LIC_API()){ try { o = await licApi('/tienda/oferta', {bizId:licBizId()}); } catch(e){ err = e.message; } }
+  if (!o) o = await localOffer();
+  if (err) o.reason = err;
+  el.innerHTML = storeHtml(o);
+}
+function storeSheet(){ openSheet(`<h2>Licencia de StockSoft</h2><div id="stx"></div><div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`); fillLicense($('#stx')); }
+async function buyLicense(dur){
+  if (me && !isAdmin()){ toast('Solo el administrador puede comprar la licencia'); return; }
+  let r; try { r = await licApi('/tienda/checkout', {bizId:licBizId(), dur}); } catch(e){ toast(e.message); return; }
+  try { sessionStorage.setItem('ss_order', r.orderId); } catch(e){}
+  window.open(r.url, '_blank', 'noopener');
+  waitOrder(r.orderId);
+}
+// Espera la confirmación del SERVIDOR (que solo llega con el webhook de la pasarela). Nunca activa nada por su cuenta.
+function waitOrder(orderId){
+  openSheet(`<h2>Esperando la confirmación del pago</h2><p class="note">Completa el pago en la ventana de la pasarela. Esta pantalla se actualiza sola cuando el pago queda confirmado.</p><div id="woSt" class="note"></div><div class="sheet-actions"><button class="btn sec" onclick="clearInterval(waitOrder.t);closeSheet()">Cerrar</button></div>`);
+  const t0 = Date.now(); clearInterval(waitOrder.t);
+  const tick = async () => {
+    let o; try { o = await licApi('/tienda/pedido', {orderId}); } catch(e){ const el = $('#woSt'); if (el) el.textContent = e.message; return; }
+    const el = $('#woSt'); if (el) el.textContent = 'Estado: ' + ({pending:'pendiente', paid:'pagado', failed:'rechazado', canceled:'cancelado', refunded:'reembolsado', revisar:'en revisión', error:'error'}[o.status] || o.status);
+    if (o.status === 'paid'){ clearInterval(waitOrder.t); try { sessionStorage.removeItem('ss_order'); } catch(e){} await licenseActivated(o); }
+    else if (['failed', 'canceled', 'revisar', 'error'].includes(o.status)){ clearInterval(waitOrder.t); try { sessionStorage.removeItem('ss_order'); } catch(e){} if (el) el.innerHTML = o.status === 'revisar' ? 'Recibimos el pago pero hay que revisarlo. Te contactaremos.' : 'El pago no se completó. No se ha cobrado ni activado nada.'; }
+    if (Date.now() - t0 > 20 * 60e3) clearInterval(waitOrder.t);
+  };
+  waitOrder.t = setInterval(tick, 4000); tick();
+}
+async function licenseActivated(o){
+  openSheet(`<h2>¡Licencia activada!</h2><div class="total" style="text-align:center"><div class="v">${esc(o.label)}</div><div class="s">Tu acceso vence el ${o.to ? fmtDay(o.to) : '—'}</div></div><p class="note">Gracias por confiar en StockSoft.</p><div class="sheet-actions"><button class="btn" onclick="closeSheet()">Listo</button></div>`);
+  if (ui.renew){ ui.renew = null; await onFbUser(FB.auth.currentUser); return; }
+  try { const d = await FB.fs.doc('biz/' + bizId).get(); if (d.exists) bizInfo = d.data(); } catch(e){}
+  if (view === 'mas' && sub === 'licencia') fillLicense();
+}
+function checkPaymentReturn(){
+  let id = ''; try { const q = new URLSearchParams(location.search); id = q.get('pedido') || sessionStorage.getItem('ss_order') || ''; } catch(e){}
+  if (id && LIC_API() && CLOUD()) waitOrder(id);
+}
+
+/* ---- Cortesía de 30 días y promoción (solo el dueño del sistema) ---- */
+function grantCourtesy(id){
+  if (!isOwner()) return;
+  const b = lic.biz[id] || {}, days = 30, now = Date.now();
+  if (!b.trial && !num(b.expires)){ toast('Ese negocio no tiene vencimiento'); return; }
+  const from = Math.max(now, bizExp(b) || 0), to = from + days * 864e5;
+  ask('Cortesía de ' + days + ' días', (b.name || 'El negocio') + ': su acceso pasará a vencer el ' + fmtDay(to) + '. Queda registrada como cortesía, no como pago.', 'Conceder cortesía', async () => {
+    const bt = FB.fs.batch();
+    bt.set(FB.fs.doc('biz/' + id), {trial:false, expires:to, courtesy:true}, {merge:true});
+    bt.set(FB.fs.doc('biz/' + id + '/licHistory/cortesia_' + now), {type:'cortesia', days, from, to, by:me.u, at:now, note:'Cortesía de StockSoft'});
+    try { await bt.commit(); toast('Cortesía concedida hasta ' + fmtDay(to)); } catch(e){ toast(fbMsg(e)); }
+  }, false);
+}
+async function bizHistory(id){
+  const el = $('#bzH'); if (!el) return;
+  try { const q = await FB.fs.collection('biz/' + id + '/licHistory').orderBy('at', 'desc').limit(20).get();
+    el.innerHTML = q.docs.length ? q.docs.map(d => { const h = d.data(); return `<div class="mv"><span>${fmtDay(h.at)} · ${HIST_TXT[h.type] || esc(h.type)}${h.label ? ' ' + esc(h.label) : h.days ? ' ' + h.days + ' d' : ''}</span><b>${h.amount ? SSPrices.fmt(h.amount, h.currency) : ''}${h.to ? ' → ' + fmtDay(h.to) : ''}</b></div>`; }).join('') : '<div class="sub">Sin movimientos.</div>';
+  } catch(e){ el.innerHTML = '<div class="sub">No se pudo leer el historial (' + esc(fbMsg(e)) + ').</div>'; }
+}
+async function storeAdminHtml(){
+  const st = await storeCfg(), w = SSPrices.promoWindow(st), now = Date.now();
+  const iso = w ? new Date(w.start).toISOString().slice(0, 10) : '';
+  return `<h3>Tienda de licencias</h3><div class="card"><p class="note" style="margin-top:0">Promoción de lanzamiento del ${SSPrices.PROMO.pct} % para clientes nuevos durante ${SSPrices.PROMO.days} días desde la fecha que pongas aquí. Sin fecha, no hay promoción.</p>
+  <label>Inicio de la promoción</label><input type="date" id="prS" value="${iso}">
+  <p class="note">${w ? (now < w.start ? 'Empieza el ' + fmtDay(w.start) : now < w.end ? '<b>Activa</b> hasta el ' + fmtDay(w.end) : 'Terminó el ' + fmtDay(w.end)) : 'Sin promoción configurada.'}</p>
+  <div class="gap"><button class="btn sm" onclick="savePromo()">Guardar</button>${w ? '<button class="btn sm sec" onclick="savePromo(true)">Quitar promoción</button>' : ''}</div></div>`;
+}
+async function savePromo(clear){
+  const v = $('#prS') && $('#prS').value;
+  const start = clear || !v ? 0 : new Date(v + 'T00:00:00').getTime();
+  try { await FB.fs.doc('store/config').set({promoStart:start, promoDays:SSPrices.PROMO.days, updatedAt:Date.now(), updatedBy:me.u}, {merge:true}); toast(start ? 'Promoción guardada' : 'Promoción quitada'); fillLicenses(); } catch(e){ toast(fbMsg(e)); }
 }
 
 /* ============ Usuarios y contraseña ============ */
@@ -739,6 +996,7 @@ function authScreen(){
   $('#lgReset').style.display = c ? 'inline' : 'none';
   $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none'; $('#suU2w').style.display = c ? 'block' : 'none';
   if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
+  if (!$('#suC').options.length){ $('#suC').innerHTML = SSRegion.list().map(r => `<option value="${r.code}">${r.flag} ${esc(r.name)}</option>`).join(''); $('#suC').value = SSRegion.DEFAULT; suCountryNote(); }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
 async function doSetup(ev){
@@ -785,7 +1043,7 @@ async function doSetup(ev){
       b.set(FB.fs.doc('biz/' + id + '/members/' + id), {name:an, role:'admin', email:au, created:now});
       b.set(FB.fs.doc('users/' + id), {biz:id, role:'admin', name:an, email:au});
       try { await b.commit(); } catch(e){ try { await cred.user.delete(); } catch(e2){ await FB.auth.signOut(); } pendingSetup = false; $('#suBtn').disabled = false; return msg('No se pudo activar con ese código.' + contactTxt()); }
-      await FB.fs.doc('biz/' + id + '/config/main').set({...DEF_CFG, name:biz, termsV:1, termsAt:Date.now()});
+      await FB.fs.doc('biz/' + id + '/config/main').set(newBizCfg({name:biz, termsV:1, termsAt:Date.now(), ...regionInit($('#suC').value, id, an)}));
       if (wantE){ msg('Creando el usuario del empleado…'); try { ui.newEmp = await createPinMember(en, ep, 'vendedor'); } catch(e){ toast('Empleado no creado: ' + fbMsg(e) + '. Puedes crearlo luego en Más → Usuarios'); } }
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
@@ -797,7 +1055,7 @@ async function doSetup(ev){
     $('#suBtn').disabled = false;
     return;
   }
-  await putCfg({name:biz});
+  await putCfg({name:biz, ...regionInit($('#suC').value, au, an)});
   const s1 = uid(), admin = {name:an, role:'admin', salt:s1, hash:await sha(s1 + ':' + ap), created:Date.now()};
   if (!(await put('users', au, admin))){ $('#suBtn').disabled = false; return msg('No se pudo guardar. ¿Tienes permiso para modificar esta página?'); }
   if (wantE){ const s2 = uid(); await put('users', eu, {name:en, role:'vendedor', salt:s2, hash:await sha(s2 + ':' + ep), created:Date.now()}); }
@@ -1312,7 +1570,10 @@ function saleRow(s){
   <div><div class="price">${usd(num(s.total))}</div>${s.rate ? `<div class="sub" style="text-align:right">${bs(num(s.total), s.rate)}</div>` : ''}</div></div>`;
 }
 
-const METHODS = {efectivo_usd:'Efectivo $', efectivo_bs:'Efectivo Bs', pago_movil:'Pago móvil', punto:'Punto de venta', transferencia:'Transferencia', zelle:'Zelle', efectivo_eur:'Efectivo €', fiado:'Fiado'};
+const METHODS = {efectivo_usd:'Efectivo $', efectivo_bs:'Efectivo Bs', pago_movil:'Pago móvil', punto:'Punto de venta', transferencia:'Transferencia', zelle:'Zelle', efectivo_eur:'Efectivo €', fiado:'Fiado',
+  efectivo:'Efectivo', tarjeta:'Tarjeta', bizum:'Bizum', transf:'Transferencia', cheque:'Cheque', nequi:'Nequi', daviplata:'Daviplata', spei:'Transferencia SPEI'};
+// Formas de pago que se pueden elegir en este negocio (según su país). METHODS sigue teniendo todas para leer ventas antiguas.
+const regMethods = (withF = true) => Object.fromEntries(Object.entries(REG.methods).filter(([k]) => withF || k !== 'fiado'));
 /* ---- Códigos de barras: escanear y crear ---- */
 const ean13Check = d => { let s = 0; for (let i = 0; i < 12; i++) s += (+d[i]) * (i % 2 ? 3 : 1); return (10 - s % 10) % 10; };
 const validEAN13 = c => /^\d{13}$/.test(c) && ean13Check(c) === +c[12];
@@ -1435,8 +1696,8 @@ function priceBlock(p, big){
   const u = pUsd(p), b = pBs(p);
   return `<div class="total pricebox"><div class="sub" style="color:var(--tot-mut);font-size:12px;font-weight:600">PRECIO</div>
     <div class="v" style="font-size:${big ? 38 : 30}px">${pMain(p)}</div>
-    <div class="bsline" style="font-size:${big ? 26 : 21}px">${b ? bsF(b) : '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>'}</div>
-    <div class="s">${[curOf(p) === 'eur' ? 'Tasa euro BCV ' + (cfg.eur ? nf2.format(cfg.eur) : '—') : 'Tasa dólar BCV ' + (cfg.bcv ? nf2.format(cfg.bcv) : '—'), pAlt(p)].filter(Boolean).join(' · ')}</div>
+    <div class="bsline" style="font-size:${big ? 26 : 21}px">${b ? bsF(b) : REG.features.bcv ? '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>' : ''}</div>
+    <div class="s">${[!REG.features.bcv ? '' : curOf(p) === 'eur' ? 'Tasa euro BCV ' + (cfg.eur ? nf2.format(cfg.eur) : '—') : 'Tasa dólar BCV ' + (cfg.bcv ? nf2.format(cfg.bcv) : '—'), pAlt(p)].filter(Boolean).join(' · ')}</div>
     ${hasW(p) ? `<div class="s" style="margin-top:6px;font-weight:700;color:#fff">${wTxt(p)}${cfg.bcv ? ' · ' + bsF(num(p.wPrice) * (curOf(p) === 'eur' ? (cfg.eur || 0) : cfg.bcv)) : ''}</div>` : ''}</div>`;
 }
 function priceSheet(id){
@@ -1494,7 +1755,7 @@ function addToCart(pid, quiet){
   if (p.track !== false && num(p.stock) <= 0) toast('Ojo: ' + p.name + ' figura agotado');
   else if (e && e.days < 0){ toast('Ojo: ' + p.name + ' tiene un lote vencido (' + fmtExp(e.exp) + ')'); quiet = true; }
   const ex = cart.find(c => c.pid === pid);
-  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? 16 : num(p.iva)}; c.ivaP = c.iva; reprice(c); cart.push(c); }
+  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? REG.tax.def : num(p.iva)}; c.ivaP = c.iva; reprice(c); cart.push(c); }
   if (!quiet) toast('+1 ' + p.name + ' · ' + pMain(p) + (pBs(p) ? ' · ' + bsF(pBs(p)) : ''));
   renderCart();
 }
@@ -1502,11 +1763,11 @@ function addToCart(pid, quiet){
 function reprice(c){ const p = c.pid && S.products[c.pid]; if (!hasW(p)){ c.mayor = false; return; } const u = unitUsd(p, c.qty); if (isFinite(u)){ c.price = r2(ivaAdj(u, ivaOf(c, true), ivaOf(c))); c.mayor = isW(p, c.qty); } }
 /* IVA por línea al vender: el precio incluye el IVA, así que al quitarlo o cambiarlo se recalcula el precio
    manteniendo la base (ej. $11,60 con 16 % → exento $10,00 → 8 % $10,80). ivaP = el IVA con que se cargó la línea. */
-const ivaOf = (c, orig) => { const v = orig ? (c.ivaP ?? c.iva) : c.iva; return v == null || v === '' ? 16 : num(v); };
+const ivaOf = (c, orig) => { const v = orig ? (c.ivaP ?? c.iva) : c.iva; return v == null || v === '' ? REG.tax.def : num(v); };
 const ivaAdj = (price, from, to) => from === to ? price : price / (1 + from / 100) * (1 + to / 100);
-const IVA_LBL = {16:'IVA 16%', 8:'IVA 8%', 0:'Sin IVA'};
+const IVA_LBL = new Proxy({}, {get:(o, k) => +k === 0 ? (REG.tax.rates.length > 1 ? 'Sin ' + REG.tax.name : 'Sin impuesto') : REG.tax.name + ' ' + nfq.format(+k) + '%'});
 function setLineIva(i, to){ const c = cart[i]; if (!c) return; if (c.ivaP == null) c.ivaP = ivaOf(c); const from = ivaOf(c); if (from === to) return; c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; renderCart(); }
-function cycleIva(i){ const c = cart[i]; if (!c) return; const cur = ivaOf(c), next = cur === 16 ? 8 : cur === 8 ? 0 : 16; setLineIva(i, next); toast(c.name + ': ' + IVA_LBL[next] + ' · ' + usd(c.price)); }
+function cycleIva(i){ const c = cart[i]; if (!c) return; const cur = ivaOf(c), rs = REG.tax.rates, ix = rs.indexOf(cur), next = rs[(ix + 1) % rs.length] ?? rs[0]; setLineIva(i, next); toast(c.name + ': ' + IVA_LBL[next] + ' · ' + usd(c.price)); }
 function allIva(on){ cart.forEach((c, i) => { if (c.ivaP == null) c.ivaP = ivaOf(c); const to = on ? ivaOf(c, true) : 0; const from = ivaOf(c); if (from !== to){ c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; } }); renderCart(); toast(on ? 'IVA de nuevo como en el inventario' : 'IVA quitado de toda la venta'); }
 /* Servicios y artículos que no están en el inventario (reparaciones, envíos, mano de obra…).
    El precio lo pones tú en cada venta. Los servicios guardados (cfg.services) y los usados hace poco salen como atajos. */
@@ -1542,26 +1803,32 @@ async function addFree(){
 function setQty(i, v){ v = r3(num(v)); if (v <= 0) cart.splice(i, 1); else { cart[i].qty = v; reprice(cart[i]); } renderCart(); }
 /* ---- Impuestos, descuentos y pagos ---- */
 const DIVISAS = ['efectivo_usd', 'efectivo_eur', 'zelle'];
-const METHOD_CUR = {efectivo_usd:'usd', zelle:'usd', efectivo_eur:'eur', efectivo_bs:'bs', pago_movil:'bs', punto:'bs', transferencia:'bs', fiado:'usd'};
-const CUR_SYM = {usd:'$', bs:'Bs', eur:'€'};
-const CASH = {efectivo_usd:'usd', efectivo_bs:'bs', efectivo_eur:'eur'};
+const METHOD_CUR = {efectivo_usd:'usd', zelle:'usd', efectivo_eur:'eur', efectivo_bs:'bs', pago_movil:'bs', punto:'bs', transferencia:'bs', fiado:'usd', efectivo:'usd', tarjeta:'usd', bizum:'usd', transf:'usd', cheque:'usd', nequi:'usd', daviplata:'usd', spei:'usd'};
+const CUR_SYM = {get usd(){ return curNow().symbol; }, bs:'Bs', eur:'€'};
+const CASH = {efectivo_usd:'usd', efectivo_bs:'bs', efectivo_eur:'eur', efectivo:'usd'};
 const fromCur = (v, cur, rate = cfg.bcv, rateEur = cfg.eur) => cur === 'bs' ? (rate ? v / rate : 0) : cur === 'eur' ? (rate && rateEur ? v * rateEur / rate : 0) : v;
 const toCur = (usdV, cur, rate = cfg.bcv, rateEur = cfg.eur) => cur === 'bs' ? usdV * (rate || 0) : cur === 'eur' ? (rateEur ? usdV * (rate || 0) / rateEur : 0) : usdV;
 const fmtCur = (v, cur) => cur === 'bs' ? bsF(v) : cur === 'eur' ? eurF(v) : usd(v);
 function taxCalc(items, divisasUsd){
-  let ex = 0, b8 = 0, i8 = 0, b16 = 0, i16 = 0, sub = 0;
-  for (const it of items){ const T = num(it.price) * num(it.qty); sub += T; const r = it.iva == null || it.iva === '' ? 16 : num(it.iva);
-    if (r === 0) ex += T; else if (r === 8){ const b = T / 1.08; b8 += b; i8 += T - b; } else { const b = T / 1.16; b16 += b; i16 += T - b; } }
-  const igtf = cfg.igtf ? Math.max(0, num(divisasUsd)) * 0.03 : 0;
-  return {ex:r2(ex), b8:r2(b8), i8:r2(i8), b16:r2(b16), i16:r2(i16), sub:r2(sub), igtf:r2(igtf), total:r2(sub + igtf)};
+  // Precios con el impuesto incluido. Desglose por tipo (rows) para cualquier país; b8/i8/b16/i16 se mantienen para Venezuela.
+  let ex = 0, b8 = 0, i8 = 0, b16 = 0, i16 = 0, sub = 0; const by = {};
+  for (const it of items){ const T = num(it.price) * num(it.qty); sub += T; const r = it.iva == null || it.iva === '' ? REG.tax.def : num(it.iva);
+    if (r === 0){ ex += T; continue; } const b = T / (1 + r / 100); by[r] = by[r] || [0, 0]; by[r][0] += b; by[r][1] += T - b;
+    if (r === 8){ b8 += b; i8 += T - b; } else if (r === 16){ b16 += b; i16 += T - b; } }
+  // Objetos {r, b, i}: Firestore no admite listas dentro de listas.
+  const rows = Object.entries(by).map(([r, x]) => ({r:+r, b:r2(x[0]), i:r2(x[1])})).sort((a, b) => b.r - a.r);
+  const igtf = cfg.igtf && REG.features.igtf ? Math.max(0, num(divisasUsd)) * 0.03 : 0;
+  return {ex:r2(ex), b8:r2(b8), i8:r2(i8), b16:r2(b16), i16:r2(i16), rows, sub:r2(sub), igtf:r2(igtf), total:r2(sub + igtf)};
 }
+// Desglose de impuestos de una venta (nueva: rows; anterior a la configuración regional: b16/b8).
+const taxRows = t => !t ? [] : Array.isArray(t.rows) ? t.rows.map(x => Array.isArray(x) ? x : [num(x.r), num(x.b), num(x.i)]) : [[16, num(t.b16), num(t.i16)], [8, num(t.b8), num(t.i8)]].filter(x => x[1]);
+const taxIva = t => taxRows(t).reduce((a, x) => a + num(x[2]), 0);
 function taxHtml(t, rate, fiscal){
   const row = (l, v) => `<div class="mv"><span>${l}</span><span style="text-align:right"><b>${usd(v)}</b>${rate ? `<br><span class="sub">${bs(v, rate)}</span>` : ''}</span></div>`;
   let h = '';
   if (t.disc) h += row('Descuento', -t.disc);
   if (fiscal){
-    if (t.b16) h += row('Base imponible 16%', t.b16) + row('IVA 16%', t.i16);
-    if (t.b8) h += row('Base imponible 8%', t.b8) + row('IVA 8%', t.i8);
+    for (const [r, b, i] of taxRows(t)) h += row('Base imponible ' + nfq.format(r) + '%', b) + row(REG.tax.name + ' ' + nfq.format(r) + '%', i);
     if (t.ex) h += row('Exento', t.ex);
     h += row('Subtotal', t.sub);
   }
@@ -1570,7 +1837,7 @@ function taxHtml(t, rate, fiscal){
 }
 /* Pagos de una venta, normalizados: [{m, usd, raw, cur}] */
 function salePayments(s){
-  if (Array.isArray(s.payments) && s.payments.length) return s.payments.map(p => ({m:p.m, usd:num(p.usd), raw:num(p.raw), cur:METHOD_CUR[p.m] || 'usd'}));
+  if (Array.isArray(s.payments) && s.payments.length) return s.payments.map(p => ({m:p.m, usd:num(p.usd), raw:num(p.raw), cur:p.cur || METHOD_CUR[p.m] || 'usd'}));
   const cur = METHOD_CUR[s.method] || 'usd';
   return [{m:s.method, usd:num(s.total), raw:r2(toCur(num(s.total), cur, s.rate, s.rateEur)), cur}];
 }
@@ -1597,7 +1864,7 @@ function custInput(k, v){
 }
 
 /* ---- Carrito ---- */
-if (!ui.pay) ui.pay = {mode:'simple', method:'efectivo_usd', lines:[], client:'', changeCur:'usd'};
+if (!ui.pay) ui.pay = {mode:'simple', method:Object.keys(REG.methods)[0], lines:[], client:'', changeCur:'usd'};
 if (!ui.disc) ui.disc = {type:'pct', v:''};
 const cartSub0 = () => r2(cart.reduce((a, c) => a + c.price * c.qty, 0));
 function discUsd(){
@@ -1618,7 +1885,7 @@ function payState(){
   return {items, t, paid, rest:r2(t.total - paid), lines, fiado:r2(lines.filter(l => l.m === 'fiado').reduce((a, l) => a + l.usd, 0))};
 }
 function setPayLine(i, k, v){ ui.pay.lines[i][k] = v; if (k === 'm') renderCart(); else updatePayInfo(); }
-function addPayLine(){ const st = payState(); const m = ui.pay.lines.length ? 'pago_movil' : 'efectivo_usd'; const cur = METHOD_CUR[m]; ui.pay.lines.push({m, v:st.rest > 0 ? String(r2(toCur(st.rest, cur))).replace('.', ',') : ''}); renderCart(); }
+function addPayLine(){ const st = payState(); const ks = Object.keys(regMethods(false)), m = ui.pay.lines.length ? (ks[1] || ks[0]) : ks[0]; const cur = METHOD_CUR[m]; ui.pay.lines.push({m, v:st.rest > 0 ? String(r2(toCur(st.rest, cur))).replace('.', ',') : ''}); renderCart(); }
 function fillRest(i){ const l = ui.pay.lines[i]; l.v = ''; const st = payState(); if (st.rest > 0) l.v = String(r2(toCur(st.rest, METHOD_CUR[l.m]))).replace('.', ','); renderCart(); }
 function updatePayInfo(){
   const el = $('#payInfo'); if (!el) return;
@@ -1638,24 +1905,24 @@ function renderCart(){
   const fiscal = ui.doc === 'fiscal';
   const cl = clients().sort((a, b) => a.name.localeCompare(b.name, 'es'));
   const C = ui.cust, needClient = st.fiado > 0;
-  const methodOpts = (sel, withF = true) => Object.entries(METHODS).filter(([k]) => withF || k !== 'fiado').map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
+  const methodOpts = (sel, withF = true) => Object.entries(regMethods(withF)).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${v}</option>`).join('');
   el.innerHTML = (ui.editQuote && S.quotes[ui.editQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Editando la cotización ${esc(S.quotes[ui.editQuote].no)}. Cuando termines pulsa <b>Cotización</b> para guardarla. <a href="#" onclick="ui.editQuote=null;renderCart();return false">cancelar edición</a></div>` : '') + (ui.fromQuote && S.quotes[ui.fromQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Vendiendo la cotización ${esc(S.quotes[ui.fromQuote].no || '')}. <a href="#" onclick="ui.fromQuote=null;renderCart();return false">quitar vínculo</a></div>` : '')
     + (cart.length ? `<div class="row" style="gap:8px;margin-bottom:10px"><span class="sub" style="margin:0;white-space:nowrap">Cliente</span><select class="grow" style="padding:8px" onchange="setSaleClient(this.value)"><option value="">Cliente general${''}</option>${clients().sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => `<option value="${c.id}" ${c.id === ui.saleClient ? 'selected' : ''}>${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}${cDisc(c) ? ' (−' + discTxt(cDisc(c)) + ')' : ''}</option>`).join('')}</select></div>${ui.disc.client && S.clients[ui.disc.client] ? `<div class="pill ok" style="margin:-4px 0 10px">Descuento de cliente${S.clients[ui.disc.client].type ? ' ' + esc(S.clients[ui.disc.client].type) : ''}: −${discTxt(cDisc(S.clients[ui.disc.client]))}</div>` : ''}` : '')
     + `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
       <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}</div>
-      <button type="button" class="ivachip${ivaOf(c) === 0 ? ' off' : ''}${c.ivaP != null && ivaOf(c) !== ivaOf(c, true) ? ' chg' : ''}" onclick="cycleIva(${i})" title="Toca para cambiar: 16% → 8% → sin IVA">${ivaOf(c) ? '✓ ' : '✕ '}${IVA_LBL[ivaOf(c)]}</button></div>
+      <button type="button" class="ivachip${ivaOf(c) === 0 ? ' off' : ''}${c.ivaP != null && ivaOf(c) !== ivaOf(c, true) ? ' chg' : ''}" onclick="cycleIva(${i})" title="Toca para cambiar el ${esc(REG.tax.name)}: ${REG.tax.rates.map(r => r ? nfq.format(r) + '%' : 'sin impuesto').join(' → ')}">${ivaOf(c) ? '✓ ' : '✕ '}${IVA_LBL[ivaOf(c)]}</button></div>
       <div class="qty"><button onclick="setQty(${i},${c.qty}-1)">−</button><input inputmode="decimal" value="${nfq.format(c.qty)}" onchange="setQty(${i},this.value)"><button onclick="setQty(${i},${c.qty}+1)">+</button></div>
     </div></div>`).join('') + `</div>
     ${cart.length ? `<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><span class="sub" style="margin:0">IVA de la venta:</span>${cart.some(c => ivaOf(c) > 0) ? `<button type="button" class="btn sm sec" onclick="allIva(false)">Quitar IVA a todo</button>` : ''}${cart.some(c => ivaOf(c) !== ivaOf(c, true)) ? `<button type="button" class="btn sm sec" onclick="allIva(true)">Volver a poner el IVA</button>` : ''}</div>` : ''}
     <div class="row" style="margin-top:10px;gap:8px"><span class="sub" style="margin:0;white-space:nowrap">Descuento</span><input inputmode="decimal" value="${esc(ui.disc.v)}" placeholder="0" style="width:90px;padding:8px" onchange="ui.disc.v=this.value;renderCart()"><select style="width:80px;padding:8px" onchange="ui.disc.type=this.value;renderCart()"><option value="pct" ${ui.disc.type === 'pct' ? 'selected' : ''}>%</option><option value="usd" ${ui.disc.type === 'usd' ? 'selected' : ''}>$</option></select>${t.disc ? `<span class="sub" style="margin:0">−${usd(t.disc)}</span>` : ''}${!isAdmin() ? `<span class="sub" style="margin:0">máx. ${nf0.format(num(cfg.maxDisc ?? 10))}%</span>` : ''}</div>
     <div class="total" style="margin-top:12px"><div class="sub" style="color:var(--tot-mut);font-size:12px;font-weight:600">TOTAL A PAGAR</div><div class="v" id="totV">${usd(t.total)}</div>
-    <div class="bsline" style="font-size:22px" id="totB">${cfg.bcv ? bs(t.total) : '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>'}</div>
+    <div class="bsline" style="font-size:22px" id="totB">${cfg.bcv ? bs(t.total) : REG.features.bcv ? '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>' : ''}</div>
     <div class="s">${cfg.bcv ? 'Tasa dólar BCV ' + nf2.format(cfg.bcv) : ''}${cfg.eur && cfg.bcv ? ' · ≈ ' + eurF(usdToEur(t.total)) : ''}${t.igtf ? ' · incluye IGTF' : ''}</div></div>
     <label>Documento</label>
     <div class="seg" style="margin:0"><button class="${fiscal ? 'on' : ''}" onclick="ui.doc='fiscal';renderCart()">Factura fiscal</button><button class="${!fiscal ? 'on' : ''}" onclick="ui.doc='nota';renderCart()">Nota de entrega (sin factura)</button></div>
     ${fiscal ? `<div class="card" style="margin-top:10px">
       <div class="row between"><div class="name" style="font-size:14px">Datos para la factura</div><button class="btn sm sec" onclick="ui.cust={rif:'V00000000',name:'Consumidor final',addr:'',phone:''};renderCart()">Consumidor final</button></div>
-      <div class="grid2"><div><label>Cédula / RIF</label><input id="f_rif" list="rifList" value="${esc(C.rif)}" placeholder="V12345678 / J123456789" oninput="custInput('rif',this.value)"><datalist id="rifList">${cl.filter(c => c.rif).map(c => `<option value="${esc(c.rif)}">${esc(c.name)}</option>`).join('')}</datalist></div>
+      <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="f_rif" list="rifList" value="${esc(C.rif)}" placeholder="V12345678 / J123456789" oninput="custInput('rif',this.value)"><datalist id="rifList">${cl.filter(c => c.rif).map(c => `<option value="${esc(c.rif)}">${esc(c.name)}</option>`).join('')}</datalist></div>
       <div><label>Nombre o razón social</label><input id="f_name" value="${esc(C.name)}" oninput="custInput('name',this.value)"></div></div>
       <div id="rifHint" class="note" style="color:var(--acc)"></div>
       <div class="grid2"><div><label>Dirección fiscal</label><input id="f_addr" value="${esc(C.addr)}" oninput="custInput('addr',this.value)" placeholder="Opcional"></div>
@@ -1666,7 +1933,7 @@ function renderCart(){
     <div class="seg" style="margin:0 0 8px"><button class="${P.mode !== 'mixto' ? 'on' : ''}" onclick="ui.pay.mode='simple';renderCart()">Un solo pago</button><button class="${P.mode === 'mixto' ? 'on' : ''}" onclick="ui.pay.mode='mixto';if(!ui.pay.lines.length){ui.pay.lines=[];addPayLine()}else renderCart()">Pago mixto</button></div>
     ${P.mode !== 'mixto' ? `<select id="payM" onchange="ui.pay.method=this.value;renderCart()">${methodOpts(P.method)}</select>
       ${P.method !== 'fiado' ? `<label>Recibido (para calcular el vuelto)</label>
-      <div class="row"><input id="recv" inputmode="decimal" placeholder="0,00" oninput="calcChange()" class="grow"><select id="recvCur" onchange="calcChange()" style="width:110px"><option value="usd">$</option><option value="bs" ${METHOD_CUR[P.method] === 'bs' ? 'selected' : ''}>Bs</option>${cfg.eur ? `<option value="eur" ${P.method === 'efectivo_eur' ? 'selected' : ''}>€</option>` : ''}</select></div>
+      <div class="row"><input id="recv" inputmode="decimal" placeholder="0,00" oninput="calcChange()" class="grow"><select id="recvCur" onchange="calcChange()" style="width:110px"><option value="usd">${CUR_SYM.usd}</option>${REG.features.bcv ? `<option value="bs" ${METHOD_CUR[P.method] === 'bs' ? 'selected' : ''}>Bs</option>` : ''}${cfg.eur ? `<option value="eur" ${P.method === 'efectivo_eur' ? 'selected' : ''}>€</option>` : ''}</select></div>
       <div id="change" class="note"></div>` : ''}`
     : `<div class="card" style="padding:8px 12px">${P.lines.map((l, i) => { const cur = METHOD_CUR[l.m] || 'usd'; return `<div class="row" style="gap:6px;padding:5px 0">
         <select style="flex:1.3;padding:8px" onchange="setPayLine(${i},'m',this.value)">${methodOpts(l.m)}</select>
@@ -1711,7 +1978,7 @@ async function checkout(){
     customer = {clientId:c.id, name:C.name, rif:C.rif, addr:C.addr || '', phone:C.phone || ''};
   } else if (fiscal) customer = {clientId:'', name:C.name, rif:C.rif, addr:'', phone:''};
   if (!customer && ui.saleClient && S.clients[ui.saleClient]){ const c = S.clients[ui.saleClient]; customer = {clientId:ui.saleClient, name:c.name, rif:c.rif || '', addr:c.addr || '', phone:c.phone || ''}; }
-  const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, disc:discUsd(), tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0,
+  const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, disc:discUsd(), tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16, rows:t.rows}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, rg:REG.code, bc:REG.currency.code,
     method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || ui.saleClient || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:fiscal ? nextInvNo() : '', customer, user:me ? me.u : '', userName:me ? me.name : ''};
   if (P.mode === 'mixto'){
     sale.payments = st.lines.map(l => ({m:l.m, usd:l.usd, raw:l.raw}));
@@ -1781,7 +2048,7 @@ function returnForm(id){
   <div class="card" style="margin-top:12px">${its.map(it => `<div class="mv" style="align-items:center"><div class="grow"><div>${esc(it.name)}</div><div class="sub">vendidos ${nfq.format(num(it.qty))} a ${usd(num(it.price))}${it.left < num(it.qty) ? ' · ya devueltos ' + nfq.format(r3(num(it.qty) - it.left)) : ''}</div></div>
     <input type="number" min="0" max="${it.left}" step="any" value="0" data-i="${it.i}" class="retq" style="width:80px;padding:7px" ${it.left <= 0 ? 'disabled' : ''} oninput="retTotal('${id}')"></div>`).join('')}</div>
   <div class="note" id="retTot">Total a devolver: <b>$0,00</b></div>
-  <label>Cómo se devuelve el dinero</label><select id="retM">${Object.entries(METHODS).filter(([k]) => k !== 'fiado').map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}${cl ? `<option value="fiado">Descontar de lo que debe ${esc(cl.name)} / saldo a favor</option>` : ''}</select>
+  <label>Cómo se devuelve el dinero</label><select id="retM">${Object.entries(regMethods(false)).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}${cl ? `<option value="fiado">Descontar de lo que debe ${esc(cl.name)} / saldo a favor</option>` : ''}</select>
   <label class="row" style="gap:8px;color:var(--tx);font-size:14px;margin-top:12px"><input type="checkbox" id="retStock" class="chk" checked> Devolver los productos al inventario</label>
   <div class="sheet-actions"><button class="btn sec" onclick="showSale('${id}')">Volver</button><button class="btn" onclick="saveReturn('${id}')">Registrar devolución</button></div>`);
 }
@@ -1792,7 +2059,7 @@ async function saveReturn(id){
   if (!items.length){ toast('Pon la cantidad a devolver'); return; }
   const total = r2(items.reduce((a, i) => a + num(i.price) * num(i.qty), 0)), m = $('#retM').value, now = Date.now(), rid = uid();
   const cur = METHOD_CUR[m] || 'usd';
-  const ret = {ts:now, items, total, sub:total, igtf:0, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, method:m, payments:[{m, usd:total, raw:r2(toCur(total, cur))}], clientId:s.clientId || '', doc:'devolucion', refOf:id, user:me ? me.u : '', userName:me ? me.name : ''};
+  const ret = {ts:now, items, total, sub:total, igtf:0, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, rg:REG.code, bc:REG.currency.code, method:m, payments:[{m, usd:total, raw:r2(toCur(total, cur))}], clientId:s.clientId || '', doc:'devolucion', refOf:id, user:me ? me.u : '', userName:me ? me.name : ''};
   const restock = $('#retStock').checked;
   closeSheet();
   if (!(await put('sales', rid, ret))) return;
@@ -1819,14 +2086,14 @@ async function notaPDF(id){
   const LG = showLogo() ? await getLogo() : '';
   if (LG){ const d = await imgSize(LG); if (d){ const k = Math.min(30 / d.w, 18 / d.h); try { doc.addImage(LG, LG.includes('image/jpeg') ? 'JPEG' : 'PNG', c - d.w * k / 2, y - 4, d.w * k, d.h * k); y += d.h * k + 1; } catch(e){} } }
   center(cfg.name || '', 12, true); y += 0.5;
-  if (cfg.rif) center('RIF: ' + cfg.rif, 8);
+  if (cfg.rif) center(REG.taxId + ': ' + cfg.rif, 8);
   if (cfg.addr) center(cfg.addr, 7.5);
   if (cfg.phone) center('Tel: ' + cfg.phone, 7.5);
   if (cfg.email) center(cfg.email, 7.5);
   y += 2; center('NOTA DE ENTREGA', 11, true); center('Documento no fiscal', 7.5); y += 1.5;
   lr('Nº ' + (s.noteNo || ''), new Date(s.ts).toLocaleString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}));
   const cl = s.customer || (s.clientId && S.clients[s.clientId]);
-  if (cl){ lr('Cliente: ' + String(cl.name).slice(0, 34), ''); if (cl.rif) lr('C.I./RIF: ' + cl.rif, ''); if (cl.addr) lr(String(cl.addr).slice(0, 40), '', false, 7.5); if (cl.phone) lr('Tel: ' + cl.phone, '', false, 7.5); }
+  if (cl){ lr('Cliente: ' + String(cl.name).slice(0, 34), ''); if (cl.rif) lr((REG.code === 'VE' ? 'C.I./RIF' : REG.taxId) + ': ' + cl.rif, ''); if (cl.addr) lr(String(cl.addr).slice(0, 40), '', false, 7.5); if (cl.phone) lr('Tel: ' + cl.phone, '', false, 7.5); }
   hr();
   items.forEach(i => {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -1898,17 +2165,16 @@ function facturaHTML(s){
   const m = v => inBs ? 'Bs ' + nf2.format(r2(v * rate)) : usd(v);
   const cl = s.customer || (s.clientId && S.clients[s.clientId]) || {}, t = s.tax || {}, dt = new Date(s.ts);
   const tl = [['Sub-total', num(s.sub ?? s.total)]];
-  if (fiscal || num(t.i16) || num(t.i8)){
-    if (num(t.b16)) tl.push(['Base imponible 16%', num(t.b16)], ['I.V.A. 16%', num(t.i16)]);
-    if (num(t.b8)) tl.push(['Base imponible 8%', num(t.b8)], ['I.V.A. 8%', num(t.i8)]);
+  if (fiscal || taxIva(t)){
+    for (const [r, b, i] of taxRows(t)) tl.push(['Base imponible ' + nfq.format(r) + '%', num(b)], [(REG.tax.name === 'IVA' ? 'I.V.A.' : REG.tax.name) + ' ' + nfq.format(r) + '%', num(i)]);
     if (num(t.ex)) tl.push(['Exento', num(t.ex)]);
   }
   if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
   return `<div class="fv">
     <div class="fv-top"><div class="fv-biz">${showLogo() ? `<img class="fvLogo" alt="" style="visibility:hidden">` : ''}<div><b>${esc(cfg.name || 'Mi Negocio')}</b>
-      ${cfg.rif ? `<div>RIF: ${esc(cfg.rif)}</div>` : ''}${cfg.addr ? `<div>${esc(cfg.addr)}</div>` : ''}<div>${[cfg.phone && 'Tlf: ' + esc(cfg.phone), cfg.email && esc(cfg.email)].filter(Boolean).join(' · ')}</div></div></div>
+      ${cfg.rif ? `<div>${esc(REG.taxId)}: ${esc(cfg.rif)}</div>` : ''}${cfg.addr ? `<div>${esc(cfg.addr)}</div>` : ''}<div>${[cfg.phone && 'Tlf: ' + esc(cfg.phone), cfg.email && esc(cfg.email)].filter(Boolean).join(' · ')}</div></div></div>
       <div class="fv-box"><b class="${fiscal ? 'red' : ''}">${fiscal ? 'FACTURA' : 'NOTA DE ENTREGA'}</b><div class="no">${fiscal ? (s.fiscalNo ? 'Nº ' + esc(s.fiscalNo) : 'Nº ______') : 'Nº ' + esc(s.noteNo || '')}</div><small>Fecha de emisión</small><div>${dt.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'})}</div></div></div>
-    <div class="fv-cli"><div class="w2"><small>Nombre o razón social</small><b>${esc(cl.name || '—')}</b></div><div><small>RIF / C.I.</small><b>${esc(cl.rif || '—')}</b></div>
+    <div class="fv-cli"><div class="w2"><small>Nombre o razón social</small><b>${esc(cl.name || '—')}</b></div><div><small>${REG.code === 'VE' ? 'RIF / C.I.' : esc(REG.taxId)}</small><b>${esc(cl.rif || '—')}</b></div>
       <div class="w2"><small>Domicilio fiscal</small><b>${esc(cl.addr || '—')}</b></div><div><small>Teléfono</small><b>${esc(cl.phone || '—')}</b></div><div><small>Condiciones de pago</small><b>${payCond(s)}</b></div></div>
     <table class="fv-t"><thead><tr><th>Cant.</th><th>Descripción</th><th>P. unitario</th><th>Total</th></tr></thead><tbody>
       ${(s.items || []).map(i => `<tr><td>${nfq.format(num(i.qty))}</td><td>${esc(i.name)}${num(i.iva ?? 16) === 0 && fiscal ? ' (E)' : num(i.iva ?? 16) === 8 ? ' (8%)' : ''}</td><td>${m(num(i.price))}</td><td>${m(r2(num(i.price) * num(i.qty)))}</td></tr>`).join('')}
@@ -1923,7 +2189,7 @@ function viewFactura(id){
   const s = S.sales[id]; if (!s) return;
   const fiscal = s.doc === 'fiscal', cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
   openSheet(`<h2>${fiscal ? 'Factura' : 'Nota de entrega'}</h2>
-  ${!cfg.rif || !cfg.addr ? `<div class="warnbox">Faltan datos de tu negocio (${[!cfg.rif && 'RIF', !cfg.addr && 'dirección'].filter(Boolean).join(' y ')}). ${isAdmin() ? `<a href="#" onclick="closeSheet();go('mas','ajustes');return false">Complétalos en Ajustes</a>` : 'Pídele al administrador que los complete en Ajustes.'}</div>` : ''}
+  ${!cfg.rif || !cfg.addr ? `<div class="warnbox">Faltan datos de tu negocio (${[!cfg.rif && REG.taxId, !cfg.addr && 'dirección'].filter(Boolean).join(' y ')}). ${isAdmin() ? `<a href="#" onclick="closeSheet();go('mas','ajustes');return false">Complétalos en Ajustes</a>` : 'Pídele al administrador que los complete en Ajustes.'}</div>` : ''}
   <div class="fv-wrap">${facturaHTML(s)}</div>${showLogo() ? `<img style="display:none" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onload="fillLogos()">` : ''}
   <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}')">Descargar PDF</button>${s.doc === 'nota' ? `<button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
   <a class="btn wa full" style="margin-top:8px" href="${waLink(cl.phone || '', receiptText(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
@@ -1945,7 +2211,7 @@ async function facturaPDF(id){
   const nmW = 136 - x0; doc.setFont('helvetica', 'bold'); let nmS = 15; doc.setFontSize(nmS); let nm = doc.splitTextToSize(cfg.name || 'Mi Negocio', nmW);
   if (nm.length > 1){ nmS = 12.5; doc.setFontSize(nmS); nm = doc.splitTextToSize(cfg.name || 'Mi Negocio', nmW); }
   nm.slice(0, 2).forEach((l, k) => txt(l, x0, y + 3 + k * nmS * 0.42, {b:1, s:nmS}));
-  let yy = y + 8.5 + (Math.min(nm.length, 2) - 1) * nmS * 0.42; const lines = [cfg.rif && 'RIF: ' + cfg.rif, cfg.addr, [cfg.phone && 'Tlf: ' + cfg.phone, cfg.email && 'Email: ' + cfg.email].filter(Boolean).join('   ')].filter(Boolean);
+  let yy = y + 8.5 + (Math.min(nm.length, 2) - 1) * nmS * 0.42; const lines = [cfg.rif && REG.taxId + ': ' + cfg.rif, cfg.addr, [cfg.phone && 'Tlf: ' + cfg.phone, cfg.email && 'Email: ' + cfg.email].filter(Boolean).join('   ')].filter(Boolean);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
   lines.forEach(t => doc.splitTextToSize(String(t), 136 - x0).forEach(l => { doc.text(l, x0, yy); yy += 4; }));
   // Recuadro del documento (derecha)
@@ -1962,7 +2228,7 @@ async function facturaPDF(id){
   const cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
   doc.roundedRect(L, y, R - L, 23, 2, 2);
   const row = (k, v, x, yy2, w) => { txt(k, x, yy2, {s:7.5, c:90}); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(0); doc.text(doc.splitTextToSize(String(v || ''), w)[0] || '', x, yy2 + 4.2); };
-  row('Nombre y apellido o razón social', cl.name, L + 3, y + 4.5, 120); row('RIF / C.I.', cl.rif, 142, y + 4.5, 55);
+  row('Nombre y apellido o razón social', cl.name, L + 3, y + 4.5, 120); row(REG.code === 'VE' ? 'RIF / C.I.' : REG.taxId, cl.rif, 142, y + 4.5, 55);
   row('Domicilio fiscal', cl.addr, L + 3, y + 13.5, 120); row('Teléfono', cl.phone, 142, y + 13.5, 30); row('Condiciones de pago', payCond(s), 175, y + 13.5, 26);
   y += 28;
   // Tabla de productos y servicios
@@ -1984,9 +2250,8 @@ async function facturaPDF(id){
   // Totales (derecha) y forma de pago (izquierda)
   const t = s.tax || {}, tl = [];
   tl.push(['SUB-TOTAL', num(s.sub ?? s.total)]);
-  if (fiscal || num(t.i16) || num(t.i8)){
-    if (num(t.b16)) tl.push(['Base imponible 16%', num(t.b16)], ['I.V.A. 16%', num(t.i16)]);
-    if (num(t.b8)) tl.push(['Base imponible 8%', num(t.b8)], ['I.V.A. 8%', num(t.i8)]);
+  if (fiscal || taxIva(t)){
+    for (const [r, b, i] of taxRows(t)) tl.push(['Base imponible ' + nfq.format(r) + '%', num(b)], [(REG.tax.name === 'IVA' ? 'I.V.A.' : REG.tax.name) + ' ' + nfq.format(r) + '%', num(i)]);
     if (num(t.ex)) tl.push(['Exento', num(t.ex)]);
   }
   if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
@@ -2059,7 +2324,7 @@ function changePayForm(id){
   const s = S.sales[id]; if (!s) return;
   if (s.method === 'mixto' || s.method === 'fiado' || s.doc === 'devolucion'){ toast('Para esta venta usa "Corregir venta"'); return; }
   openSheet(`<h2>Cambiar forma de pago</h2><div class="sub">${esc(saleDesc(s))}</div>
-  <label>Forma de pago correcta</label><select id="cpM">${Object.entries(METHODS).filter(([k]) => k !== 'fiado').map(([k, v]) => `<option value="${k}" ${k === s.method ? 'selected' : ''}>${v}</option>`).join('')}</select>
+  <label>Forma de pago correcta</label><select id="cpM">${Object.entries(regMethods(false)).map(([k, v]) => `<option value="${k}" ${k === s.method ? 'selected' : ''}>${v}</option>`).join('')}</select>
   <p class="note">Solo cambia cómo se cobró (por ejemplo, era pago móvil y se marcó efectivo). Si cambian productos, precios o cliente, usa "Corregir venta".</p>
   <div class="sheet-actions"><button class="btn sec" onclick="showSale('${id}')">Volver</button><button class="btn" onclick="saveChangePay('${id}')">Guardar</button></div>`);
 }
@@ -2166,7 +2431,7 @@ function editProduct(id, preset = {}){
   <div class="grid2"><div><label>Se vende por</label><select id="pU">${['unidad', 'kg', 'g', 'lt', 'paquete', 'caja'].map(u => `<option ${p.unit === u ? 'selected' : ''} value="${u}">${u}</option>`).join('')}</select></div>
   <div><label>Garantía</label><input id="pW" value="${esc(p.warranty || '')}" placeholder="Ej: 6 meses"></div></div>
   <label>Proveedor habitual</label><select id="pSup"><option value="">— Ninguno —</option>${suppliers().map(x => `<option value="${x.id}" ${p.supplierId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-  <label>IVA (el precio ya lo incluye)</label><select id="pI">${[[16, 'General 16%'], [8, 'Reducido 8%'], [0, 'Exento']].map(([v, l]) => `<option value="${v}" ${num(p.iva == null || p.iva === '' ? 16 : p.iva) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+  <label>${esc(REG.tax.name)} (el precio ya lo incluye)</label><select id="pI">${(() => { const cur = num(p.iva == null || p.iva === '' ? REG.tax.def : p.iva), o = REG.tax.rates.map(v => [v, REG.tax.labels[v] || (v + '%')]); if (!REG.tax.rates.includes(cur)) o.push([cur, nfq.format(cur) + '% (valor anterior)']); return o.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`).join(''); })()}</select>
   <div class="grid2"><div><label>Stock actual</label><input id="pS" inputmode="decimal" value="${ed(p.stock)}" placeholder="0"></div>
   <div><label>Avisar cuando queden</label><input id="pM" inputmode="decimal" value="${ed(p.min)}" placeholder="${nfq.format(num(cfg.lowDefault))}"></div></div>
   <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="pT" class="chk" ${p.track !== false ? 'checked' : ''}> Controlar stock de este producto</label>
@@ -2220,7 +2485,7 @@ function pPrev(){
   const cur = $('#pCur').value, sym = cur === 'eur' ? '€' : '$';
   $('#pPl').textContent = 'Precio de venta (' + sym + ')'; $('#pKl').textContent = 'Costo (' + sym + ')';
   const fake = {price:num($('#pP').value), cur};
-  let t = fake.price ? pLine(fake) || (cur === 'eur' ? 'Pon la tasa del euro para ver Bs' : 'Pon la tasa del dólar para ver Bs') : '';
+  let t = fake.price ? pLine(fake) || (!REG.features.bcv ? '' : cur === 'eur' ? 'Pon la tasa del euro para ver Bs' : 'Pon la tasa del dólar para ver Bs') : '';
   const c = num($('#pK').value);
   if (fake.price && c) t += (t ? '<br>' : '') + `Ganancia: ${sym}${nf2.format(r2(fake.price - c))} por unidad (${Math.round((fake.price - c) / c * 100)}%)`;
   $('#pPrev').innerHTML = t;
@@ -2363,7 +2628,7 @@ function editClient(id, fromPos){
   const c = id ? S.clients[id] : {name:'', phone:'', note:'', rif:'', addr:''};
   openSheet(`<h2>${id ? 'Editar cliente' : 'Nuevo cliente'}</h2>
   <label>Nombre</label><input id="cN" value="${esc(c.name)}" autofocus placeholder="Ej: Sra. Carmen">
-  <div class="grid2"><div><label>Cédula / RIF</label><input id="cR" value="${esc(c.rif || '')}" placeholder="V12345678"></div><div><label>Teléfono (WhatsApp)</label><input id="cP" value="${esc(c.phone)}" inputmode="tel" placeholder="0414 1234567"></div></div>
+  <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="cR" value="${esc(c.rif || '')}" placeholder="V12345678"></div><div><label>Teléfono (WhatsApp)</label><input id="cP" value="${esc(c.phone)}" inputmode="tel" placeholder="0414 1234567"></div></div>
   <label>Dirección</label><input id="cA" value="${esc(c.addr || '')}" placeholder="Opcional">
   <label>Nota (opcional)</label><input id="cO" value="${esc(c.note || '')}" placeholder="Ej: vive en la casa 12">
   ${isAdmin() ? `<div class="grid2"><div><label>Tipo de cliente</label><input id="cT" value="${esc(c.type || '')}" placeholder="Ej: Mecánico, Mayorista, VIP" list="cTypes"><datalist id="cTypes">${[...new Set(clients().map(x => x.type).filter(Boolean))].map(t => `<option value="${esc(t)}">`).join('')}</datalist></div><div><label>Descuento fijo (%)</label><input id="cD" inputmode="decimal" value="${c.disc ? nf2.format(num(c.disc)).replace(/,00$/, '') : ''}" placeholder="0"></div></div>
@@ -2404,9 +2669,9 @@ function showClient(id){
 function movForm(cid, type){
   const c = S.clients[cid];
   openSheet(`<h2>${type === 'abono' ? 'Abono de ' : 'Nueva deuda de '}${esc(c.name)}</h2><div class="sub">Saldo actual: ${usd(balance(cid))}</div>
-  <label>Monto</label><div class="row"><input id="mA" inputmode="decimal" autofocus placeholder="0,00" class="grow" oninput="mvPrev()"><select id="mC" style="width:110px" onchange="mvPrev()"><option value="usd">$</option>${cfg.bcv ? '<option value="bs">Bs</option>' : ''}${cfg.eur && cfg.bcv ? '<option value="eur">€</option>' : ''}</select></div>
+  <label>Monto</label><div class="row"><input id="mA" inputmode="decimal" autofocus placeholder="0,00" class="grow" oninput="mvPrev()"><select id="mC" style="width:110px" onchange="mvPrev()"><option value="usd">${CUR_SYM.usd}</option>${cfg.bcv ? '<option value="bs">Bs</option>' : ''}${cfg.eur && cfg.bcv ? '<option value="eur">€</option>' : ''}</select></div>
   <div id="mPrev" class="note"></div>
-  ${type === 'abono' ? `<label>Cómo pagó</label><select id="mP">${Object.entries(METHODS).filter(([k]) => k !== 'fiado').map(([k, v]) => `<option>${v}</option>`).join('')}</select>` : ''}
+  ${type === 'abono' ? `<label>Cómo pagó</label><select id="mP">${Object.entries(regMethods(false)).map(([k, v]) => `<option>${v}</option>`).join('')}</select>` : ''}
   <label>Nota (opcional)</label><input id="mN" placeholder="${type === 'abono' ? 'Ej: pagó la mitad' : 'Ej: 2 harinas y 1 aceite'}">
   ${type === 'abono' && balance(cid) > 0 ? `<button class="btn sm sec" style="margin-top:10px" onclick="$('#mA').value='${nf2.format(balance(cid)).replace(/\./g, '')}';$('#mC').value='usd';mvPrev()">Pagó todo (${usd(balance(cid))})</button>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="showClient('${cid}')">Volver</button><button class="btn" onclick="saveMov('${cid}','${type}')">Guardar</button></div>`);
@@ -2437,6 +2702,7 @@ VIEWS.mas = {
     if (sub && !isAdmin() && !['caja', 'cotizaciones'].includes(sub)) sub = '';
     if (sub === 'licencias' && !isOwner()) sub = '';
     if (sub === 'licencias') return back('Licencias y clientes') + `<div id="mx"></div>`;
+    if (sub === 'licencia') return back('Mi licencia') + `<div id="mx"></div>`;
     if (sub === 'caja') return back('Caja') + `<div id="mx"></div>`;
     if (sub === 'cotizaciones') return back('Cotizaciones') + `<div id="mx"></div>`;
     if (sub === 'reportes') return back('Reportes') + `<div class="seg" id="repSeg"></div><div id="mx"></div>`;
@@ -2445,7 +2711,7 @@ VIEWS.mas = {
     if (sub === 'log') return back('Registro de actividad') + `<div id="mx"></div>`;
     if (sub === 'gastos') return back('Gastos') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="expenseForm()">+ Registrar gasto</button><div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
     if (sub === 'usuarios') return back('Usuarios') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="userForm()">+ Nuevo usuario</button><div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
-    const opts = (isOwner() ? [['licencias', '★ Licencias y clientes', 'Códigos de activación, negocios, vencimientos y bloqueos']] : []).concat([['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial'], ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['ajustes', 'Ajustes del negocio', 'Nombre, RIF, dirección, IGTF y documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []));
+    const opts = (isOwner() ? [['licencias', '★ Licencias y clientes', 'Códigos de activación, negocios, vencimientos y bloqueos']] : []).concat([['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [...(REG.features.bcv ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial']] : []), ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['licencia', 'Mi licencia', 'Estado, vencimiento, historial de compras y renovación'], ['ajustes', 'Ajustes del negocio', 'Nombre, ' + REG.taxId + ', país y configuración regional, documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []));
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
       <div class="item tap row" onclick="helpSheet()"><div class="grow"><div class="name">Ayuda y contacto</div><div class="sub">Soporte, ventas y licencias</div></div><span style="color:var(--mut)">›</span></div>
@@ -2459,6 +2725,7 @@ VIEWS.mas = {
     if (sub === 'gastos') return fillExpenses();
     if (sub === 'caja') return fillCashView();
     if (sub === 'licencias') return fillLicenses();
+    if (sub === 'licencia') return fillLicense();
     if (sub === 'log') return fillLog();
     if (sub === 'cotizaciones') return fillQuotes();
     if (sub === 'usuarios'){
@@ -2483,9 +2750,9 @@ VIEWS.mas = {
     }
     if (sub === 'ajustes'){
       if ($('#mx').dataset.done) return; $('#mx').dataset.done = 1;
-      $('#mx').innerHTML = `<div class="card">
+      $('#mx').innerHTML = regionCard() + `<h3>Datos del negocio</h3><div class="card">
         <label style="margin-top:0">Nombre del negocio</label><input id="aN" value="${esc(cfg.name)}">
-        <div class="grid2"><div><label>RIF</label><input id="aR" value="${esc(cfg.rif)}" placeholder="J-12345678-9"></div><div><label>Teléfono</label><input id="aT" value="${esc(cfg.phone)}" inputmode="tel"></div></div>
+        <div class="grid2"><div><label>${esc(REG.taxId)}</label><input id="aR" value="${esc(cfg.rif)}" placeholder="${REG.code === 'VE' ? 'J-12345678-9' : ''}"></div><div><label>Teléfono</label><input id="aT" value="${esc(cfg.phone)}" inputmode="tel"></div></div>
         <label>Dirección del local</label><input id="aD" value="${esc(cfg.addr)}" placeholder="Ej: Av. Principal, C.C. Plaza, Local 12, Caracas">
         <label>Correo de contacto</label><input id="aE" type="email" value="${esc(cfg.email || '')}" placeholder="ventas@minegocio.com" autocapitalize="none">
         <label>Logo del negocio</label>
@@ -2496,10 +2763,10 @@ VIEWS.mas = {
         <label>Próximo número de factura</label><input id="aF" inputmode="numeric" value="${esc(nextInvNo())}" placeholder="000001">
         <p class="note">Se pone solo en cada factura y va subiendo (000053 → 000054). Cámbialo si quieres empezar desde otro número, por ejemplo el siguiente de tu talonario.</p>
         <label>Documento por defecto al cobrar</label><select id="aDoc"><option value="fiscal" ${cfg.docDefault !== 'nota' ? 'selected' : ''}>Factura fiscal</option><option value="nota" ${cfg.docDefault === 'nota' ? 'selected' : ''}>Nota de entrega</option></select>
-        <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="aI" class="chk" ${cfg.igtf ? 'checked' : ''}> Cobrar IGTF 3% en pagos en divisas (efectivo $, efectivo €, Zelle)</label>
-        <p class="note">Actívalo si tu negocio está obligado a cobrar el IGTF (consúltalo con tu contador). Se suma al total y aparece desglosado.</p>
+        <div style="display:${REG.features.igtf ? 'block' : 'none'}"><label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="aI" class="chk" ${cfg.igtf ? 'checked' : ''}> Cobrar IGTF 3% en pagos en divisas (efectivo $, efectivo €, Zelle)</label>
+        <p class="note">Actívalo si tu negocio está obligado a cobrar el IGTF (consúltalo con tu contador). Se suma al total y aparece desglosado.</p></div>
         <label>Descuento máximo que puede dar un vendedor (%)</label><input id="aX" inputmode="decimal" value="${nf0.format(num(cfg.maxDisc ?? 10))}">
-        <label>Moneda por defecto de los precios nuevos</label><select id="aM"><option value="usd" ${cfg.cur !== 'eur' ? 'selected' : ''}>Dólares ($ BCV)</option><option value="eur" ${cfg.cur === 'eur' ? 'selected' : ''}>Euros (€ BCV)</option></select>
+        <div style="display:${REG.features.eurPrices ? 'block' : 'none'}"><label>Moneda por defecto de los precios nuevos</label><select id="aM"><option value="usd" ${cfg.cur !== 'eur' ? 'selected' : ''}>Dólares ($ BCV)</option><option value="eur" ${cfg.cur === 'eur' ? 'selected' : ''}>Euros (€ BCV)</option></select></div>
         <div class="grid2"><div><label>Aviso de stock bajo</label><input id="aL" inputmode="decimal" value="${nfq.format(num(cfg.lowDefault))}"></div><div><label>Código de país (WhatsApp)</label><input id="aC" inputmode="numeric" value="${esc(cfg.cc)}" placeholder="58"></div></div>
         <button class="btn full" style="margin-top:16px" onclick="saveSettings()">Guardar</button></div>
       ${smartForm()}`;
@@ -2537,7 +2804,8 @@ async function saveSmart(){
   if (await putCfg({smart})){ logA('admin', 'Ajustes modificados', 'Inventario inteligente'); toast('Inventario inteligente guardado'); }
 }
 async function saveSettings(){
-  if (await putCfg({name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, invNext:($('#aF').value.trim() === nextInvNo() ? (cfg.invNext || '') : $('#aF').value.replace(/\D/g, '')), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
+  const tx = $('#aTx') ? {taxRates:$('#aTx').value.split(/[;,\s]+/).map(num).filter(x => x > 0 && x <= 50)} : {};
+  if (await putCfg({...tx, name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, invNext:($('#aF').value.trim() === nextInvNo() ? (cfg.invNext || '') : $('#aF').value.replace(/\D/g, '')), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
 }
 function fillReports(){
   const ranges = {hoy:'Hoy', '7':'7 días', '30':'30 días', mes:'Este mes'};
@@ -2557,7 +2825,7 @@ function fillReports(){
   const maxT = top.length ? top[0][1].t : 1;
   const fis = ss.filter(x => x.doc === 'fiscal'), notas = ss.filter(x => x.doc === 'nota');
   const sumF = (arr, f) => r2(arr.reduce((a, x) => a + f(x), 0));
-  const ivaT = sumF(fis, x => num((x.tax || {}).i16) + num((x.tax || {}).i8)), igtfT = sumF(ss, x => num(x.igtf));
+  const ivaT = sumF(fis, x => taxIva(x.tax)), igtfT = sumF(ss, x => num(x.igtf));
   const pend = fis.filter(x => !x.fiscalNo).length;
   const bySeller = {}; ss.forEach(x => { const k = x.userName || '—'; const b = bySeller[k] = bySeller[k] || {n:0, t:0}; if (x.doc !== 'devolucion') b.n++; b.t += num(x.total); });
   const abonos = r2(Object.values(S.movs).filter(m => m.type === 'abono' && m.ts >= from).reduce((a, m) => a + num(m.amount), 0));
@@ -2587,9 +2855,10 @@ const suppliers = () => Object.entries(S.suppliers).map(([id, x]) => ({id, ...x}
 function sBalance(sid){ let b = 0; for (const m of Object.values(S.pmovs)) if (m.supplierId === sid) b += m.type === 'pago' ? -num(m.amount) : num(m.amount); return r2(b); }
 const totalPayable = () => r2(suppliers().reduce((a, x) => a + Math.max(0, sBalance(x.id)), 0));
 const EXP_CATS = ['Alquiler', 'Servicios (luz, agua, internet)', 'Sueldos', 'Transporte y fletes', 'Mantenimiento', 'Impuestos y permisos', 'Publicidad', 'Comisiones bancarias', 'Otros'];
-const PAY_OUT = {efectivo_usd:'Efectivo $', efectivo_bs:'Efectivo Bs', pago_movil:'Pago móvil', transferencia:'Transferencia', zelle:'Zelle', efectivo_eur:'Efectivo €'};
+const PAY_OUT_VE = {efectivo_usd:'Efectivo $', efectivo_bs:'Efectivo Bs', pago_movil:'Pago móvil', transferencia:'Transferencia', zelle:'Zelle', efectivo_eur:'Efectivo €'};
+const payOut = () => REG.code === 'VE' ? PAY_OUT_VE : regMethods(false);
 function amtToUsd(v, cur){ v = num(v); return cur === 'bs' ? (cfg.bcv ? v / cfg.bcv : NaN) : cur === 'eur' ? toUsd(v, 'eur') : v; }
-const curSel = id => `<select id="${id}" style="width:100px"><option value="usd">$</option>${cfg.bcv ? '<option value="bs">Bs</option>' : ''}${cfg.eur && cfg.bcv ? '<option value="eur">€</option>' : ''}</select>`;
+const curSel = id => `<select id="${id}" style="width:100px"><option value="usd">${CUR_SYM.usd}</option>${cfg.bcv ? '<option value="bs">Bs</option>' : ''}${cfg.eur && cfg.bcv ? '<option value="eur">€</option>' : ''}</select>`;
 const todayISO = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
 const dateToTs = v => { const [y, m, d] = String(v || '').split('-').map(Number); if (!y) return Date.now(); const now = new Date(); return new Date(y, m - 1, d, now.getHours(), now.getMinutes()).getTime(); };
 
@@ -2615,7 +2884,7 @@ function editSupplier(id){
   const x = id ? S.suppliers[id] : {name:'', rif:'', phone:'', contact:'', supplies:'', addr:'', note:''};
   openSheet(`<h2>${id ? 'Editar proveedor' : 'Nuevo proveedor'}</h2>
   <label>Nombre o empresa</label><input id="sN" value="${esc(x.name)}" autofocus placeholder="Ej: Distribuidora Central">
-  <div class="grid2"><div><label>RIF</label><input id="sR" value="${esc(x.rif || '')}" placeholder="J-12345678-9"></div><div><label>Teléfono / WhatsApp</label><input id="sP" value="${esc(x.phone || '')}" inputmode="tel"></div></div>
+  <div class="grid2"><div><label>${esc(REG.taxId)}</label><input id="sR" value="${esc(x.rif || '')}" placeholder="J-12345678-9"></div><div><label>Teléfono / WhatsApp</label><input id="sP" value="${esc(x.phone || '')}" inputmode="tel"></div></div>
   <label>Persona de contacto</label><input id="sC" value="${esc(x.contact || '')}" placeholder="Opcional">
   <label>Qué te vende</label><input id="sS" value="${esc(x.supplies || '')}" placeholder="Ej: alimentos y bebidas">
   <label>Dirección</label><input id="sA" value="${esc(x.addr || '')}" placeholder="Opcional">
@@ -2656,7 +2925,7 @@ function supPayForm(sid){
   const x = S.suppliers[sid], b = sBalance(sid);
   openSheet(`<h2>Pago a ${esc(x.name)}</h2><div class="sub">Le debes: ${usd(b)}</div>
   <label>Monto</label><div class="row"><input id="spA" inputmode="decimal" autofocus placeholder="0,00" class="grow">${curSel('spC')}</div>
-  <label>Cómo le pagaste</label><select id="spM">${Object.values(PAY_OUT).map(v => `<option>${v}</option>`).join('')}</select>
+  <label>Cómo le pagaste</label><select id="spM">${Object.values(payOut()).map(v => `<option>${v}</option>`).join('')}</select>
   <label>Nota / referencia</label><input id="spN" placeholder="Ej: ref. 001234">
   ${b > 0 ? `<button class="btn sm sec" style="margin-top:10px" onclick="$('#spA').value='${String(b).replace('.', ',')}';$('#spC').value='usd'">Pagar todo (${usd(b)})</button>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="showSupplier('${sid}')">Volver</button><button class="btn" onclick="saveSupPay('${sid}')">Guardar pago</button></div>`);
@@ -2691,7 +2960,7 @@ function purchaseForm(sid){
   <div class="grid2"><div><label>Nº de factura del proveedor</label><input id="pcRef" placeholder="Opcional"></div><div><label>Fecha</label><input id="pcD" type="date" value="${todayISO()}" onchange="$('#pcV').value=isoPlus(this.value, ${cd})"></div></div>
   <label>Pago</label><select id="pcPay" onchange="$('#pcMw').style.display=this.value==='credito'?'none':'block';$('#pcVw').style.display=this.value==='credito'?'block':'none'"><option value="credito">A crédito (queda como deuda con el proveedor)</option><option value="contado">De contado (pagado ya)</option></select>
   <div id="pcVw"><label>Fecha de pago (te lo recordamos 3 días antes)</label><input id="pcV" type="date" value="${isoPlus(todayISO(), cd)}"></div>
-  <div id="pcMw" style="display:none"><label>Cómo pagaste</label><select id="pcM">${Object.values(PAY_OUT).map(v => `<option>${v}</option>`).join('')}</select></div>
+  <div id="pcMw" style="display:none"><label>Cómo pagaste</label><select id="pcM">${Object.values(payOut()).map(v => `<option>${v}</option>`).join('')}</select></div>
   <div class="sheet-actions"><button class="btn sec" onclick="showSupplier('${sid}')">Cancelar</button><button class="btn" onclick="savePurchase()">Guardar compra</button></div>`);
   renderPurchRes(); renderPurchLines();
 }
@@ -2763,7 +3032,7 @@ function expenseForm(id){
   <label>Descripción</label><input id="exN" value="${esc(e ? e.note : '')}" placeholder="Ej: alquiler de noviembre" ${e ? '' : 'autofocus'}>
   <label>Monto</label><div class="row"><input id="exA" inputmode="decimal" value="${e ? String(e.amount).replace('.', ',') : ''}" placeholder="0,00" class="grow">${curSel('exCur')}</div>
   <div class="grid2"><div><label>Fecha</label><input id="exD" type="date" value="${e ? new Date(e.ts - new Date(e.ts).getTimezoneOffset() * 6e4).toISOString().slice(0, 10) : todayISO()}"></div>
-  <div><label>Cómo se pagó</label><select id="exM">${Object.values(PAY_OUT).map(v => `<option ${e && e.paidIn === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
+  <div><label>Cómo se pagó</label><select id="exM">${Object.values(payOut()).map(v => `<option ${e && e.paidIn === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div></div>
   ${!e && isAdmin() ? `<div id="exRw"><label>Repetir</label><select id="exR"><option value="">No se repite</option>${Object.entries(FREQ).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
   <p class="note">Si se repite, queda como pago fijo: te lo recordamos 3 días antes de la próxima vez y lo registras con un toque.</p></div>` : ''}
   <div class="sheet-actions">${e ? `<button class="btn bad" onclick="delExpense('${id}')">Borrar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}<button class="btn" onclick="saveExpense(${id ? `'${id}'` : 'null'})">Guardar</button></div>`);
@@ -2811,7 +3080,7 @@ function dashData(){
   const byCat = {}, byProd = {}, byMethod = {};
   let nSales = 0;
   for (const s of salesArr()){ if (s.ts < R.from) continue; const i = idx[kOf(s.ts)]; if (i == null) continue; nSales++;
-    const tax = s.tax ? num(s.tax.i16) + num(s.tax.i8) : 0, net = num(s.total) - num(s.igtf) - (s.doc === 'fiscal' ? tax : 0);
+    const tax = taxIva(s.tax), net = num(s.total) - num(s.igtf) - (s.doc === 'fiscal' ? tax : 0);
     inc[i] += net; salePayments(s).forEach(p => byMethod[p.m] = (byMethod[p.m] || 0) + p.usd);
     for (const it of (s.items || [])){ const c = num(it.cost) * num(it.qty); cogs[i] += c; const pr = byProd[it.name] = byProd[it.name] || {v:0, g:0}; pr.v += num(it.price) * num(it.qty); pr.g += num(it.price) * num(it.qty) - c; } }
   for (const e of Object.values(S.expenses)){ if (e.ts < R.from) continue; const i = idx[kOf(e.ts)]; if (i == null) continue; exp[i] += num(e.amount); byCat[e.cat] = (byCat[e.cat] || 0) + num(e.amount); }
@@ -2904,7 +3173,7 @@ function renderCashBar(){
   el.innerHTML = c ? `<div class="row between" style="background:var(--ok-bg);border:1.5px solid var(--ok-line);border-radius:8px;padding:8px 12px;margin-bottom:12px"><span class="sub" style="margin:0;color:var(--ok-tx)">Caja abierta desde ${new Date(c.openedAt).toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'})}${c.openedBy ? ' · ' + esc(c.openedBy) : ''}</span><button class="btn sm sec" onclick="closeCashForm()">Cerrar caja</button></div>`
     : `<div class="row between" style="background:var(--note);border:1px solid var(--note-line);border-radius:2px 2px 2px 12px;padding:8px 12px;margin-bottom:12px"><span class="sub" style="margin:0;color:var(--note-tx)">La caja está cerrada</span><button class="btn sm" onclick="openCashForm()">Abrir caja</button></div>`;
 }
-const curInputs = (pre, vals = {}) => `<div class="grid2"><div><label>Efectivo en $</label><input id="${pre}usd" inputmode="decimal" placeholder="0,00" value="${vals.usd ?? ''}"></div><div><label>Efectivo en Bs</label><input id="${pre}bs" inputmode="decimal" placeholder="0,00" value="${vals.bs ?? ''}"></div></div>${cfg.eur ? `<label>Efectivo en €</label><input id="${pre}eur" inputmode="decimal" placeholder="0,00" value="${vals.eur ?? ''}">` : ''}`;
+const curInputs = (pre, vals = {}) => `<div class="grid2"><div><label>Efectivo en ${CUR_SYM.usd}</label><input id="${pre}usd" inputmode="decimal" placeholder="0,00" value="${vals.usd ?? ''}"></div>${REG.features.bcv ? `<div><label>Efectivo en Bs</label><input id="${pre}bs" inputmode="decimal" placeholder="0,00" value="${vals.bs ?? ''}"></div>` : ''}</div>${cfg.eur ? `<label>Efectivo en €</label><input id="${pre}eur" inputmode="decimal" placeholder="0,00" value="${vals.eur ?? ''}">` : ''}`;
 const readCur = pre => ({usd:r2(num(($('#' + pre + 'usd') || {}).value)), bs:r2(num(($('#' + pre + 'bs') || {}).value)), eur:r2(num(($('#' + pre + 'eur') || {}).value))});
 function openCashForm(){
   if (openCash()){ toast('Ya hay una caja abierta'); return; }
@@ -2924,7 +3193,7 @@ function closeCashForm(){
   const sm = cashSummary(c);
   openSheet(`<h2>Cerrar caja</h2><div class="sub">Abierta ${fmtDate(c.openedAt)}${c.openedBy ? ' por ' + esc(c.openedBy) : ''} · ${sm.sales.n} ventas · ${usd(sm.sales.usd)}</div>
   <div class="card" style="margin-top:12px;padding:6px 14px"><div class="sub" style="font-weight:600">Efectivo que debería haber</div>
-    <div class="mv"><span>Dólares</span><b>${usd(sm.exp.usd)}</b></div><div class="mv"><span>Bolívares</span><b>${bsF(sm.exp.bs)}</b></div>${cfg.eur || sm.exp.eur ? `<div class="mv"><span>Euros</span><b>${eurF(sm.exp.eur)}</b></div>` : ''}
+    <div class="mv"><span>${REG.features.bcv ? 'Dólares' : 'Efectivo'}</span><b>${usd(sm.exp.usd)}</b></div>${REG.features.bcv || sm.exp.bs ? `<div class="mv"><span>Bolívares</span><b>${bsF(sm.exp.bs)}</b></div>` : ''}${cfg.eur || sm.exp.eur ? `<div class="mv"><span>Euros</span><b>${eurF(sm.exp.eur)}</b></div>` : ''}
     ${sm.outs.length ? `<div class="sub" style="padding:6px 0">Ya restado: ${esc(sm.outs.join(' · '))}</div>` : ''}</div>
   ${Object.keys(sm.other).length ? `<div class="card" style="margin-top:8px;padding:6px 14px"><div class="sub" style="font-weight:600">Otros cobros (revísalos en el banco)</div>${Object.entries(sm.other).map(([k, v]) => `<div class="mv"><span>${METHODS[k] || k}</span><b>${usd(r2(v))}${cfg.bcv ? ' <span class="sub">(' + bs(v) + ')</span>' : ''}</b></div>`).join('')}</div>` : ''}
   <h3>Efectivo contado</h3>${curInputs('cc')}
@@ -2950,7 +3219,7 @@ function fillCashView(){
   const diffTxt = d => { const p = []; ['usd', 'bs', 'eur'].forEach(k => { if (d && Math.abs(num(d[k])) >= 0.01) p.push((d[k] > 0 ? '+' : '−') + fmtCur(Math.abs(d[k]), k)); }); return p.length ? `<span style="color:var(--warn)">${p.join(' · ')}</span>` : '<span style="color:var(--acc)">cuadró</span>'; };
   $('#mx').innerHTML = (c ? (() => { const sm = cashSummary(c); return `<div class="card"><div class="row between"><div class="name">Caja abierta</div><span class="pill ok">desde ${new Date(c.openedAt).toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'})}</span></div>
       <div class="sub">${sm.sales.n} ventas · ${usd(sm.sales.usd)}</div>
-      <div class="mv"><span>Efectivo $ esperado</span><b>${usd(sm.exp.usd)}</b></div><div class="mv"><span>Efectivo Bs esperado</span><b>${bsF(sm.exp.bs)}</b></div>${cfg.eur ? `<div class="mv"><span>Efectivo € esperado</span><b>${eurF(sm.exp.eur)}</b></div>` : ''}
+      <div class="mv"><span>Efectivo ${CUR_SYM.usd} esperado</span><b>${usd(sm.exp.usd)}</b></div>${REG.features.bcv || sm.exp.bs ? `<div class="mv"><span>Efectivo Bs esperado</span><b>${bsF(sm.exp.bs)}</b></div>` : ''}${cfg.eur ? `<div class="mv"><span>Efectivo € esperado</span><b>${eurF(sm.exp.eur)}</b></div>` : ''}
       <button class="btn full" style="margin-top:10px" onclick="closeCashForm()">Cerrar caja</button></div>`; })()
     : `<div class="card"><div class="name">La caja está cerrada</div><p class="note">Ábrela al empezar el día con el efectivo del fondo. Al cerrarla, el sistema te dice cuánto debería haber y si falta o sobra.</p><button class="btn full" style="margin-top:10px" onclick="openCashForm()">Abrir caja</button></div>`)
     + `<h3>Cierres anteriores</h3><div class="list">${hist.length ? hist.map(x => `<div class="item"><div class="row between"><div><div class="name" style="font-size:14px">${fmtDate(x.closedAt)}</div><div class="sub">${esc(x.closedBy || '')} · ${x.sales ? x.sales.n + ' ventas · ' + usd(x.sales.usd) : ''}</div></div><div class="sub" style="text-align:right">${diffTxt(x.diff)}</div></div>${x.note ? `<div class="sub">${esc(x.note)}</div>` : ''}</div>`).join('') : '<div class="empty">Todavía no hay cierres.</div>'}</div>`;
@@ -2965,7 +3234,7 @@ function quoteForm(){
   const eq = ui.editQuote && S.quotes[ui.editQuote];
   openSheet(`<h2>${eq ? 'Actualizar cotización ' + esc(eq.no) : 'Guardar como cotización'}</h2><p class="note" style="margin-top:0">Se guarda con los precios de hoy y la puedes mandar por WhatsApp o en PDF. Luego, si el cliente acepta, la conviertes en venta.</p>
   <label>Cliente</label><input id="qN" value="${esc(C.name || '')}" placeholder="Nombre o empresa" autofocus>
-  <div class="grid2"><div><label>Teléfono</label><input id="qP" value="${esc(C.phone || '')}" inputmode="tel" placeholder="0414 1234567"></div><div><label>Cédula / RIF</label><input id="qR" value="${esc(C.rif || '')}" placeholder="Opcional"></div></div>
+  <div class="grid2"><div><label>Teléfono</label><input id="qP" value="${esc(C.phone || '')}" inputmode="tel" placeholder="0414 1234567"></div><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="qR" value="${esc(C.rif || '')}" placeholder="Opcional"></div></div>
   <div class="grid2"><div><label>Válida por (días)</label><input id="qV" type="number" min="1" value="${eq ? eq.validDays : 7}"></div><div><label>Nota</label><input id="qO" value="${esc(eq ? eq.note || '' : '')}" placeholder="Ej: incluye envío"></div></div>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="saveQuote()">Guardar</button></div>`);
 }
@@ -3007,7 +3276,7 @@ async function quotePDF(id){
   doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(String(cfg.name || ''), L, y);
   doc.setFontSize(20); doc.setTextColor(40, 120, 90); doc.text('COTIZACIÓN', R, y, {align:'right'}); doc.setTextColor(0);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); y += 6;
-  [cfg.rif && 'RIF: ' + cfg.rif, cfg.addr, cfg.phone && 'Tel: ' + cfg.phone].filter(Boolean).forEach(t => { doc.text(String(t), L, y); y += 4.5; });
+  [cfg.rif && REG.taxId + ': ' + cfg.rif, cfg.addr, cfg.phone && 'Tel: ' + cfg.phone].filter(Boolean).forEach(t => { doc.text(String(t), L, y); y += 4.5; });
   doc.setFontSize(10); doc.text('Nº ' + q.no, R, 28, {align:'right'}); doc.text('Fecha: ' + fmtDay(q.ts), R, 33, {align:'right'}); doc.text('Válida hasta: ' + fmtDay(q.ts + num(q.validDays) * 864e5), R, 38, {align:'right'});
   y = Math.max(y, 44) + 4; doc.setDrawColor(200); doc.line(L, y, R, y); y += 7;
   doc.setFont('helvetica', 'bold'); doc.text('Cliente:', L, y); doc.setFont('helvetica', 'normal'); doc.text(String(q.customer.name) + (q.customer.rif ? '  ·  ' + q.customer.rif : '') + (q.customer.phone ? '  ·  ' + q.customer.phone : ''), L + 18, y); y += 10;
@@ -3538,7 +3807,7 @@ async function doPriceAdj(){
 /* ---- Tasas (visible para todos, se actualiza en vivo) ---- */
 function ago(ts){ if (!ts) return 'nunca'; const m = Math.round((Date.now() - ts) / 60000); if (m < 1) return 'hace un momento'; if (m < 60) return 'hace ' + m + ' min'; const h = Math.round(m / 60); if (h < 24) return 'hace ' + h + ' h'; const d = Math.round(h / 24); return 'hace ' + d + ' día' + (d > 1 ? 's' : ''); }
 VIEWS.tasas = {
-  shell: () => `<h2>Tasas del día</h2><div id="tzTop"></div>
+  shell: () => !REG.features.bcv ? `<h2>Tasas</h2><div class="empty">Tu negocio está en ${esc(REG.name)}: la tasa BCV y los bolívares solo se usan en Venezuela.</div>` : `<h2>Tasas del día</h2><div id="tzTop"></div>
     <h3>Calculadora</h3>
     <div class="card"><div class="row"><input id="calcV" inputmode="decimal" placeholder="Monto" class="grow" value="${esc(ui.calcV || '')}" oninput="ui.calcV=this.value;VIEWS.tasas.fill()">
       <select id="calcC" style="width:120px" onchange="ui.calcC=this.value;VIEWS.tasas.fill()"><option value="usd" ${ui.calcC !== 'eur' && ui.calcC !== 'bs' ? 'selected' : ''}>$ → Bs</option><option value="eur" ${ui.calcC === 'eur' ? 'selected' : ''}>€ → Bs</option><option value="bs" ${ui.calcC === 'bs' ? 'selected' : ''}>Bs → $ / €</option></select></div>
@@ -3551,6 +3820,7 @@ VIEWS.tasas = {
       <button class="btn full" style="margin-top:14px" onclick="saveRates()">Guardar tasas</button>
       <p class="note">Tasa oficial en <a href="https://www.bcv.org.ve" target="_blank" rel="noopener">bcv.org.ve</a></p></div>` : ''}`,
   fill(){
+    if (!$('#tzTop')) return;
     const big = (lbl, sym, v) => `<div class="card stat" style="padding:16px"><div class="k">${lbl}</div><div class="v" style="font-size:30px">${v ? nf2.format(v) : '—'}</div><div class="s">Bs por ${sym}1</div></div>`;
     $('#tzTop').innerHTML = (ratesStale() ? `<div class="warnbox">${cfg.bcv ? 'La tasa lleva más de un día sin actualizarse.' : 'Todavía no hay tasa registrada.'}</div>` : '') +
       `<div class="grid2">${big('Dólar BCV', '$', cfg.bcv)}${big('Euro BCV', '€', cfg.eur)}</div>
@@ -3583,6 +3853,15 @@ async function saveRates(){
     logA('admin', 'Tasa cambiada a mano', '$ ' + nf2.format(data.bcv) + ' · € ' + nf2.format(data.eur)); $('#tB').value = ''; $('#tE').value = ''; toast('Tasas guardadas');
   }
 }
+
+/* Ver o imprimir una venta usa la región con la que se hizo (no se recalcula nada si el negocio cambió de país). */
+{ const wrapS = (f, getS) => function(...a){ return withSaleRegion(getS(...a), () => f.apply(this, a)); };
+  receiptText = wrapS(receiptText, s => s); facturaHTML = wrapS(facturaHTML, s => s);
+  showSale = wrapS(showSale, id => S.sales[id]); notaPDF = wrapS(notaPDF, id => S.sales[id]);
+  viewFactura = wrapS(viewFactura, id => S.sales[id]); facturaPDF = wrapS(facturaPDF, id => S.sales[id]); }
+// Reportes: aviso si hay ventas en otra moneda (de antes de un cambio de país); nunca se convierten.
+{ const fr = fillReports; fillReports = function(){ fr(); const mx = $('#mx'); if (!mx) return; const other = salesArr().filter(s => (s.bc || 'USD') !== REG.currency.code);
+  if (other.length && !mx.querySelector('.curmix')) mx.insertAdjacentHTML('afterbegin', `<div class="warnbox curmix">Hay ${other.length} venta(s) registradas en otra moneda (${[...new Set(other.map(s => s.bc || 'USD'))].join(', ')}), de antes del cambio de país. Se conservan tal cual; los totales de periodos que las incluyan suman importes de monedas distintas.</div>`); }; }
 
 /* ---- Archivos ---- */
 async function saveFile(name, data){

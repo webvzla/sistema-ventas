@@ -1,0 +1,42 @@
+[
+ {
+  "id": "A1",
+  "desc": "España: desglose 21 % y 10 % correcto (precio con IVA incluido) y exento",
+  "ok": true
+ },
+ {
+  "id": "A2",
+  "desc": "Regresión: la venta no contiene listas anidadas (Firestore las rechaza)",
+  "ok": true
+ },
+ {
+  "id": "A3",
+  "desc": "España: sin IGTF aunque la configuración diga igtf:true (petición manipulada)",
+  "ok": true
+ },
+ {
+  "id": "A4",
+  "desc": "Venezuela: campos de siempre (b16/i16/b8/i8) intactos, producto sin IVA usa 16 % e IGTF 3 % sobre divisas",
+  "ok": true
+ },
+ {
+  "id": "A5",
+  "desc": "Venta antigua (sin rows) se sigue leyendo: taxRows usa b16/b8",
+  "ok": true
+ },
+ {
+  "id": "A6",
+  "desc": "Venta nueva con rows en objetos: taxIva suma todos los tipos",
+  "ok": true
+ },
+ {
+  "id": "A7",
+  "desc": "Regresión: negocio nuevo de España se crea SIN campos BCV ni IGTF (las reglas los rechazarían)",
+  "ok": true
+ },
+ {
+  "id": "A8",
+  "desc": "Negocio nuevo de Venezuela conserva bcv/eur/igtf por defecto",
+  "ok": true
+ }
+]

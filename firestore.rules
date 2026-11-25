@@ -68,6 +68,11 @@ service cloud.firestore {
         && getAfter(bizPath(request.auth.uid)).data.license == code);
     }
 
+    // Tienda de licencias. Los pedidos y los pagos solo los escribe el servidor (Admin SDK, sin reglas).
+    match /store/{d} { allow read: if signed(); allow write: if owner(); }
+    match /orders/{o} { allow get: if owner() || (signed() && resource.data.uid == request.auth.uid); allow list: if owner(); allow write: if false; }
+    match /payments/{p} { allow read: if owner(); allow write: if false; }
+
     match /biz/{b} {
       allow read: if (signed() && exists(memberDoc(b))) || owner();
       // Un negocio se crea gastando un código de activación válido y sin usar (en la misma operación),
@@ -103,12 +108,29 @@ service cloud.firestore {
         allow update: if validMember() && admin(b);
         allow delete: if admin(b);
       }
+      // Configuración regional: el país (config/main.country) solo lo cambia el administrador y queda firmado.
+      // Sin país = negocio anterior a la configuración regional = Venezuela.
+      // Aislamiento BCV: las claves de tasa (bcv, eur, ratesAt…) solo se pueden escribir si el negocio es de Venezuela.
       match /config/{d} {
+        function bcvTouched() { return request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']); }
+        function veAfter() { return request.resource.data.get('country', 'VE') == 'VE'; }
+        function countryOk() {
+          return !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['country'])
+            || (request.resource.data.country in ['VE', 'ES', 'US', 'CO', 'MX', 'XX'] && request.resource.data.get('regionBy', '') == request.auth.uid);
+        }
         allow read: if member(b);
-        allow create: if admin(b);
-        allow update: if admin(b) || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']));
+        allow create: if admin(b) && countryOk() && (!bcvTouched() || veAfter());
+        allow update: if (admin(b) && countryOk() && (!bcvTouched() || veAfter()))
+          || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']) && (!bcvTouched() || veAfter()));
       }
-      match /rates/{d} { allow read, write: if member(b); }
+      function isVE() { let c = /databases/$(database)/documents/biz/$(b)/config/main; return !exists(c) || get(c).data.get('country', 'VE') == 'VE'; }
+      match /rates/{d} { allow read: if member(b); allow write: if member(b) && isVE(); }
+      // Historial de licencia (compras, reembolsos, cortesías): lo escribe el servidor (sin reglas) y el dueño
+      // del sistema solo para cortesías. El administrador del negocio lo puede leer.
+      match /licHistory/{d} {
+        allow read: if admin(b) || owner();
+        allow create: if owner() && request.resource.data.type == 'cortesia' && request.resource.data.by == request.auth.uid;
+      }
       // Fotos de productos: las ven todos los del negocio; solo el administrador las sube o borra.
       match /photos/{d} { allow read: if member(b); allow write: if admin(b); }
       match /products/{d} {
@@ -129,7 +151,7 @@ service cloud.firestore {
       match /log/{d} { allow create: if member(b) && request.resource.data.uid == request.auth.uid; allow read, delete: if admin(b); }
       // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
       // (Los miembros quedan fuera: su rol solo se cambia con las reglas de members, que lo validan.)
-      match /{col}/{d} { allow read, write: if col != 'members' && admin(b); }
+      match /{col}/{d} { allow read, write: if !(col in ['members', 'config', 'rates', 'licHistory']) && admin(b); }
     }
   }
 }
