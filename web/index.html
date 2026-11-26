@@ -1291,6 +1291,21 @@ Reglas obligatorias:
 6. Distingue lo que está disponible de lo que está pendiente o no existe, según la documentación.
 7. Usa los nombres reales de botones y pantallas en **negrita**, pasos numerados cortos y frases sencillas. Máximo unas 150 palabras salvo que pidan detalle.
 8. Responde en el idioma en que te escriben.`;
+// Modo guía: de las secciones encontradas, las líneas que responden a la pregunta (y las siguientes de su lista), sin títulos vacíos.
+function asGuide(q, secs){
+  const w = asWords(q), hit = t => { const n = helpNorm(t); return w.filter(x => n.includes(x)).length; }, out = [];
+  for (const x of secs){
+    const lines = x.txt.split('\n').slice(1).map(l => l.replace(/\|/g, ' ').trimEnd()).filter(l => l.trim() && !/^\s*-{3,}/.test(l));
+    if (!lines.length) continue;
+    let keep = [];
+    lines.forEach((l, i) => { if (hit(l)) for (let k = i; k < Math.min(lines.length, i + 3); k++) if (!keep.includes(k)) keep.push(k); });
+    if (!keep.length) keep = lines.map((l, i) => i).slice(0, 6);
+    keep.sort((a, b) => a - b);
+    out.push('**' + x.h.replace(/^#+ /, '') + '**\n' + keep.slice(0, 10).map(i => lines[i]).join('\n'));
+    if (out.length >= 2) break;
+  }
+  return out.join('\n\n').slice(0, 1800);
+}
 async function asModel(){
   if (AS.model) return AS.model;
   const C = window.ASSISTANT || {}; if (!C.enabled || !window.FIREBASE_CONFIG) throw new Error('off');
@@ -1363,7 +1378,7 @@ async function asSend(ev){
     }
     if (!ans){
       // Modo guía: se muestran las secciones encontradas en la documentación.
-      ans = (lim ? lim + '\n\n' : '') + (secs.length ? 'Esto es lo que dicen las guías de StockSoft:\n\n' + secs.slice(0, 2).map(x => '**' + x.h.replace(/^#+ /, '') + '**\n' + x.txt.replace(/^##? .+\n?/, '').replace(/\|/g, ' ').slice(0, 900)).join('\n\n') : 'No lo encuentro en la documentación de StockSoft. Prueba con otras palabras o escribe a soporte desde **Más → Ayuda → Contactar con soporte**.');
+      ans = (lim ? lim + '\n\n' : '') + (secs.length ? 'Esto es lo que dicen las guías de StockSoft:\n\n' + asGuide(q, secs) : 'No lo encuentro en la documentación de StockSoft. Prueba con otras palabras o escribe a soporte desde **Más → Ayuda → Contactar con soporte**.');
     }
   } catch(e){ ans = 'No pude consultar las guías ahora mismo. Revisa tu conexión o abre **Más → Ayuda**.'; }
   AS.busy = false; AS.msgs.push({r:'a', t:ans, src}); asSave(); asRender();

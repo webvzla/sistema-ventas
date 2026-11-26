@@ -10,7 +10,7 @@ let fetched = [];
 const ctx = { location: { protocol: 'https:' }, console, Set, Promise, JSON, Math, Date,
   fetch: async u => { const f = String(u).replace(/^asistente\//, ''); fetched.push(f); const p = path.join(D, f); return fs.existsSync(p) ? { ok: true, json: async () => JSON.parse(fs.readFileSync(p, 'utf8')), text: async () => fs.readFileSync(p, 'utf8') } : { ok: false }; } };
 vm.createContext(ctx);
-vm.runInContext(helpNorm + '\n' + block.replace(/\bconst AS = /, 'var AS = ') + ';this.asRetrieve=asRetrieve;this.AS_SYS=AS_SYS;this.AS_LIM=AS_LIM;this.AS=AS;', ctx);
+vm.runInContext(helpNorm + '\n' + block.replace(/\bconst AS = /, 'var AS = ') + ';this.asRetrieve=asRetrieve;this.asGuide=asGuide;this.AS_SYS=AS_SYS;this.AS_LIM=AS_LIM;this.AS=AS;', ctx);
 
 (async () => {
   const ask = async q => { fetched = []; const r = await ctx.asRetrieve(q); return { r, files: [...new Set(fetched)], txt: r.map(x => x.txt).join('\n') }; };
@@ -29,6 +29,8 @@ vm.runInContext(helpNorm + '\n' + block.replace(/\bconst AS = /, 'var AS = ') + 
   { const { r } = await ask('xyzzy plumbus'); T('AS-NO', 'Pregunta sin relación: no devuelve secciones (el asistente dirá que no lo encuentra)', r.length === 0, r.map(x => x.h)); }
   { const { r } = await ask('¿El asistente puede cambiar los precios de mis productos?'); T('AS-LIM', 'Preguntas sobre lo que no hace: llegan la guía del asistente o las limitaciones', r.some(x => /16-asistente|30-limitaciones/.test(x.f)), r.map(x => x.f)); }
   { const { r } = await ask('¿Cómo vendo?'); const len = r.reduce((a, x) => a + x.txt.length, 0); T('AS-TAM', 'Contexto acotado: como mucho 5 secciones y ~7.000 caracteres por pregunta', r.length <= 5 && len <= 7000, { n: r.length, len }); }
+  { const q = '¿Cómo hago una nota de entrega?', { r } = await ask(q), g = ctx.asGuide(q, r);
+    T('AS-GUIA', 'Modo guía: muestra las líneas que responden (la nota de entrega con su numeración NE-) y no títulos vacíos', /Nota de entrega/.test(g) && /NE-/.test(g) && g.split(/\n\n/).every(b => b.trim().split(/\n/).length > 1), g.slice(0, 400)); }
   const S = ctx.AS_SYS;
   T('AS-SYS', 'Instrucciones: solo documentación, decir "no lo encuentro" y soporte, solo informativo, sin credenciales, sin afirmar cumplimiento fiscal, idioma del usuario',
     /SOLO con la información de la DOCUMENTACIÓN/.test(S) && /No lo encuentro en la documentación/.test(S) && /solo informativo/.test(S) && /contraseñas, claves/.test(S) && /No afirmes que StockSoft cumple requisitos legales o fiscales/.test(S) && /idioma en que te escriben/.test(S));
