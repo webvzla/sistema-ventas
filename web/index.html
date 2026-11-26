@@ -771,8 +771,13 @@ function fillLicenses(){
 }
 
 /* ============ Configuración regional: país del negocio, vista previa y cambio ============ */
-function suCountryNote(){ const el = $('#suCn'); if (!el) return; const r = SSRegion.get($('#suC').value); el.innerHTML = esc(r.currency.code + ' · ' + r.tax.name + ' ' + r.tax.rates.map(x => x + '%').join('/') + (r.features.bcv ? ' · tasa BCV y bolívares' : '') + (r.fiscal.validated ? '' : ' · configuración fiscal pendiente de validación')); }
+function suCountryNote(){ const el = $('#suCn'); if (!el) return; const r = SSRegion.get($('#suC').value); el.innerHTML = esc(r.currency.code + ' (' + r.currency.symbol + ') · ' + (r.taxUnset ? 'sin impuestos predefinidos: los configuras tú cuando quieras' : r.tax.name + ' ' + r.tax.rates.filter(x => x).map(x => x + '%').join('/') + ' (sugeridos)') + (r.features.bcv ? ' · tasa BCV y bolívares' : '') + (r.fiscal.validated ? '' : ' · configuración fiscal pendiente de validación')); }
 // Configuración inicial de un negocio nuevo según el país elegido.
+// Lista de países: primero los que StockSoft tiene configurados, luego el resto (sin impuestos predefinidos).
+function countryOptions(sel){
+  const L = SSRegion.list(), o = r => `<option value="${r.code}" ${r.code === sel ? 'selected' : ''}>${r.flag} ${esc(r.name)}</option>`;
+  return `<optgroup label="Configurados en StockSoft">${L.filter(r => r.preset).map(o).join('')}</optgroup><optgroup label="Otros países (impuestos a configurar)">${L.filter(r => !r.preset).map(o).join('')}</optgroup>`;
+}
 function regionInit(code, byUid, byName){
   const r = SSRegion.get(SSRegion.isCode(code) ? code : SSRegion.DEFAULT), now = Date.now();
   return {country:r.code, regionAt:now, regionBy:byUid, regionByName:byName || '', tz:r.tz, cc:r.cc || '58', regionLog:[{from:'', to:r.code, at:now, by:byUid, name:byName || ''}]};
@@ -794,19 +799,83 @@ function regionCard(){
   ${r.local ? `<div class="mv"><span>Cobro en moneda local</span><b>${esc(r.local.code)} con tasa BCV</b></div>` : ''}
   <div class="mv"><span>Zona horaria</span><b>${esc(r.tz)}</b></div>
   <div class="mv"><span>Formato</span><b>${esc(nf2.format(1234.5))} · ${esc(fmtDay(Date.now()))}</b></div>
-  <div class="mv"><span>Impuesto</span><b>${esc(r.tax.name)} ${r.tax.rates.map(x => nfq.format(x) + '%').join(' / ')}${r.features.igtf ? ' · IGTF' : ''}</b></div>
+  <div class="mv"><span>Impuestos</span><b style="text-align:right">${r.taxes.length ? r.taxes.map(t => esc(taxLbl(t))).join(' / ') : 'Sin configurar'}${r.features.igtf ? ' · IGTF' : ''}</b></div>
   <div class="mv"><span>Formas de pago</span><b style="text-align:right">${Object.values(r.methods).map(esc).join(', ')}</b></div>
   <div class="mv"><span>Tasa BCV</span><b>${r.features.bcv ? 'Activa' : 'No aplica'}</b></div>
   ${r.legacy ? `<p class="note">Tu negocio se creó antes de la configuración regional y sigue en <b>Venezuela</b>, como siempre.${r.uncertain ? ' <b style="color:var(--warn)">Tu código telefónico no es de Venezuela: revisa si este es tu país.</b>' : ''}</p>` : ''}
   <p class="note">${esc(r.fiscal.status)}</p>
-  ${r.tax.custom ? `<label>Tus tipos de ${esc(r.tax.name.toLowerCase())} (%), separados por coma</label><input id="aTx" inputmode="decimal" value="${esc(r.tax.rates.filter(x => x).join(', '))}" placeholder="Ej: 8.875"><p class="note">Se guarda con el botón Guardar de abajo.</p>` : ''}
+
   <div class="gap" style="margin-top:12px">${r.legacy ? `<button class="btn sm" onclick="confirmRegion()">Confirmar Venezuela</button>` : ''}<button class="btn sm sec" onclick="regionForm()">Cambiar país</button></div>
   ${regionLogHtml()}</div>`;
+}
+/* ---- Impuestos del negocio (Ajustes → Impuestos) ----
+   El administrador crea, edita y borra sus impuestos (nombre, %, incluido o sumado) y elige el de por defecto.
+   Se guardan en config/main (taxes, taxDef). Los sugeridos del país son solo un punto de partida, sin validar. */
+function prodTaxOpts(p){
+  const cur = taxOfP(p), opts = taxChoices().map(t => [t.id || '__none', taxLbl(t), sameTax(t, cur)]);
+  if (cur.rate && !REG.taxes.some(t => sameTax(t, cur))) opts.unshift(['r:' + cur.rate + ':' + (cur.inc ? 1 : 0), taxLbl(cur) + ' (valor anterior)', true]);
+  return opts.map(([v, l, s]) => `<option value="${esc(v)}" ${s ? 'selected' : ''}>${esc(l)}</option>`).join('');
+}
+function prodTaxVal(v){
+  if (v === '__none') return {iva:0, tax:'', taxN:'', taxInc:true};
+  if (/^r:/.test(v)){ const [, r, inc] = v.split(':'); return {iva:num(r), taxInc:inc !== '0'}; } // se conserva el impuesto anterior
+  const t = taxById(v) || REG.taxDef || TAX_NONE;
+  return {iva:t.rate, tax:t.id || '', taxN:t.rate ? t.name : '', taxInc:t.inc !== false};
+}
+function taxCard(){
+  const r = REG, L = r.taxes, def = r.taxDef ? r.taxDef.id : '';
+  return `<h3>Impuestos</h3><div class="card">
+  ${r.taxUnset ? `<div class="warnbox" style="margin-bottom:10px">StockSoft no tiene impuestos predefinidos para ${esc(r.name)}. Añade los que uses (nombre y porcentaje) o trabaja sin impuesto mientras decides.</div>` : ''}
+  ${!r.taxCustom && L.length ? `<p class="note" style="margin-top:0">${r.code === 'VE' ? 'Tipos de IVA de siempre en StockSoft.' : 'Tipos sugeridos para ' + esc(r.name) + ', <b>no validados oficialmente</b>: revísalos con tu contador.'} Puedes cambiarlos.</p>` : ''}
+  <div class="list">${L.map(t => `<div class="item row"><div class="grow"><div class="name">${esc(t.name)} ${nfq.format(t.rate)}%${def === t.id ? ' <span class="pill ok">por defecto</span>' : ''}</div><div class="sub">${t.inc ? 'Incluido en el precio' : 'Se suma al precio al cobrar'}</div></div><button class="btn sm sec" onclick="taxForm('${esc(t.id)}')">Editar</button></div>`).join('') || '<div class="empty">Sin impuestos: las ventas no llevan impuesto.</div>'}</div>
+  <div class="gap" style="margin-top:10px"><button class="btn sm" onclick="taxForm()">+ Añadir impuesto</button>${r.taxCustom && r.taxSuggested.length ? `<button class="btn sm sec" onclick="taxReset()">Volver a los sugeridos de ${esc(r.name)}</button>` : ''}</div>
+  ${L.length ? `<label>Impuesto por defecto de los productos nuevos</label><select onchange="taxSetDef(this.value)"><option value="">Sin impuesto</option>${L.map(t => `<option value="${esc(t.id)}" ${def === t.id ? 'selected' : ''}>${esc(taxLbl(t))}</option>`).join('')}</select>` : ''}
+  <p class="note">Cambiar o borrar un impuesto no modifica las ventas anteriores (cada venta guarda los impuestos con los que se hizo) y los productos que lo tenían conservan su porcentaje.</p></div>`;
+}
+const taxList = () => REG.taxes.map(t => ({id:t.id, name:t.name, rate:t.rate, inc:t.inc !== false}));
+async function saveTaxes(list, def, msg){
+  if (!isAdmin()){ toast('Solo el administrador puede cambiar los impuestos'); return false; }
+  const ok = await putCfg({taxes:list, taxDef:def || ''});
+  if (ok){ logA('admin', 'Impuestos cambiados', msg); closeSheet(); const mx = $('#mx'); if (mx) delete mx.dataset.done; shellFor = ''; render(); toast(msg); }
+  return ok;
+}
+function taxForm(id){
+  if (!isAdmin()) return;
+  const t = id ? taxById(id) : null;
+  openSheet(`<h2>${t ? 'Editar impuesto' : 'Nuevo impuesto'}</h2>
+  <div class="grid2"><div><label>Nombre</label><input id="txN" maxlength="30" value="${esc(t ? t.name : '')}" placeholder="Ej: IVA, IGV, GST, Sales tax" autofocus></div>
+  <div><label>Porcentaje (%)</label><input id="txR" inputmode="decimal" value="${t ? esc(String(t.rate).replace('.', ',')) : ''}" placeholder="Ej: 18"></div></div>
+  <label>¿Cómo se aplica?</label><select id="txI"><option value="1" ${!t || t.inc ? 'selected' : ''}>Incluido en el precio (el precio ya lo lleva)</option><option value="0" ${t && !t.inc ? 'selected' : ''}>Se suma aparte al cobrar</option></select>
+  <label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="txD" class="chk" ${!REG.taxDef || (t && REG.taxDef.id === t.id) ? 'checked' : ''}> Usarlo por defecto en los productos nuevos</label>
+  <div class="sheet-actions">${t ? `<button class="btn bad" onclick="taxDel('${esc(t.id)}')">Eliminar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}<button class="btn" onclick="taxSave(${t ? `'${esc(t.id)}'` : 'null'})">Guardar</button></div>`);
+}
+function taxSave(id){
+  const name = $('#txN').value.trim().slice(0, 30), rate = Math.round(num($('#txR').value) * 1000) / 1000, inc = $('#txI').value === '1';
+  if (!name){ toast('Ponle un nombre (ej: IVA)'); return; }
+  if (!(rate > 0 && rate <= 50)){ toast('El porcentaje debe ser mayor que 0 y como mucho 50'); return; }
+  const L = taxList(), nid = id || ('t' + Date.now().toString(36)), cur = REG.taxDef ? REG.taxDef.id : '';
+  const t = {id:nid, name, rate, inc}, ix = L.findIndex(x => x.id === id);
+  if (ix >= 0) L[ix] = t; else L.push(t);
+  saveTaxes(L, $('#txD').checked ? nid : (cur === id ? '' : cur), (id ? 'Impuesto actualizado: ' : 'Impuesto añadido: ') + name + ' ' + nfq.format(rate) + '%');
+}
+function taxDel(id){
+  const t = taxById(id); if (!t) return;
+  ask('¿Eliminar ' + t.name + ' ' + nfq.format(t.rate) + '%?', 'Las ventas anteriores no cambian y los productos que lo tienen conservan su porcentaje.', 'Eliminar', () => {
+    const cur = REG.taxDef ? REG.taxDef.id : '';
+    saveTaxes(taxList().filter(x => x.id !== id), cur === id ? '' : cur, 'Impuesto eliminado: ' + t.name);
+  });
+}
+function taxSetDef(v){ saveTaxes(taxList(), v, v ? 'Impuesto por defecto: ' + taxLbl(taxById(v)) : 'Productos nuevos sin impuesto por defecto'); }
+function taxReset(){
+  ask('Volver a los impuestos sugeridos', 'Se usarán los tipos sugeridos para ' + REG.name + ' (sin validar oficialmente). Las ventas anteriores no cambian.', 'Usar sugeridos', async () => {
+    if (!isAdmin()) return;
+    if (await putCfg({taxes:null, taxDef:null})){ logA('admin', 'Impuestos cambiados', 'Sugeridos de ' + REG.name); const mx = $('#mx'); if (mx) delete mx.dataset.done; shellFor = ''; render(); toast('Impuestos sugeridos de ' + REG.name); }
+  }, false);
 }
 function regionForm(){
   if (!isAdmin()){ toast('Solo el administrador puede cambiar el país'); return; }
   openSheet(`<h2>Cambiar país del negocio</h2><p class="note" style="margin-top:0">Ahora: <b>${REG.flag} ${esc(REG.name)}</b>. Los cambios se aplican a las ventas y operaciones <b>nuevas</b>; lo anterior queda como está.</p>
-  <label>Nuevo país</label><select id="rgC" onchange="regionPreview()">${SSRegion.list().map(r => `<option value="${r.code}" ${r.code === REG.code ? 'selected' : ''}>${r.flag} ${esc(r.name)}</option>`).join('')}</select>
+  <label>Nuevo país</label><select id="rgC" onchange="regionPreview()">${countryOptions(REG.code)}</select>
   <div id="rgXw" style="display:none"><label>Moneda</label><select id="rgX">${Object.keys(SSRegion.CURRENCIES).map(c => `<option ${c === (cfg.currency || 'USD') ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
   <label>Zona horaria</label><input id="rgT" placeholder="Ej: Europe/Madrid">
   <div id="rgP" style="margin-top:12px"></div>
@@ -996,7 +1065,7 @@ function authScreen(){
   $('#lgReset').style.display = c ? 'inline' : 'none';
   $('#suLw').style.display = c ? 'block' : 'none'; $('#suTw').style.display = c ? 'flex' : 'none'; $('#suU2w').style.display = c ? 'block' : 'none';
   if (window.APP_WA){ const href = 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero un código de activación de StockSoft para mi negocio.'); $('#lgWa').href = $('#rnWa').href = href; $('#lgWa').style.display = $('#rnWa').style.display = c ? 'flex' : 'none'; $('#suWa').innerHTML = ` <a href="${href}" target="_blank" rel="noopener">Pídelo por WhatsApp</a>`; }
-  if (!$('#suC').options.length){ $('#suC').innerHTML = SSRegion.list().map(r => `<option value="${r.code}">${r.flag} ${esc(r.name)}</option>`).join(''); $('#suC').value = SSRegion.DEFAULT; suCountryNote(); }
+  if (!$('#suC').options.length){ $('#suC').innerHTML = countryOptions(SSRegion.DEFAULT); suCountryNote(); }
   $('#suNote').textContent = c ? 'Crea tu cuenta y la de tu negocio. Tus datos quedan guardados en la nube.' : 'Configura tu negocio. Solo se hace una vez.';
 }
 async function doSetup(ev){
@@ -1048,6 +1117,7 @@ async function doSetup(ev){
       pendingSetup = false; ui.setupMode = false; msg('');
       await onFbUser(FB.auth.currentUser);
       toast(trial ? '¡Listo! Tienes 7 días de prueba gratis, ' + an : '¡Listo! Bienvenido, ' + an);
+      if (REG.taxUnset) setTimeout(() => toast('Configura tus impuestos cuando quieras en Más → Ajustes → Impuestos'), 5200);
       // Correo para confirmar la dirección (así sabemos que podrá recuperar su contraseña).
       try { await FB.auth.currentUser.sendEmailVerification(); setTimeout(() => toast('Te enviamos un correo a ' + au + ' para confirmarlo (revisa también spam)'), 3200); } catch(e){ console.warn('verificación', e); }
       if (ui.newEmp){ const x = ui.newEmp; ui.newEmp = null; setTimeout(() => empCredSheet(x), 900); }
@@ -1755,20 +1825,41 @@ function addToCart(pid, quiet){
   if (p.track !== false && num(p.stock) <= 0) toast('Ojo: ' + p.name + ' figura agotado');
   else if (e && e.days < 0){ toast('Ojo: ' + p.name + ' tiene un lote vencido (' + fmtExp(e.exp) + ')'); quiet = true; }
   const ex = cart.find(c => c.pid === pid);
-  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, iva:p.iva == null || p.iva === '' ? REG.tax.def : num(p.iva)}; c.ivaP = c.iva; reprice(c); cart.push(c); }
+  if (ex){ ex.qty = r3(ex.qty + 1); reprice(ex); } else { const c = {pid, name:p.name, price:r2(unitUsd(p, 1)), cost:r2(toUsd(p.cost, curOf(p)) || 0), unit:p.unit || 'unidad', qty:1, ...(t => ({iva:t.rate, ivaN:t.name, ivaInc:t.inc !== false, ivaId:t.id || ''}))(taxOfP(p))}; c.ivaP = c.iva; c.txP = lineTax(c); reprice(c); cart.push(c); }
   if (!quiet) toast('+1 ' + p.name + ' · ' + pMain(p) + (pBs(p) ? ' · ' + bsF(pBs(p)) : ''));
   renderCart();
 }
 /* Aplica el precio al mayor (o lo quita) según la cantidad de la línea. */
-function reprice(c){ const p = c.pid && S.products[c.pid]; if (!hasW(p)){ c.mayor = false; return; } const u = unitUsd(p, c.qty); if (isFinite(u)){ c.price = r2(ivaAdj(u, ivaOf(c, true), ivaOf(c))); c.mayor = isW(p, c.qty); } }
+function reprice(c){ const p = c.pid && S.products[c.pid]; if (!hasW(p)){ c.mayor = false; return; } const u = unitUsd(p, c.qty); if (isFinite(u)){ c.price = r2(taxMove(u, lineTax(c, true), lineTax(c))); c.mayor = isW(p, c.qty); } }
 /* IVA por línea al vender: el precio incluye el IVA, así que al quitarlo o cambiarlo se recalcula el precio
    manteniendo la base (ej. $11,60 con 16 % → exento $10,00 → 8 % $10,80). ivaP = el IVA con que se cargó la línea. */
-const ivaOf = (c, orig) => { const v = orig ? (c.ivaP ?? c.iva) : c.iva; return v == null || v === '' ? REG.tax.def : num(v); };
+/* Impuestos del negocio (REG.taxes, configurables en Ajustes → Impuestos). Cada impuesto: {id, name, rate, inc}.
+   inc = incluido en el precio; si no, se suma aparte al cobrar. Cada línea de venta guarda el suyo
+   (iva = %, ivaN = nombre, ivaInc, ivaId), así que cambiar los impuestos nunca altera ventas anteriores. */
+const TAX_NONE = {id:'', name:'Sin impuesto', rate:0, inc:true};
+const taxById = id => REG.taxes.find(t => t.id === id) || null;
+function taxOfP(p){
+  if (!p) return REG.taxDef || TAX_NONE;
+  if (p.tax && taxById(p.tax)) return taxById(p.tax);
+  if (p.iva == null || p.iva === '') return p.tax === '' ? TAX_NONE : (REG.taxDef || TAX_NONE);
+  const r = num(p.iva); if (!r) return TAX_NONE;
+  const inc = p.taxInc !== false;
+  // Impuesto borrado o producto anterior: se conserva su porcentaje (y su nombre si lo tenía).
+  return REG.taxes.find(t => t.rate === r && t.inc === inc) || {id:p.tax || '', name:p.taxN || REG.tax.name, rate:r, inc};
+}
+const ivaOf = (c, orig) => { const v = orig ? (c.txP ? c.txP.rate : (c.ivaP ?? c.iva)) : c.iva; return v == null || v === '' ? REG.tax.def : num(v); };
+const lineTax = (c, orig) => orig && c.txP ? c.txP : {id:c.ivaId || '', name:c.ivaN || REG.tax.name, rate:ivaOf(c), inc:c.ivaInc !== false};
+// Al cambiar el impuesto de una línea se conserva el precio sin impuesto (ej. 11,60 con 16 % incluido → exento 10,00).
+const taxMove = (price, from, to) => { const base = from.inc === false || !from.rate ? price : price / (1 + from.rate / 100); return to.inc === false || !to.rate ? base : base * (1 + to.rate / 100); };
 const ivaAdj = (price, from, to) => from === to ? price : price / (1 + from / 100) * (1 + to / 100);
-const IVA_LBL = new Proxy({}, {get:(o, k) => +k === 0 ? (REG.tax.rates.length > 1 ? 'Sin ' + REG.tax.name : 'Sin impuesto') : REG.tax.name + ' ' + nfq.format(+k) + '%'});
-function setLineIva(i, to){ const c = cart[i]; if (!c) return; if (c.ivaP == null) c.ivaP = ivaOf(c); const from = ivaOf(c); if (from === to) return; c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; renderCart(); }
-function cycleIva(i){ const c = cart[i]; if (!c) return; const cur = ivaOf(c), rs = REG.tax.rates, ix = rs.indexOf(cur), next = rs[(ix + 1) % rs.length] ?? rs[0]; setLineIva(i, next); toast(c.name + ': ' + IVA_LBL[next] + ' · ' + usd(c.price)); }
-function allIva(on){ cart.forEach((c, i) => { if (c.ivaP == null) c.ivaP = ivaOf(c); const to = on ? ivaOf(c, true) : 0; const from = ivaOf(c); if (from !== to){ c.price = r2(ivaAdj(c.price, from, to)); c.iva = to; } }); renderCart(); toast(on ? 'IVA de nuevo como en el inventario' : 'IVA quitado de toda la venta'); }
+const taxLbl = t => !t || !t.rate ? (REG.code === 'VE' ? 'Sin IVA' : 'Sin impuesto') : t.name + ' ' + nfq.format(t.rate) + '%' + (t.inc === false ? ' (se suma)' : '');
+const IVA_LBL = new Proxy({}, {get:(o, k) => taxLbl({name:REG.tax.name, rate:+k, inc:true})});
+const taxChoices = () => [...REG.taxes, TAX_NONE];
+const sameTax = (a, b) => num(a.rate) === num(b.rate) && (a.inc !== false) === (b.inc !== false) && (!a.id || !b.id || a.id === b.id);
+function setTaxLine(c, to){ if (!c.txP) c.txP = lineTax(c); const from = lineTax(c); c.price = r2(taxMove(c.price, from, to)); c.iva = to.rate; c.ivaN = to.name; c.ivaInc = to.inc !== false; c.ivaId = to.id || ''; }
+function setLineIva(i, to){ const c = cart[i]; if (!c) return; const t = typeof to === 'object' ? to : (REG.taxes.find(x => x.rate === to) || (to ? {id:'', name:REG.tax.name, rate:to, inc:true} : TAX_NONE)); setTaxLine(c, t); renderCart(); }
+function cycleIva(i){ const c = cart[i]; if (!c) return; const L = taxChoices(), ix = L.findIndex(t => sameTax(t, lineTax(c))), next = L[(ix + 1) % L.length]; setTaxLine(c, next); renderCart(); toast(c.name + ': ' + taxLbl(next) + ' · ' + usd(c.price)); }
+function allIva(on){ cart.forEach(c => setTaxLine(c, on ? lineTax(c, true) : TAX_NONE)); renderCart(); toast(on ? 'Impuestos de nuevo como en el inventario' : 'Impuestos quitados de toda la venta'); }
 /* Servicios y artículos que no están en el inventario (reparaciones, envíos, mano de obra…).
    El precio lo pones tú en cada venta. Los servicios guardados (cfg.services) y los usados hace poco salen como atajos. */
 function recentFree(){
@@ -1783,8 +1874,8 @@ function freeItem(){
   openSheet(`<h2>Servicio o artículo libre</h2><p class="note" style="margin-top:0">Para cobrar algo que no está en el inventario: una reparación, un envío, mano de obra… Tú pones la descripción y el precio, y sale así en la factura.</p>
   ${chips.length ? `<div class="sub" style="font-weight:600;margin:6px 0">Atajos</div><div class="gap" style="flex-wrap:wrap">${chips.map((c, k) => `<span class="svchip"><button type="button" onclick="pickFree(${k})">${c.saved ? '★ ' : ''}${esc(c.name)}${c.price ? ' · ' + usd(c.price) : ''}</button>${c.saved && isAdmin() ? `<button type="button" class="x" title="Quitar de servicios guardados" onclick="delService(${k})">×</button>` : ''}</span>`).join('')}</div>` : ''}
   <label>Descripción</label><input id="fiN" placeholder="Ej: Reparación de control remoto" autofocus>
-  <div class="grid2"><div><label>Cantidad</label><input id="fiQ" inputmode="decimal" value="1"></div><div><label>Precio unitario en $</label><input id="fiP" inputmode="decimal" placeholder="0,00"></div></div>
-  <label>IVA</label><div class="seg" id="fiI" style="margin:0">${[[16, 'IVA 16%'], [8, 'IVA 8%'], [0, 'Sin IVA']].map(([v, l]) => `<button type="button" data-v="${v}" class="${v === 16 ? 'on' : ''}" onclick="document.querySelectorAll('#fiI button').forEach(b=>b.classList.toggle('on',b===this))">${l}</button>`).join('')}</div>
+  <div class="grid2"><div><label>Cantidad</label><input id="fiQ" inputmode="decimal" value="1"></div><div><label>Precio unitario en ${esc(CUR_SYM.usd)}</label><input id="fiP" inputmode="decimal" placeholder="0,00"></div></div>
+  <label>Impuesto</label><div class="seg" id="fiI" style="margin:0;flex-wrap:wrap">${taxChoices().map((t, k) => `<button type="button" data-i="${k}" class="${sameTax(t, REG.taxDef || TAX_NONE) ? 'on' : ''}" onclick="document.querySelectorAll('#fiI button').forEach(b=>b.classList.toggle('on',b===this))">${esc(taxLbl(t))}</button>`).join('')}</div>
   ${isAdmin() ? `<label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="fiS" class="chk"> Guardar como servicio frecuente (sale como atajo)</label>` : ''}
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="addFree()">Añadir a la venta</button></div>`);
   ui._free = chips;
@@ -1795,8 +1886,8 @@ async function addFree(){
   const n = $('#fiN').value.trim(), q = r3(num($('#fiQ').value) || 1), pr = num($('#fiP').value);
   if (!n){ toast('Escribe la descripción'); $('#fiN').focus(); return; }
   if (pr <= 0){ toast('Pon un precio'); $('#fiP').focus(); return; }
-  const on = document.querySelector('#fiI button.on'), iva = on ? num(on.dataset.v) : 16;
-  cart.push({pid:'', name:n, price:r2(pr), cost:0, unit:'unidad', qty:q, iva, ivaP:iva});
+  const on = document.querySelector('#fiI button.on'), t = (on && taxChoices()[+on.dataset.i]) || REG.taxDef || TAX_NONE;
+  cart.push({pid:'', name:n, price:r2(pr), cost:0, unit:'unidad', qty:q, iva:t.rate, ivaN:t.name, ivaInc:t.inc !== false, ivaId:t.id || '', ivaP:t.rate, txP:t});
   if ($('#fiS') && $('#fiS').checked){ const list = (cfg.services || []).filter(x => x.name.toLowerCase() !== n.toLowerCase()); list.unshift({name:n, price:r2(pr)}); await putCfg({services:list.slice(0, 30)}); }
   closeSheet(); renderCart(); toast('+ ' + n);
 }
@@ -1811,27 +1902,33 @@ const toCur = (usdV, cur, rate = cfg.bcv, rateEur = cfg.eur) => cur === 'bs' ? u
 const fmtCur = (v, cur) => cur === 'bs' ? bsF(v) : cur === 'eur' ? eurF(v) : usd(v);
 function taxCalc(items, divisasUsd){
   // Precios con el impuesto incluido. Desglose por tipo (rows) para cualquier país; b8/i8/b16/i16 se mantienen para Venezuela.
-  let ex = 0, b8 = 0, i8 = 0, b16 = 0, i16 = 0, sub = 0; const by = {};
+  // Impuesto incluido: el precio ya lo lleva. Impuesto "se suma": se añade al cobrar (add).
+  let ex = 0, b8 = 0, i8 = 0, b16 = 0, i16 = 0, sub = 0, add = 0; const by = {};
   for (const it of items){ const T = num(it.price) * num(it.qty); sub += T; const r = it.iva == null || it.iva === '' ? REG.tax.def : num(it.iva);
-    if (r === 0){ ex += T; continue; } const b = T / (1 + r / 100); by[r] = by[r] || [0, 0]; by[r][0] += b; by[r][1] += T - b;
-    if (r === 8){ b8 += b; i8 += T - b; } else if (r === 16){ b16 += b; i16 += T - b; } }
-  // Objetos {r, b, i}: Firestore no admite listas dentro de listas.
-  const rows = Object.entries(by).map(([r, x]) => ({r:+r, b:r2(x[0]), i:r2(x[1])})).sort((a, b) => b.r - a.r);
+    if (r === 0){ ex += T; continue; }
+    const inc = it.ivaInc !== false, n = it.ivaN || REG.tax.name, b = inc ? T / (1 + r / 100) : T, i = inc ? T - b : T * r / 100;
+    if (!inc) add += i;
+    const k = n + '|' + r + '|' + (inc ? 1 : 0); by[k] = by[k] || {r, n, x:!inc, b:0, i:0}; by[k].b += b; by[k].i += i;
+    if (inc && r === 8){ b8 += b; i8 += i; } else if (inc && r === 16){ b16 += b; i16 += i; } }
+  // Objetos {r, b, i, n, x}: Firestore no admite listas dentro de listas. x = impuesto sumado aparte.
+  const rows = Object.values(by).map(x => ({r:x.r, b:r2(x.b), i:r2(x.i), n:x.n, ...(x.x ? {x:true} : {})})).sort((a, b) => b.r - a.r);
   const igtf = cfg.igtf && REG.features.igtf ? Math.max(0, num(divisasUsd)) * 0.03 : 0;
-  return {ex:r2(ex), b8:r2(b8), i8:r2(i8), b16:r2(b16), i16:r2(i16), rows, sub:r2(sub), igtf:r2(igtf), total:r2(sub + igtf)};
+  return {ex:r2(ex), b8:r2(b8), i8:r2(i8), b16:r2(b16), i16:r2(i16), rows, sub:r2(sub), add:r2(add), igtf:r2(igtf), total:r2(sub + add + igtf)};
 }
 // Desglose de impuestos de una venta (nueva: rows; anterior a la configuración regional: b16/b8).
-const taxRows = t => !t ? [] : Array.isArray(t.rows) ? t.rows.map(x => Array.isArray(x) ? x : [num(x.r), num(x.b), num(x.i)]) : [[16, num(t.b16), num(t.i16)], [8, num(t.b8), num(t.i8)]].filter(x => x[1]);
+const taxRows = t => !t ? [] : Array.isArray(t.rows) ? t.rows.map(x => Array.isArray(x) ? x : [num(x.r), num(x.b), num(x.i), x.n || '', !!x.x]) : [[16, num(t.b16), num(t.i16)], [8, num(t.b8), num(t.i8)]].filter(x => x[1]);
 const taxIva = t => taxRows(t).reduce((a, x) => a + num(x[2]), 0);
 function taxHtml(t, rate, fiscal){
   const row = (l, v) => `<div class="mv"><span>${l}</span><span style="text-align:right"><b>${usd(v)}</b>${rate ? `<br><span class="sub">${bs(v, rate)}</span>` : ''}</span></div>`;
   let h = '';
   if (t.disc) h += row('Descuento', -t.disc);
   if (fiscal){
-    for (const [r, b, i] of taxRows(t)) h += row('Base imponible ' + nfq.format(r) + '%', b) + row(REG.tax.name + ' ' + nfq.format(r) + '%', i);
+    for (const [r, b, i, n, x] of taxRows(t)) h += row('Base imponible ' + nfq.format(r) + '%', b) + row((n || REG.tax.name) + ' ' + nfq.format(r) + '%' + (x ? ' (se suma)' : ''), i);
     if (t.ex) h += row('Exento', t.ex);
     h += row('Subtotal', t.sub);
   }
+  // En la nota (sin desglose) también se ven los impuestos que se suman aparte, para que el total cuadre.
+  if (!fiscal) for (const [r, b, i, n, x] of taxRows(t)) if (x) h += row(esc(n || REG.tax.name) + ' ' + nfq.format(r) + '% (se suma)', i);
   if (t.igtf) h += row('IGTF 3% (pago en divisas)', t.igtf);
   return h ? `<div class="card" style="margin-top:10px;padding:4px 14px">${h}${row('<b>Total</b>', t.total)}</div>` : '';
 }
@@ -1874,7 +1971,7 @@ function discUsd(){
   if (!isAdmin()){ const max = s0 * Math.max(num(cfg.maxDisc ?? 10), cd) / 100; if (d > max + 0.001) d = max; }
   return r2(d);
 }
-function netItems(){ const s0 = cartSub0(), d = discUsd(), f = s0 ? 1 - d / s0 : 1; return cart.map(c => ({pid:c.pid, name:c.name, qty:c.qty, price:Math.round(c.price * f * 10000) / 10000, list:c.price, cost:c.cost || 0, unit:c.unit, iva:c.iva ?? 16})); }
+function netItems(){ const s0 = cartSub0(), d = discUsd(), f = s0 ? 1 - d / s0 : 1; return cart.map(c => ({pid:c.pid, name:c.name, qty:c.qty, price:Math.round(c.price * f * 10000) / 10000, list:c.price, cost:c.cost || 0, unit:c.unit, iva:c.iva ?? 16, ...(c.ivaN ? {ivaN:c.ivaN} : {}), ...(c.ivaInc === false ? {ivaInc:false} : {}), ...(c.ivaId ? {ivaId:c.ivaId} : {})})); }
 function payState(){
   const P = ui.pay, items = netItems();
   if (P.mode !== 'mixto'){ const t0 = taxCalc(items, 0); const t = taxCalc(items, DIVISAS.includes(P.method) ? t0.sub : 0); return {items, t, paid:t.total, rest:0, lines:[], fiado:P.method === 'fiado' ? t.total : 0}; }
@@ -1909,12 +2006,12 @@ function renderCart(){
   el.innerHTML = (ui.editQuote && S.quotes[ui.editQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Editando la cotización ${esc(S.quotes[ui.editQuote].no)}. Cuando termines pulsa <b>Cotización</b> para guardarla. <a href="#" onclick="ui.editQuote=null;renderCart();return false">cancelar edición</a></div>` : '') + (ui.fromQuote && S.quotes[ui.fromQuote] ? `<div class="warnbox" style="background:var(--info-bg);border-color:var(--info-line);color:var(--info-tx)">Vendiendo la cotización ${esc(S.quotes[ui.fromQuote].no || '')}. <a href="#" onclick="ui.fromQuote=null;renderCart();return false">quitar vínculo</a></div>` : '')
     + (cart.length ? `<div class="row" style="gap:8px;margin-bottom:10px"><span class="sub" style="margin:0;white-space:nowrap">Cliente</span><select class="grow" style="padding:8px" onchange="setSaleClient(this.value)"><option value="">Cliente general${''}</option>${clients().sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => `<option value="${c.id}" ${c.id === ui.saleClient ? 'selected' : ''}>${esc(c.name)}${c.type ? ' · ' + esc(c.type) : ''}${cDisc(c) ? ' (−' + discTxt(cDisc(c)) + ')' : ''}</option>`).join('')}</select></div>${ui.disc.client && S.clients[ui.disc.client] ? `<div class="pill ok" style="margin:-4px 0 10px">Descuento de cliente${S.clients[ui.disc.client].type ? ' ' + esc(S.clients[ui.disc.client].type) : ''}: −${discTxt(cDisc(S.clients[ui.disc.client]))}</div>` : ''}` : '')
     + `<div class="list">` + cart.map((c, i) => `<div class="item"><div class="row">
-      <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}</div>
-      <button type="button" class="ivachip${ivaOf(c) === 0 ? ' off' : ''}${c.ivaP != null && ivaOf(c) !== ivaOf(c, true) ? ' chg' : ''}" onclick="cycleIva(${i})" title="Toca para cambiar el ${esc(REG.tax.name)}: ${REG.tax.rates.map(r => r ? nfq.format(r) + '%' : 'sin impuesto').join(' → ')}">${ivaOf(c) ? '✓ ' : '✕ '}${IVA_LBL[ivaOf(c)]}</button></div>
+      <div class="grow"><div class="name">${esc(c.name)}${c.mayor ? ' <span class="pill ok">Precio al mayor</span>' : ''}</div><div class="sub">${usd(c.price)}${c.ivaInc === false && num(c.iva) ? ' + ' + esc(c.ivaN || REG.tax.name) + ' ' + nfq.format(num(c.iva)) + '%' : ''}${cfg.bcv ? ' (' + bs(c.price) + ')' : ''} · subtotal ${usd(r2(c.price * c.qty))}</div>
+      ${!REG.taxes.length && !ivaOf(c) ? '' : `<button type="button" class="ivachip${ivaOf(c) === 0 ? ' off' : ''}${c.ivaP != null && !sameTax(lineTax(c), lineTax(c, true)) ? ' chg' : ''}" onclick="cycleIva(${i})" title="Toca para cambiar el impuesto: ${esc(taxChoices().map(taxLbl).join(' → '))}">${ivaOf(c) ? '✓ ' : '✕ '}${esc(taxLbl(lineTax(c)))}</button>`}</div>
       <div class="qty"><button onclick="setQty(${i},${c.qty}-1)">−</button><input inputmode="decimal" value="${nfq.format(c.qty)}" onchange="setQty(${i},this.value)"><button onclick="setQty(${i},${c.qty}+1)">+</button></div>
     </div></div>`).join('') + `</div>
-    ${cart.length ? `<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><span class="sub" style="margin:0">IVA de la venta:</span>${cart.some(c => ivaOf(c) > 0) ? `<button type="button" class="btn sm sec" onclick="allIva(false)">Quitar IVA a todo</button>` : ''}${cart.some(c => ivaOf(c) !== ivaOf(c, true)) ? `<button type="button" class="btn sm sec" onclick="allIva(true)">Volver a poner el IVA</button>` : ''}</div>` : ''}
-    <div class="row" style="margin-top:10px;gap:8px"><span class="sub" style="margin:0;white-space:nowrap">Descuento</span><input inputmode="decimal" value="${esc(ui.disc.v)}" placeholder="0" style="width:90px;padding:8px" onchange="ui.disc.v=this.value;renderCart()"><select style="width:80px;padding:8px" onchange="ui.disc.type=this.value;renderCart()"><option value="pct" ${ui.disc.type === 'pct' ? 'selected' : ''}>%</option><option value="usd" ${ui.disc.type === 'usd' ? 'selected' : ''}>$</option></select>${t.disc ? `<span class="sub" style="margin:0">−${usd(t.disc)}</span>` : ''}${!isAdmin() ? `<span class="sub" style="margin:0">máx. ${nf0.format(num(cfg.maxDisc ?? 10))}%</span>` : ''}</div>
+    ${cart.length && (REG.taxes.length || cart.some(c => ivaOf(c) > 0)) ? `<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><span class="sub" style="margin:0">${REG.code === 'VE' ? 'IVA' : 'Impuestos'} de la venta:</span>${cart.some(c => ivaOf(c) > 0) ? `<button type="button" class="btn sm sec" onclick="allIva(false)">Quitar ${REG.code === 'VE' ? 'IVA' : 'impuestos'} a todo</button>` : ''}${cart.some(c => !sameTax(lineTax(c), lineTax(c, true))) ? `<button type="button" class="btn sm sec" onclick="allIva(true)">Volver a ponerlos como en el inventario</button>` : ''}</div>` : ''}
+    <div class="row" style="margin-top:10px;gap:8px"><span class="sub" style="margin:0;white-space:nowrap">Descuento</span><input inputmode="decimal" value="${esc(ui.disc.v)}" placeholder="0" style="width:90px;padding:8px" onchange="ui.disc.v=this.value;renderCart()"><select style="width:80px;padding:8px" onchange="ui.disc.type=this.value;renderCart()"><option value="pct" ${ui.disc.type === 'pct' ? 'selected' : ''}>%</option><option value="usd" ${ui.disc.type === 'usd' ? 'selected' : ''}>${esc(CUR_SYM.usd)}</option></select>${t.disc ? `<span class="sub" style="margin:0">−${usd(t.disc)}</span>` : ''}${!isAdmin() ? `<span class="sub" style="margin:0">máx. ${nf0.format(num(cfg.maxDisc ?? 10))}%</span>` : ''}</div>
     <div class="total" style="margin-top:12px"><div class="sub" style="color:var(--tot-mut);font-size:12px;font-weight:600">TOTAL A PAGAR</div><div class="v" id="totV">${usd(t.total)}</div>
     <div class="bsline" style="font-size:22px" id="totB">${cfg.bcv ? bs(t.total) : REG.features.bcv ? '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>' : ''}</div>
     <div class="s">${cfg.bcv ? 'Tasa dólar BCV ' + nf2.format(cfg.bcv) : ''}${cfg.eur && cfg.bcv ? ' · ≈ ' + eurF(usdToEur(t.total)) : ''}${t.igtf ? ' · incluye IGTF' : ''}</div></div>
@@ -2166,7 +2263,7 @@ function facturaHTML(s){
   const cl = s.customer || (s.clientId && S.clients[s.clientId]) || {}, t = s.tax || {}, dt = new Date(s.ts);
   const tl = [['Sub-total', num(s.sub ?? s.total)]];
   if (fiscal || taxIva(t)){
-    for (const [r, b, i] of taxRows(t)) tl.push(['Base imponible ' + nfq.format(r) + '%', num(b)], [(REG.tax.name === 'IVA' ? 'I.V.A.' : REG.tax.name) + ' ' + nfq.format(r) + '%', num(i)]);
+    for (const [r, b, i, n] of taxRows(t)) { const nm = n || REG.tax.name; tl.push(['Base imponible ' + nfq.format(r) + '%', num(b)], [(nm === 'IVA' && REG.code === 'VE' ? 'I.V.A.' : nm) + ' ' + nfq.format(r) + '%', num(i)]); }
     if (num(t.ex)) tl.push(['Exento', num(t.ex)]);
   }
   if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
@@ -2251,7 +2348,7 @@ async function facturaPDF(id){
   const t = s.tax || {}, tl = [];
   tl.push(['SUB-TOTAL', num(s.sub ?? s.total)]);
   if (fiscal || taxIva(t)){
-    for (const [r, b, i] of taxRows(t)) tl.push(['Base imponible ' + nfq.format(r) + '%', num(b)], [(REG.tax.name === 'IVA' ? 'I.V.A.' : REG.tax.name) + ' ' + nfq.format(r) + '%', num(i)]);
+    for (const [r, b, i, n] of taxRows(t)) { const nm = n || REG.tax.name; tl.push(['Base imponible ' + nfq.format(r) + '%', num(b)], [(nm === 'IVA' && REG.code === 'VE' ? 'I.V.A.' : nm) + ' ' + nfq.format(r) + '%', num(i)]); }
     if (num(t.ex)) tl.push(['Exento', num(t.ex)]);
   }
   if (num(s.igtf)) tl.push(['I.G.T.F. 3%', num(s.igtf)]);
@@ -2308,7 +2405,7 @@ function correctSale(id){
     const s = S.sales[id]; if (!s) return;
     const snap = JSON.parse(JSON.stringify(s));
     await undoSale(s, id); await logAction('Venta corregida (anulada y rehecha)', saleDesc(snap));
-    cart = (snap.items || []).map(i => ({pid:i.pid, name:i.name, price:num(i.list ?? i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16}));
+    cart = (snap.items || []).map(i => ({pid:i.pid, name:i.name, price:num(i.list ?? i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16, ivaN:i.ivaN, ivaInc:i.ivaInc, ivaId:i.ivaId}));
     const s0v = cart.reduce((a, c) => a + c.price * c.qty, 0);
     ui.disc = snap.disc ? {type:'usd', v:String(snap.disc)} : (s0v && Math.abs(s0v - num(snap.sub)) > 0.01 && !snap.disc ? {type:'pct', v:''} : {type:'pct', v:''});
     ui.doc = snap.doc === 'fiscal' ? 'fiscal' : 'nota';
@@ -2338,7 +2435,7 @@ async function saveChangePay(id){
 function editQuote(id){
   if (!isAdmin()) return;
   const q = S.quotes[id]; if (!q) return;
-  cart = q.items.map(i => ({pid:i.pid, name:i.name, price:num(i.list ?? i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16}));
+  cart = q.items.map(i => ({pid:i.pid, name:i.name, price:num(i.list ?? i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16, ivaN:i.ivaN, ivaInc:i.ivaInc, ivaId:i.ivaId}));
   ui.disc = q.disc ? {type:'usd', v:String(q.disc)} : {type:'pct', v:''};
   ui.cust = {rif:q.customer.rif || '', name:q.customer.name || '', addr:'', phone:q.customer.phone || ''};
   ui.editQuote = id; ui.fromQuote = null;
@@ -2383,7 +2480,7 @@ VIEWS.inventario = {
       <div class="sub" style="margin:4px 0 8px">Marca los productos (${ui.selLabels.size} elegidos).${nNoCode ? ` A ${nNoCode} sin código se les creará uno nuevo.` : ''}</div>
       <div class="grid2"><div><label style="margin-top:0">Formato</label><select onchange="ui.lblFmt=this.value"><option value="a4" ${ui.lblFmt !== 'termica' ? 'selected' : ''}>Hoja A4 · 21 etiquetas</option><option value="termica" ${ui.lblFmt === 'termica' ? 'selected' : ''}>Impresora térmica 50×30 mm</option></select></div>
       <div><label style="margin-top:0">Copias de cada una</label><input type="number" min="1" max="50" value="${ui.copies || 1}" onchange="ui.copies=Math.max(1,Math.min(50,parseInt(this.value)||1))"></div></div>
-      <label class="row" style="gap:8px;color:var(--tx);font-size:13px"><input type="checkbox" class="chk" ${ui.lblBs ? 'checked' : ''} onchange="ui.lblBs=this.checked"> Incluir precio en Bs (cambia cada día con la tasa)</label>
+      ${REG.features.bcv ? `<label class="row" style="gap:8px;color:var(--tx);font-size:13px"><input type="checkbox" class="chk" ${ui.lblBs ? 'checked' : ''} onchange="ui.lblBs=this.checked"> Incluir precio en Bs (cambia cada día con la tasa)</label>` : ''}
       <div class="gap" style="margin-top:10px"><button class="btn sm sec" onclick="${ps.map(p => `ui.selLabels.add('${p.id}')`).join(';')};VIEWS.inventario.fill()">Marcar todos</button><button class="btn sm sec" onclick="ui.selLabels.clear();VIEWS.inventario.fill()">Ninguno</button>
       <button class="btn sm" ${ui.selLabels.size ? '' : 'disabled'} onclick="makeLabels()">Crear PDF</button></div></div>` : '';
     const val = r2(all.reduce((a, p) => a + Math.max(0, num(p.stock)) * (toUsd(num(p.cost) || num(p.price), curOf(p)) || 0), 0));
@@ -2414,13 +2511,13 @@ function editProduct(id, preset = {}){
   <div class="gap"><label class="btn sm sec" style="margin:0;cursor:pointer">${p.img ? 'Cambiar foto' : 'Tomar o subir foto'}<input type="file" accept="image/*" hidden onchange="pickProdPhoto(this)"></label>${p.img ? '<button class="btn sm bad" onclick="clearProdPhoto()">Quitar</button>' : ''}</div></div>
   <div class="grid2"><div><label>Categoría</label><input id="pC" list="catList" value="${esc(p.cat)}" placeholder="${cats.length ? 'Elige o escribe una nueva' : 'Escribe una categoría'}"><datalist id="catList">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></div>
   <div><label>Marca / modelo</label><input id="pBr" value="${esc(p.brand || '')}" placeholder="Opcional"></div></div>
-  <label>Precio en</label>
-  <div class="seg" style="margin:0"><button type="button" id="curU" class="${curOf(p) === 'usd' ? 'on' : ''}" onclick="setCur('usd')">Dólares ($ BCV)</button><button type="button" id="curE" class="${curOf(p) === 'eur' ? 'on' : ''}" onclick="setCur('eur')">Euros (€ BCV)</button></div>
-  <input type="hidden" id="pCur" value="${curOf(p)}">
+  ${REG.features.eurPrices ? `<label>Precio en</label>
+  <div class="seg" style="margin:0"><button type="button" id="curU" class="${curOf(p) === 'usd' ? 'on' : ''}" onclick="setCur('usd')">Dólares ($ BCV)</button><button type="button" id="curE" class="${curOf(p) === 'eur' ? 'on' : ''}" onclick="setCur('eur')">Euros (€ BCV)</button></div>` : `<p class="note" style="margin:12px 0 0">Precios en <b>${esc(REG.currency.code)} (${esc(REG.currency.symbol)})</b>, la moneda de tu negocio.</p>`}
+  <input type="hidden" id="pCur" value="${REG.features.eurPrices ? curOf(p) : 'usd'}">
   <div class="grid2"><div><label id="pPl">Precio de venta</label><input id="pP" inputmode="decimal" value="${ed(p.price)}" placeholder="0,00" oninput="pPrev()"></div>
   <div><label id="pKl">Costo</label><input id="pK" inputmode="decimal" value="${ed(p.cost)}" placeholder="0,00" oninput="pPrev()"></div></div>
   <div id="pPrev" class="note"></div>
-  <div class="grid2"><div><label>Precio al mayor (opcional)</label><input id="pWP" inputmode="decimal" value="${ed(p.wPrice)}" placeholder="0,00"></div>
+  <div class="grid2"><div><label>Precio al mayor (${esc(CUR_SYM.usd)}, opcional)</label><input id="pWP" inputmode="decimal" value="${ed(p.wPrice)}" placeholder="0,00"></div>
   <div><label>A partir de (cantidad)</label><input id="pWQ" inputmode="decimal" value="${ed(p.wQty)}" placeholder="Ej: 12"></div></div>
   <p class="note" style="margin-top:4px">Al vender esa cantidad o más, cada unidad se cobra al precio al mayor.</p>
   <label>Código de barras</label>
@@ -2431,7 +2528,7 @@ function editProduct(id, preset = {}){
   <div class="grid2"><div><label>Se vende por</label><select id="pU">${['unidad', 'kg', 'g', 'lt', 'paquete', 'caja'].map(u => `<option ${p.unit === u ? 'selected' : ''} value="${u}">${u}</option>`).join('')}</select></div>
   <div><label>Garantía</label><input id="pW" value="${esc(p.warranty || '')}" placeholder="Ej: 6 meses"></div></div>
   <label>Proveedor habitual</label><select id="pSup"><option value="">— Ninguno —</option>${suppliers().map(x => `<option value="${x.id}" ${p.supplierId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-  <label>${esc(REG.tax.name)} (el precio ya lo incluye)</label><select id="pI">${(() => { const cur = num(p.iva == null || p.iva === '' ? REG.tax.def : p.iva), o = REG.tax.rates.map(v => [v, REG.tax.labels[v] || (v + '%')]); if (!REG.tax.rates.includes(cur)) o.push([cur, nfq.format(cur) + '% (valor anterior)']); return o.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`).join(''); })()}</select>
+  <label>Impuesto</label><select id="pI">${prodTaxOpts(p)}</select>${REG.taxUnset ? `<p class="note" style="margin-top:4px">Aún no hay impuestos configurados: el producto queda sin impuesto.${isAdmin() ? ` <a href="#" onclick="closeSheet();go('mas','ajustes');return false">Configurar impuestos</a>` : ''}</p>` : ''}
   <div class="grid2"><div><label>Stock actual</label><input id="pS" inputmode="decimal" value="${ed(p.stock)}" placeholder="0"></div>
   <div><label>Avisar cuando queden</label><input id="pM" inputmode="decimal" value="${ed(p.min)}" placeholder="${nfq.format(num(cfg.lowDefault))}"></div></div>
   <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="pT" class="chk" ${p.track !== false ? 'checked' : ''}> Controlar stock de este producto</label>
@@ -2482,12 +2579,12 @@ function addLot(){
 }
 function setCur(c){ $('#pCur').value = c; $('#curU').classList.toggle('on', c === 'usd'); $('#curE').classList.toggle('on', c === 'eur'); pPrev(); }
 function pPrev(){
-  const cur = $('#pCur').value, sym = cur === 'eur' ? '€' : '$';
+  const cur = $('#pCur').value, sym = cur === 'eur' ? '€' : CUR_SYM.usd;
   $('#pPl').textContent = 'Precio de venta (' + sym + ')'; $('#pKl').textContent = 'Costo (' + sym + ')';
   const fake = {price:num($('#pP').value), cur};
   let t = fake.price ? pLine(fake) || (!REG.features.bcv ? '' : cur === 'eur' ? 'Pon la tasa del euro para ver Bs' : 'Pon la tasa del dólar para ver Bs') : '';
   const c = num($('#pK').value);
-  if (fake.price && c) t += (t ? '<br>' : '') + `Ganancia: ${sym}${nf2.format(r2(fake.price - c))} por unidad (${Math.round((fake.price - c) / c * 100)}%)`;
+  if (fake.price && c) t += (t ? '<br>' : '') + `Ganancia: ${(cur === 'eur' ? eurF : usd)(r2(fake.price - c))} por unidad (${Math.round((fake.price - c) / c * 100)}%)`;
   $('#pPrev').innerHTML = t;
 }
 function bcPrev(){
@@ -2515,7 +2612,7 @@ async function saveProduct(id, fromScan){
   if ((wP > 0) !== (wQ > 0)){ toast('Para el precio al mayor pon el precio y la cantidad'); return; }
   if (wP > 0 && wP >= price){ toast('El precio al mayor debe ser menor que el precio normal'); return; }
   const old = id ? S.products[id] : {created:Date.now()};
-  const d = {...old, name, cat:sameCat($('#pC').value.trim()), brand:$('#pBr').value.trim(), cur:$('#pCur').value, unit:$('#pU').value, price:r2(price), cost:r2(num($('#pK').value)), stock:r3(num($('#pS').value)), min: minV === '' ? '' : r3(num(minV)), code, warranty:$('#pW').value.trim(), iva:num($('#pI').value), supplierId:$('#pSup').value, track:$('#pT').checked, updated:Date.now(),
+  const d = {...old, name, cat:sameCat($('#pC').value.trim()), brand:$('#pBr').value.trim(), cur:$('#pCur').value, unit:$('#pU').value, price:r2(price), cost:r2(num($('#pK').value)), stock:r3(num($('#pS').value)), min: minV === '' ? '' : r3(num(minV)), code, warranty:$('#pW').value.trim(), ...prodTaxVal($('#pI').value), supplierId:$('#pSup').value, track:$('#pT').checked, updated:Date.now(),
     wPrice: wP > 0 ? r2(wP) : '', wQty: wQ > 0 ? r3(wQ) : ''};
   // Solo se guardan los lotes que siguen en el estante (los vendidos se descartan solos).
   d.lots = activeLots({stock:d.stock, lots:ui.lotsEdit || []});
@@ -2535,7 +2632,7 @@ function restock(id){
   const p = S.products[id];
   openSheet(`<h2>Reponer stock</h2><div class="sub">${esc(p.name)} · hay ${nfq.format(num(p.stock))} ${unitLbl(p.unit)}</div>
   <label>Cantidad que llegó</label><input id="rq" inputmode="decimal" autofocus placeholder="0">
-  <label>Nuevo costo por ${unitLbl(p.unit)} en ${curOf(p) === 'eur' ? '€' : '$'} (opcional)</label><input id="rc" inputmode="decimal" placeholder="${nf2.format(num(p.cost))}">
+  <label>Nuevo costo por ${unitLbl(p.unit)} en ${curOf(p) === 'eur' ? '€' : esc(CUR_SYM.usd)} (opcional)</label><input id="rc" inputmode="decimal" placeholder="${nf2.format(num(p.cost))}">
   <label>Fecha de vencimiento de este lote (opcional)</label><input id="re" type="date">
   <div class="sheet-actions"><button class="btn sec" onclick="editProduct('${id}')">Volver</button><button class="btn" onclick="doRestock('${id}')">Sumar al stock</button></div>`);
 }
@@ -2555,7 +2652,7 @@ async function makeLabels(){
   closeSheet();
   const sel = products().filter(p => ui.selLabels.has(p.id));
   for (const p of sel) if (!p.code){ const code = genCode(); p.code = code; const {id, ...rest} = p; await put('products', id, rest); }
-  const copies = ui.copies || 1, withBs = !!ui.lblBs, thermal = ui.lblFmt === 'termica';
+  const copies = ui.copies || 1, withBs = !!ui.lblBs && REG.features.bcv, thermal = ui.lblFmt === 'termica';
   const list = []; sel.forEach(p => { for (let i = 0; i < copies; i++) list.push(p); });
   const { jsPDF } = window.jspdf;
   const cache = {};
@@ -2603,7 +2700,7 @@ function labelHelp(){
   <div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">Opción A · Hoja A4 de etiquetas adhesivas</div><p class="note">Cualquier impresora normal. Compra hojas A4 de <b>21 etiquetas de 63,5 × 38,1 mm</b> (en papelerías, referencias tipo Avery L7160 o Apli 1273). También puedes imprimir en papel normal, recortar y pegar con cinta transparente.</p></div>
   <div class="card" style="margin-top:8px"><div class="name" style="font-size:14px">Opción B · Impresora de etiquetas térmica</div><p class="note">La más cómoda para una tienda. Usa rollos de <b>50 × 30 mm</b> e imprime una etiqueta por página. No gasta tinta.</p></div>
   <div class="card" style="margin-top:8px"><div class="name" style="font-size:14px">Productos que ya traen código</div><p class="note">Refrescos, chucherías, café envasado… ya tienen su código de fábrica: no hace falta imprimir nada. Escanéalo y, si no está en el inventario, el sistema te pide nombre y precio.</p></div>
-  <p class="note">Consejo: no incluyas el precio en Bs en la etiqueta, porque cambia cada día con la tasa. Al escanear, el sistema siempre calcula los Bs con la tasa actual.</p>
+  ${REG.features.bcv ? `<p class="note">Consejo: no incluyas el precio en Bs en la etiqueta, porque cambia cada día con la tasa. Al escanear, el sistema siempre calcula los Bs con la tasa actual.</p>` : ''}
   <div class="sheet-actions"><button class="btn" onclick="closeSheet()">Entendido</button></div>`);
 }
 
@@ -2750,7 +2847,7 @@ VIEWS.mas = {
     }
     if (sub === 'ajustes'){
       if ($('#mx').dataset.done) return; $('#mx').dataset.done = 1;
-      $('#mx').innerHTML = regionCard() + `<h3>Datos del negocio</h3><div class="card">
+      $('#mx').innerHTML = regionCard() + taxCard() + `<h3>Datos del negocio</h3><div class="card">
         <label style="margin-top:0">Nombre del negocio</label><input id="aN" value="${esc(cfg.name)}">
         <div class="grid2"><div><label>${esc(REG.taxId)}</label><input id="aR" value="${esc(cfg.rif)}" placeholder="${REG.code === 'VE' ? 'J-12345678-9' : ''}"></div><div><label>Teléfono</label><input id="aT" value="${esc(cfg.phone)}" inputmode="tel"></div></div>
         <label>Dirección del local</label><input id="aD" value="${esc(cfg.addr)}" placeholder="Ej: Av. Principal, C.C. Plaza, Local 12, Caracas">
@@ -3133,7 +3230,7 @@ async function drawCharts(D){
   const Chart = window.Chart;
   Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.color = CH.mut;
   const tip = {backgroundColor:cssVar('--solid'), borderColor:cssVar('--line2'), borderWidth:1, titleColor:CH.ink, bodyColor:CH.ink, padding:10, displayColors:true, boxPadding:4, callbacks:{label:c => ' ' + c.dataset.label + ': ' + usd(c.parsed.y) + (cfg.bcv ? ' (' + bs(c.parsed.y) + ')' : '')}};
-  const axes = {x:{grid:{display:false}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:7}}, y:{grid:{color:CH.grid}, border:{display:false}, ticks:{callback:v => '$' + nf0.format(v), maxTicksLimit:5}}};
+  const axes = {x:{grid:{display:false}, ticks:{maxRotation:0, autoSkip:true, maxTicksLimit:7}}, y:{grid:{color:CH.grid}, border:{display:false}, ticks:{callback:v => { const c = curNow(); return c.pos === 'post' ? nf0.format(v) + ' ' + c.symbol : c.symbol + nf0.format(v); }, maxTicksLimit:5}}};
   const base = {responsive:true, maintainAspectRatio:false, animation:charts.c1 ? false : {duration:400}, interaction:{mode:'index', intersect:false}, plugins:{legend:{display:false}, tooltip:tip}, scales:axes};
   const cfg1 = {type:'bar', data:{labels:D.labels, datasets:[{label:'Ingresos', data:D.inc, backgroundColor:CH.s1, borderRadius:{topLeft:4, topRight:4}, borderSkipped:'bottom', maxBarThickness:22, categoryPercentage:.7, barPercentage:.9}, {label:'Costos y gastos', data:D.out, backgroundColor:CH.s2, borderRadius:{topLeft:4, topRight:4}, borderSkipped:'bottom', maxBarThickness:22, categoryPercentage:.7, barPercentage:.9}]}, options:base};
   const cfg2 = {type:'line', data:{labels:D.labels, datasets:[{label:'Ganancia neta', data:D.profit, borderColor:CH.s3, backgroundColor:'rgba(25,158,112,.14)', fill:'origin', borderWidth:2, tension:.3, pointRadius:D.labels.length > 14 ? 0 : 3, pointHoverRadius:5, pointBackgroundColor:CH.s3}]}, options:{...base, scales:{...axes, y:{...axes.y, grid:{color:c => c.tick.value === 0 ? 'rgba(142,155,184,.5)' : CH.grid}}}}};
@@ -3264,7 +3361,7 @@ function showQuote(id){
 }
 function quoteToCart(id){
   const q = S.quotes[id]; if (!q) return;
-  cart = q.items.map(i => ({pid:i.pid, name:i.name, price:num(i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16}));
+  cart = q.items.map(i => ({pid:i.pid, name:i.name, price:num(i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16, ivaN:i.ivaN, ivaInc:i.ivaInc, ivaId:i.ivaId}));
   ui.disc = {type:'pct', v:''}; ui.fromQuote = id;
   ui.cust = {rif:q.customer.rif || '', name:q.customer.name || '', addr:'', phone:q.customer.phone || ''};
   closeSheet(); go('vender'); toast('Cotización cargada en el carrito');
@@ -3459,6 +3556,7 @@ function impBuild(a, o, idx){
     if (headName && nn === headName) return;
     let rc = o.cur || '';
     if (has('cur')){ const c = impCur(raw('cur')); if (c) rc = c; else add('price', line, 'moneda "' + raw('cur') + '" no reconocida; se usa la elegida abajo'); }
+    if (!REG.features.bcv) rc = 'usd'; // fuera de Venezuela todo se importa en la moneda del negocio (sin conversiones)
     const prRaw = raw('price'), pr = parseNum(prRaw, dec);
     if (!(pr > 0)){ add('skip', line, name + ': sin precio'); return; }
     raws.push(pr);
@@ -3496,7 +3594,7 @@ function impBuild(a, o, idx){
     const P = ex ? S.products[ex] : null;
     const fiva = iva !== undefined ? iva : (P ? undefined : (o.ivaDef ?? null));
     if (!P && iva === undefined){ newNoIva++; if (o.ivaDef == null) needIva++; }
-    const effIva = fiva != null ? fiva : (P ? num(P.iva ?? 16) : 0);
+    const effIva = fiva != null ? fiva : (P ? num(P.iva ?? REG.tax.def) : 0);
     if (effIva > 0 && !o.ivaIncl) needIncl++;
     let fp = rc ? conv(pr, rc, pcur) : pr;
     if (rc && isNaN(fp)) fp = 0;
@@ -3607,7 +3705,7 @@ async function importFile(file){
   impS = {sheets, an, si, idx:impIdx(), fileName:file.name, csvInfo, iva:null};
   impPick(si);
 }
-function impPick(i){ const a = impS.an[i]; Object.assign(impS, {si:i, map:{...a.map}, cur:a.cur, rate:a.rateF ? a.rateF.rate : (num(cfg.bcv) || ''), rateSrc:a.rateF ? 'archivo' : (num(cfg.bcv) ? 'bcv' : ''), rateLbl:a.rateF ? a.rateF.label : '', rateOk:false, ivaDef:null, ivaIncl:null, stockMode:'set', mkSup:true, bigOk:false, cat:'', res:{codeName:'keep', nameCode:'new', multi:'skip'}}); impRender(); }
+function impPick(i){ const a = impS.an[i]; Object.assign(impS, {si:i, map:{...a.map}, cur:REG.features.bcv ? a.cur : 'usd', rate:a.rateF ? a.rateF.rate : (num(cfg.bcv) || ''), rateSrc:a.rateF ? 'archivo' : (num(cfg.bcv) ? 'bcv' : ''), rateLbl:a.rateF ? a.rateF.label : '', rateOk:false, ivaDef:null, ivaIncl:null, stockMode:'set', mkSup:true, bigOk:false, cat:'', res:{codeName:'keep', nameCode:'new', multi:'skip'}}); impRender(); }
 function impSet(k, v){
   if (!impS) return;
   if (k === 'map'){ const [f, j] = v; if (j === '') delete impS.map[f]; else { for (const x in impS.map) if (impS.map[x] === +j && x !== f) delete impS.map[x]; impS.map[f] = +j; } }
@@ -3626,7 +3724,7 @@ function impRender(){
   const items = b.items.filter(Boolean), nNew = items.filter(x => x.act === 'new').length, nUpd = items.filter(x => x.act === 'upd').length, nSame = items.filter(x => x.act === 'same').length, writes = impWrites(b);
   const fc = {}; items.forEach(x => x.ch && Object.keys(x.ch).forEach(k => fc[k] = (fc[k] || 0) + 1));
   const FL = {price:'precio', cur:'moneda', stock:'stock', cost:'costo', code:'código', iva:'IVA', cat:'categoría', brand:'marca', unit:'unidad', min:'mínimo', lots:'vencimiento', supplierId:'proveedor', wPrice:'precio al mayor', wQty:'cant. al mayor', name:'nombre'};
-  const hintBs = b.med && ((s.idx.med && b.med / s.idx.med > 15) || (!s.idx.med && b.med > 40));
+  const hintBs = REG.features.bcv && b.med && ((s.idx.med && b.med / s.idx.med > 15) || (!s.idx.med && b.med > 40));
   const curTxt = {usd:'dólares', eur:'euros', bs:'bolívares'};
   let h = `<div class="card"><div class="name" style="font-size:14px">1. Así entendí tu archivo</div>
   <p class="note" style="margin:4px 0 0">${s.sheets.length > 1 ? `Hoja <b>${esc(s.sheets[s.si].name)}</b>. ` : ''}${where}${s.csvInfo && s.csvInfo.fixed ? ` En ${s.csvInfo.fixed} fila${s.csvInfo.fixed === 1 ? '' : 's'} uní números con coma decimal que estaban sin comillas.` : ''}</p>
@@ -3635,15 +3733,15 @@ function impRender(){
   ${miss.length ? `<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">Elegir otras columnas (${miss.map(x => x[1].toLowerCase()).slice(0, 4).join(', ')}${miss.length > 4 ? '…' : ''})</summary><div class="grid2">${miss.map(sel).join('')}</div></details>` : ''}</div>`;
   if (!b.blocked){
     h += `<div class="card" style="margin-top:10px"><div class="name" style="font-size:14px">2. Confirma estos datos</div>
-    <label>Los precios del archivo están en${s.map.cur != null ? ' (cuando la columna Moneda está vacía)' : ''}</label><select onchange="impSet('cur',this.value)">${!s.cur ? opt('', '', '— Elige la moneda —') : ''}${opt('usd', s.cur, 'Dólares ($)')}${opt('eur', s.cur, 'Euros (€)')}${opt('bs', s.cur, 'Bolívares (Bs) → pasar a $')}</select>
+    <label>Los precios del archivo están en${s.map.cur != null ? ' (cuando la columna Moneda está vacía)' : ''}</label><select onchange="impSet('cur',this.value)">${!s.cur ? opt('', '', '— Elige la moneda —') : ''}${REG.features.bcv ? `${opt('usd', s.cur, 'Dólares ($)')}${opt('eur', s.cur, 'Euros (€)')}${opt('bs', s.cur, 'Bolívares (Bs) → pasar a $')}` : opt('usd', s.cur, esc(REG.currency.code + ' (' + REG.currency.symbol + '), la moneda de tu negocio'))}</select>
     ${a.cur && s.cur === a.cur ? `<p class="sub">Lo dice el título de la columna de precio.</p>` : ''}
     ${hintBs && s.cur !== 'bs' ? `<div class="warnbox" style="margin-top:6px">Ojo: el precio típico de tu archivo es ${nf2.format(b.med)}${s.idx.med ? `, ${nf0.format(b.med / s.idx.med)} veces el de tu inventario (${usd(s.idx.med)})` : ''}. <b>¿No estarán en bolívares?</b></div>` : ''}
     ${b.usesBs ? `<label>Tasa para convertir (Bs por $)</label><input inputmode="decimal" value="${s.rate ? nf2.format(s.rate) : ''}" onchange="impSet('rate',parseNum(this.value))">
       <p class="sub">${s.rateSrc === 'archivo' ? 'Tasa encontrada en tu archivo («' + esc(s.rateLbl) + '»).' : s.rateSrc === 'bcv' ? 'Tasa BCV guardada en StockSoft' + (cfg.ratesDate ? ' (' + esc(cfg.ratesDate) + ')' : '') + '.' : s.rateSrc === 'manual' ? 'Tasa escrita por ti.' : ''}</p>
       ${ri.warns.map(w => `<div class="warnbox" style="margin-top:6px">${esc(w)}</div>`).join('')}
       ${ri.needOk ? `<label style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" style="width:auto" ${s.rateOk ? 'checked' : ''} onchange="impSet('rateOk',this.checked)"> He revisado la tasa y es correcta</label>` : ''}` : ''}
-    ${b.newNoIva ? `<label>IVA de los productos nuevos que no lo indican (${b.newNoIva})</label><select onchange="impSet('ivaDef',this.value===''?null:+this.value)">${s.ivaDef == null ? opt('', '', '— Elige el IVA —') : ''}${opt(16, s.ivaDef, '16 %')}${opt(8, s.ivaDef, '8 %')}${opt(0, s.ivaDef, 'Exento')}</select>` : ''}
-    ${b.needIncl || s.ivaIncl ? `<label>¿Los precios del archivo ya incluyen el IVA?</label><select onchange="impSet('ivaIncl',this.value||null)">${!s.ivaIncl ? opt('', '', '— Elige —') : ''}${opt('si', s.ivaIncl, 'Sí, ya incluyen IVA (precio final)')}${opt('no', s.ivaIncl, 'No, súmale el IVA a cada precio')}</select>` : ''}
+    ${b.newNoIva ? `<label>Impuesto de los productos nuevos que no lo indican (${b.newNoIva})</label><select onchange="impSet('ivaDef',this.value===''?null:+this.value)">${s.ivaDef == null ? opt('', '', '— Elige el impuesto —') : ''}${REG.taxes.filter((t, k, a) => a.findIndex(x => x.rate === t.rate) === k).map(t => opt(t.rate, s.ivaDef, esc(taxLbl(t)))).join('')}${opt(0, s.ivaDef, REG.code === 'VE' ? 'Exento' : 'Sin impuesto')}</select>` : ''}
+    ${b.needIncl || s.ivaIncl ? `<label>¿Los precios del archivo ya incluyen el ${REG.code === 'VE' ? 'IVA' : 'impuesto'}?</label><select onchange="impSet('ivaIncl',this.value||null)">${!s.ivaIncl ? opt('', '', '— Elige —') : ''}${opt('si', s.ivaIncl, 'Sí, ya lo incluyen (precio final)')}${opt('no', s.ivaIncl, 'No, súmaselo a cada precio')}</select>` : ''}
     ${b.stockUpd ? `<label>Stock de los productos que ya tienes (${b.stockUpd})</label><select onchange="impSet('stockMode',this.value)">${opt('set', s.stockMode, 'Poner el stock del archivo')}${opt('add', s.stockMode, 'Sumarlo al stock actual (mercancía que llegó)')}${opt('keep', s.stockMode, 'No cambiar el stock')}</select>` : ''}
     ${s.map.cat == null && nNew ? `<label>Categoría para los productos nuevos</label><input value="${esc(s.cat || '')}" placeholder="Opcional" onchange="impSet('cat',this.value.trim())">` : ''}
     ${b.newSups.size || (!s.mkSup && s.map.sup != null) ? `<label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" style="width:auto" ${s.mkSup ? 'checked' : ''} onchange="impSet('mkSup',this.checked)"> Crear ${b.newSups.size || ''} proveedor${b.newSups.size === 1 ? '' : 'es'} nuevo${b.newSups.size === 1 ? '' : 's'}${b.newSups.size ? ' (' + [...b.newSups.values()].slice(0, 3).map(esc).join(', ') + (b.newSups.size > 3 ? '…' : '') + ')' : ''}</label>` : ''}
@@ -3791,13 +3889,13 @@ function priceAdjForm(){
   openSheet(`<h2>Ajustar precios</h2><p class="note" style="margin-top:0">Sube o baja los precios de varios productos a la vez.</p>
   <label>Productos</label><select id="paC"><option value="">Todos</option>${cats.map(c => `<option>${esc(c)}</option>`).join('')}</select>
   <div class="grid2"><div><label>Cambio (%)</label><input id="paP" inputmode="decimal" placeholder="Ej: 10 o -5" oninput="paPrev()"></div>
-  <div><label>Redondear a</label><select id="paR" onchange="paPrev()"><option value="0.01">Céntimo</option><option value="0.05">0,05</option><option value="0.1">0,10</option><option value="0.5">0,50</option><option value="1">1</option></select></div></div>
+  <div><label>Redondear a</label><select id="paR" onchange="paPrev()">${(REG.currency.dec === 0 ? [[1, '1'], [10, '10'], [50, '50'], [100, '100'], [1000, '1.000']] : [[0.01, 'Céntimo'], [0.05, '0,05'], [0.1, '0,10'], [0.5, '0,50'], [1, '1']]).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div></div>
   <label class="row" style="gap:8px;color:var(--tx);font-size:14px;margin-top:12px"><input type="checkbox" id="paK" class="chk"> Aplicar también al costo</label>
   <div id="paV" class="note"></div>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cancelar</button><button class="btn" onclick="doPriceAdj()">Aplicar</button></div>`);
 }
 function paCalc(){ const c = $('#paC').value, pct = num($('#paP').value), step = num($('#paR').value) || 0.01; const ps = products().filter(p => !c || p.cat === c); const rnd = v => Math.max(step, Math.round(v / step) * step); return {ps, pct, f:v => r2(rnd(v * (1 + pct / 100)))}; }
-function paPrev(){ const {ps, pct, f} = paCalc(); $('#paV').innerHTML = pct ? `${ps.length} productos. Ejemplo: ${ps.slice(0, 3).map(p => `${esc(p.name)} ${nf2.format(num(p.price))} → <b>${nf2.format(f(num(p.price)))}</b>`).join(' · ')}` : ''; }
+function paPrev(){ const {ps, pct, f} = paCalc(); $('#paV').innerHTML = pct ? `${ps.length} productos. Ejemplo: ${ps.slice(0, 3).map(p => `${esc(p.name)} ${pMain(p)} → <b>${pMain({...p, price:f(num(p.price))})}</b>`).join(' · ')}` : ''; }
 async function doPriceAdj(){
   const {ps, pct, f} = paCalc(); if (!pct){ toast('Pon el porcentaje'); return; }
   const k = $('#paK').checked; closeSheet(); toast('Actualizando ' + ps.length + ' precios…');
@@ -3889,9 +3987,9 @@ async function saveFile(name, data){
 const csvCell = v => { let s = String(v ?? ''); if (/^[=+@\t\r]/.test(s) || /^-[^\d.,]/.test(s)) s = "'" + s; return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 const csv = rows => '﻿' + rows.map(r => r.map(csvCell).join(';')).join('\n');
 const dec = n => String(r2(num(n))).replace('.', ',');
-function csvInv(){ saveFile('inventario.csv', csv([['Producto', 'Categoría', 'Marca/modelo', 'Código', 'Moneda', 'Precio', 'Costo', 'Precio Bs', 'Stock', 'Unidad', 'Mínimo', 'Garantía'], ...products().map(p => [p.name, p.cat, p.brand, p.code, curOf(p) === 'eur' ? 'EUR' : 'USD', dec(p.price), dec(p.cost), dec(pBs(p)), String(num(p.stock)).replace('.', ','), p.unit, p.min, p.warranty])])); }
-function csvSales(){ const rows = [['Fecha', 'Documento', 'Nº', 'Cliente', 'C.I./RIF', 'Producto', 'Cantidad', 'Precio $', 'Subtotal $', 'IVA %', 'Total venta $', 'IGTF $', 'Forma de pago', 'Vendedor', 'Tasa']]; salesArr().forEach(s => (s.items || []).forEach(i => rows.push([new Date(s.ts).toLocaleString('es-VE'), s.doc === 'fiscal' ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega' : '', s.doc === 'fiscal' ? s.fiscalNo || '' : s.noteNo || '', (s.customer || {}).name || (S.clients[s.clientId] || {}).name || '', (s.customer || {}).rif || '', i.name, String(num(i.qty)).replace('.', ','), dec(i.price), dec(num(i.price) * num(i.qty)), i.iva ?? 16, dec(s.total), dec(s.igtf || 0), METHODS[s.method] || s.method, s.userName || '', dec(s.rate)]))); saveFile('ventas.csv', csv(rows)); }
-function csvDebts(){ saveFile('fiados.csv', csv([['Cliente', 'Teléfono', 'Saldo $', 'Saldo Bs'], ...clients().map(c => [c.name, c.phone, dec(balance(c.id)), dec(balance(c.id) * cfg.bcv)])])); }
+function csvInv(){ saveFile('inventario.csv', csv([['Producto', 'Categoría', 'Marca/modelo', 'Código', 'Moneda', 'Precio', 'Costo', ...(REG.features.bcv ? ['Precio Bs'] : []), 'Stock', 'Unidad', 'Mínimo', 'Garantía'], ...products().map(p => [p.name, p.cat, p.brand, p.code, curOf(p) === 'eur' ? 'EUR' : REG.currency.code, dec(p.price), dec(p.cost), ...(REG.features.bcv ? [dec(pBs(p))] : []), String(num(p.stock)).replace('.', ','), p.unit, p.min, p.warranty])])); }
+function csvSales(){ const rows = [['Fecha', 'Documento', 'Nº', 'Cliente', (REG.code === 'VE' ? 'C.I./RIF' : REG.taxId), 'Producto', 'Cantidad', 'Precio', 'Subtotal', 'Impuesto %', 'Total venta', ...(REG.features.bcv ? ['IGTF'] : []), 'Forma de pago', 'Vendedor', ...(REG.features.bcv ? ['Tasa'] : []), 'Moneda']]; salesArr().forEach(s => (s.items || []).forEach(i => rows.push([new Date(s.ts).toLocaleString(REG.locale), s.doc === 'fiscal' ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega' : '', s.doc === 'fiscal' ? s.fiscalNo || '' : s.noteNo || '', (s.customer || {}).name || (S.clients[s.clientId] || {}).name || '', (s.customer || {}).rif || '', i.name, String(num(i.qty)).replace('.', ','), dec(i.price), dec(num(i.price) * num(i.qty)), i.iva ?? 16, dec(s.total), ...(REG.features.bcv ? [dec(s.igtf || 0)] : []), METHODS[s.method] || s.method, s.userName || '', ...(REG.features.bcv ? [dec(s.rate)] : []), s.bc || 'USD']))); saveFile('ventas.csv', csv(rows)); }
+function csvDebts(){ saveFile('fiados.csv', csv([['Cliente', 'Teléfono', 'Saldo ' + REG.currency.code, ...(REG.features.bcv ? ['Saldo Bs'] : [])], ...clients().map(c => [c.name, c.phone, dec(balance(c.id)), ...(REG.features.bcv ? [dec(balance(c.id) * cfg.bcv)] : [])])])); }
 function backup(){ saveFile('respaldo-' + (cfg.name || 'negocio').replace(/\W+/g, '-').toLowerCase() + '-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify({app:'negocio', v:1, at:Date.now(), cfg, ...S})); }
 async function restore(file){
   if (!file) return;

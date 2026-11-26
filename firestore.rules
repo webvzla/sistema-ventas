@@ -116,7 +116,7 @@ service cloud.firestore {
         function veAfter() { return request.resource.data.get('country', 'VE') == 'VE'; }
         function countryOk() {
           return !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['country'])
-            || (request.resource.data.country in ['VE', 'ES', 'US', 'CO', 'MX', 'XX'] && request.resource.data.get('regionBy', '') == request.auth.uid);
+            || (request.resource.data.country in ['VE', 'ES', 'US', 'CO', 'MX', 'XX', 'AR', 'BO', 'BR', 'CA', 'CL', 'CR', 'DO', 'EC', 'SV', 'GT', 'HN', 'NI', 'PA', 'PY', 'PE', 'PR', 'UY', 'AW', 'TT', 'PT', 'AD', 'FR', 'IT', 'DE', 'NL', 'BE', 'IE', 'AT', 'CH', 'GB', 'AU'] && request.resource.data.get('regionBy', '') == request.auth.uid);
         }
         allow read: if member(b);
         allow create: if admin(b) && countryOk() && (!bcvTouched() || veAfter());

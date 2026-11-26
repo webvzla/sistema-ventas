@@ -32,6 +32,9 @@ const ko = async p => { try { await assertFails(p); return true; } catch (e) { r
   T('S2', 'Vendedor NO puede cambiar el país', await ko(as('v_bizVE').doc('biz/bizVE/config/main').set({ country: 'ES', regionBy: 'v_bizVE' }, { merge: true })) === true);
   T('S3', 'Administrador no puede firmar el cambio con el uid de otro', await ko(as('bizVE').doc('biz/bizVE/config/main').set({ country: 'ES', regionBy: 'otro' }, { merge: true })) === true);
   T('S4', 'País inexistente rechazado', await ko(as('bizVE').doc('biz/bizVE/config/main').set({ country: 'ZZ', regionBy: 'bizVE' }, { merge: true })) === true);
+  T('S4b', 'País sin configuración propia del catálogo (Perú) aceptado; firmado por el administrador', await ok(as('bizVE').doc('biz/bizVE/config/main').set({ country: 'PE', regionBy: 'bizVE', taxes: [{ id: 'igv', name: 'IGV', rate: 18, inc: true }], taxDef: 'igv' }, { merge: true })) === true);
+  T('S4c', 'Vendedor NO puede cambiar los impuestos del negocio', await ko(as('v_bizVE').doc('biz/bizVE/config/main').set({ taxes: [], taxDef: '' }, { merge: true })) === true);
+  await seed();
   T('S5', 'Administrador de un negocio no puede cambiar la región de otro', await ko(as('bizES').doc('biz/bizVE/config/main').set({ country: 'ES', regionBy: 'bizES' }, { merge: true })) === true);
 
   // ---- Aislamiento BCV ----

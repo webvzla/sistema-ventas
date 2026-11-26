@@ -102,10 +102,51 @@
     DOP: { code: 'DOP', symbol: 'RD$', pos: 'pre', dec: 2, name: 'peso' },
     PAB: { code: 'PAB', symbol: 'B/.', pos: 'pre', dec: 2, name: 'balboa' }
   };
+  /* Países sin configuración propia todavía: se conocen su moneda, prefijo telefónico y zona horaria, pero
+     NO se asume ningún impuesto. El negocio configura los suyos en Ajustes → Impuestos (o trabaja sin impuesto).
+     [nombre, moneda, prefijo, zona horaria, bandera] */
+  const COUNTRIES = {
+    AR: ['Argentina', 'ARS', '54', 'America/Argentina/Buenos_Aires', '🇦🇷'], BO: ['Bolivia', 'BOB', '591', 'America/La_Paz', '🇧🇴'],
+    BR: ['Brasil', 'BRL', '55', 'America/Sao_Paulo', '🇧🇷'], CA: ['Canadá', 'CAD', '1', 'America/Toronto', '🇨🇦'],
+    CL: ['Chile', 'CLP', '56', 'America/Santiago', '🇨🇱'], CR: ['Costa Rica', 'CRC', '506', 'America/Costa_Rica', '🇨🇷'],
+    DO: ['República Dominicana', 'DOP', '1', 'America/Santo_Domingo', '🇩🇴'], EC: ['Ecuador', 'USD', '593', 'America/Guayaquil', '🇪🇨'],
+    SV: ['El Salvador', 'USD', '503', 'America/El_Salvador', '🇸🇻'], GT: ['Guatemala', 'GTQ', '502', 'America/Guatemala', '🇬🇹'],
+    HN: ['Honduras', 'HNL', '504', 'America/Tegucigalpa', '🇭🇳'], NI: ['Nicaragua', 'NIO', '505', 'America/Managua', '🇳🇮'],
+    PA: ['Panamá', 'USD', '507', 'America/Panama', '🇵🇦'], PY: ['Paraguay', 'PYG', '595', 'America/Asuncion', '🇵🇾'],
+    PE: ['Perú', 'PEN', '51', 'America/Lima', '🇵🇪'], PR: ['Puerto Rico', 'USD', '1', 'America/Puerto_Rico', '🇵🇷'],
+    UY: ['Uruguay', 'UYU', '598', 'America/Montevideo', '🇺🇾'], AW: ['Aruba', 'AWG', '297', 'America/Aruba', '🇦🇼'],
+    TT: ['Trinidad y Tobago', 'TTD', '1', 'America/Port_of_Spain', '🇹🇹'], PT: ['Portugal', 'EUR', '351', 'Europe/Lisbon', '🇵🇹'],
+    AD: ['Andorra', 'EUR', '376', 'Europe/Andorra', '🇦🇩'], FR: ['Francia', 'EUR', '33', 'Europe/Paris', '🇫🇷'],
+    IT: ['Italia', 'EUR', '39', 'Europe/Rome', '🇮🇹'], DE: ['Alemania', 'EUR', '49', 'Europe/Berlin', '🇩🇪'],
+    NL: ['Países Bajos', 'EUR', '31', 'Europe/Amsterdam', '🇳🇱'], BE: ['Bélgica', 'EUR', '32', 'Europe/Brussels', '🇧🇪'],
+    IE: ['Irlanda', 'EUR', '353', 'Europe/Dublin', '🇮🇪'], AT: ['Austria', 'EUR', '43', 'Europe/Vienna', '🇦🇹'],
+    CH: ['Suiza', 'CHF', '41', 'Europe/Zurich', '🇨🇭'], GB: ['Reino Unido', 'GBP', '44', 'Europe/London', '🇬🇧'],
+    AU: ['Australia', 'AUD', '61', 'Australia/Sydney', '🇦🇺']
+  };
+  // Moneda (símbolo y decimales) a partir del código ISO, con lo que sabe el navegador o Node (Intl).
+  function curInfo(code, locale) {
+    if (CURRENCIES[code]) return clone(CURRENCIES[code]);
+    let symbol = code, dec = 2;
+    try {
+      const f = new Intl.NumberFormat(locale || 'es', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' });
+      symbol = (f.formatToParts(1).find(p => p.type === 'currency') || {}).value || code; dec = f.resolvedOptions().maximumFractionDigits;
+    } catch (e) {}
+    return { code, symbol, pos: 'pre', dec, name: code };
+  }
+  function genericRegion(code) {
+    const [name, cur, cc, tz, flag] = COUNTRIES[code], r = clone(REGIONS.XX), locale = 'es-' + code;
+    let loc = 'es'; try { loc = Intl.NumberFormat.supportedLocalesOf([locale]).length ? locale : 'es'; } catch (e) {}
+    Object.assign(r, { code, name, flag, locale: loc, tz, cc, currency: curInfo(cur, loc), generic: true });
+    r.fiscal = { validated: false, status: 'StockSoft todavía no tiene una configuración fiscal para ' + name + '. Configura tus impuestos en Ajustes → Impuestos (o trabaja sin impuesto).' };
+    r.docs = { fiscalNote: 'Documento de control interno.' };
+    return r;
+  }
   const DEFAULT = 'VE';
   const BCV_KEYS = ['bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate'];
   const clone = o => JSON.parse(JSON.stringify(o));
-  const isCode = c => typeof c === 'string' && Object.prototype.hasOwnProperty.call(REGIONS, c);
+  const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+  const isPreset = c => own(REGIONS, c);
+  const isCode = c => isPreset(c) || own(COUNTRIES, c);
   const tzOk = tz => { try { new Intl.DateTimeFormat('es', { timeZone: tz }); return true; } catch (e) { return false; } };
 
   /* La región de un negocio a partir de su configuración (config/main).
@@ -115,19 +156,13 @@
     cfg = cfg || {};
     const has = isCode(cfg.country);
     const code = has ? cfg.country : DEFAULT;
-    const r = clone(REGIONS[code]);
+    const r = isPreset(code) ? clone(REGIONS[code]) : genericRegion(code);
     r.legacy = !has;
     // Dudoso: no tiene país guardado y su prefijo telefónico no es el de Venezuela. Se mantiene VE, pero se avisa.
     r.uncertain = !has && !!cfg.cc && String(cfg.cc) !== '58';
     if (cfg.tz && tzOk(cfg.tz)) r.tz = cfg.tz;
-    if (code === 'XX' && cfg.currency && CURRENCIES[cfg.currency]) r.currency = clone(CURRENCIES[cfg.currency]);
-    // Países donde el impuesto depende del lugar (EE. UU., "otro país"): el negocio pone sus propios tipos.
-    if (r.tax.custom && Array.isArray(cfg.taxRates)) {
-      const rates = [...new Set(cfg.taxRates.map(Number).filter(x => isFinite(x) && x >= 0 && x <= 50).map(x => Math.round(x * 1000) / 1000))].sort((a, b) => b - a);
-      if (!rates.includes(0)) rates.push(0);
-      r.tax.rates = rates; r.tax.def = rates.includes(Number(cfg.taxDef)) ? Number(cfg.taxDef) : rates[0];
-      r.tax.labels = {}; rates.forEach(x => { r.tax.labels[x] = x ? r.tax.name + ' ' + x + '%' : 'Sin impuesto'; });
-    }
+    if (code === 'XX' && cfg.currency && /^[A-Z]{3}$/.test(cfg.currency)) r.currency = curInfo(cfg.currency, r.locale);
+    applyTaxes(r, cfg);
     r.methods = {}; r.methodCur = {}; r.divisas = []; r.cash = {};
     for (const [k, label, cur, divisa] of r.payments) {
       r.methods[k] = label; r.methodCur[k] = cur;
@@ -137,7 +172,43 @@
     return r;
   }
   const get = code => fromConfig({ country: isCode(code) ? code : DEFAULT });
-  const list = () => Object.values(REGIONS).map(r => ({ code: r.code, name: r.name, flag: r.flag }));
+  // Países con configuración propia primero; luego los demás por orden alfabético; "Otro país" al final.
+  const list = () => Object.values(REGIONS).filter(r => r.code !== 'XX').map(r => ({ code: r.code, name: r.name, flag: r.flag, preset: true }))
+    .concat(Object.entries(COUNTRIES).map(([code, c]) => ({ code, name: c[0], flag: c[4], preset: false })).sort((a, b) => a.name.localeCompare(b.name, 'es')))
+    .concat([{ code: 'XX', name: REGIONS.XX.name, flag: REGIONS.XX.flag, preset: false }]);
+
+  /* Impuestos del negocio. Cada uno: {id, name, rate, inc} (inc = incluido en el precio; si no, se suma aparte).
+     - cfg.taxes (lista, aunque esté vacía) = los configuró el administrador: mandan siempre, sea cual sea el país.
+     - Sin cfg.taxes: los sugeridos del país (Venezuela: los de siempre). Los países sin configuración no tienen ninguno.
+     - cfg.taxDef = id del impuesto por defecto ('' = sin impuesto).
+     Se mantienen r.tax.rates / r.tax.def / r.tax.name para el código que trabaja con porcentajes. */
+  const taxId = rate => 'p' + String(rate).replace(/\W/g, '_');
+  function normTax(t) {
+    const rate = Math.round(Number(t && t.rate) * 1000) / 1000;
+    if (!t || !isFinite(rate) || rate <= 0 || rate > 50) return null;
+    const name = String(t.name || '').trim().slice(0, 30) || 'Impuesto';
+    return { id: String(t.id || taxId(rate)).slice(0, 40), name, rate, inc: t.inc !== false };
+  }
+  function applyTaxes(r, cfg) {
+    const preset = (r.tax.rates || []).filter(x => x > 0).map(x => ({ id: taxId(x), name: r.tax.name, rate: x, inc: r.tax.included !== false }));
+    let list = null;
+    if (Array.isArray(cfg.taxes)) list = cfg.taxes.map(normTax).filter(Boolean);
+    else if (Array.isArray(cfg.taxRates)) list = cfg.taxRates.map(x => normTax({ name: r.tax.name, rate: x })).filter(Boolean); // formato anterior
+    const custom = !!list;
+    const taxes = custom ? list.filter((t, i, a) => a.findIndex(x => x.id === t.id) === i) : preset;
+    let def = null;
+    if (custom && Array.isArray(cfg.taxes)) def = taxes.find(t => t.id === cfg.taxDef) || null;
+    else if (custom) def = taxes.find(t => t.rate === Number(cfg.taxDef)) || taxes[0] || null; // formato anterior: taxDef era un porcentaje
+    else def = taxes.find(t => t.rate === r.tax.def) || null;
+    r.taxes = taxes; r.taxDef = def; r.taxCustom = custom; r.taxSuggested = preset;
+    r.taxUnset = !custom && !preset.length; // país sin impuestos predefinidos y el negocio aún no configuró los suyos
+    const rates = [...new Set(taxes.map(t => t.rate))].sort((a, b) => b - a).concat([0]);
+    const name = def ? def.name : taxes.length ? taxes[0].name : (preset.length ? r.tax.name : 'Impuesto');
+    const labels = { 0: r.tax.labels && r.tax.labels[0] && !custom ? r.tax.labels[0] : 'Sin impuesto' };
+    taxes.forEach(t => { if (!(t.rate in labels)) labels[t.rate] = t.name + ' ' + String(t.rate).replace('.', ',') + '%' + (t.inc ? '' : ' (se suma)'); });
+    if (!custom && r.tax.labels) Object.keys(r.tax.labels).forEach(k => { if (+k) labels[k] = r.tax.labels[k]; });
+    r.tax = Object.assign({}, r.tax, { rates, def: def ? def.rate : 0, name, labels });
+  }
 
   // Formato de dinero en la moneda base de la región (o en la moneda que se pase).
   function money(n, r, cur) {
@@ -149,14 +220,16 @@
   /* Qué cambia al pasar de una región a otra: lo que se enseña en la vista previa antes de confirmar.
      stats: {products, eurProducts, sales} del negocio (opcional). */
   function diff(fromCfg, toCode, stats) {
-    const a = fromConfig(fromCfg), b = get(toCode), out = [];
+    const a = fromConfig(fromCfg), b = fromConfig(Object.assign({}, fromCfg, { country: toCode, tz: undefined, currency: undefined })), out = [];
     stats = stats || {};
     if (a.code === b.code) return out;
     if (a.currency.code !== b.currency.code) out.push({ k: 'currency', t: 'Moneda de los precios: ' + a.currency.code + ' → ' + b.currency.code + '. Los precios guardados conservan su número; no se convierten. Revisa tus precios después del cambio.' });
     if (a.features.bcv && !b.features.bcv) out.push({ k: 'bcv', t: 'Se desactivan la tasa BCV, la conversión a bolívares y su actualización automática.' });
     if (!a.features.bcv && b.features.bcv) out.push({ k: 'bcv', t: 'Se activan la tasa BCV (automática y a mano) y los montos en bolívares.' });
     if (a.features.igtf !== b.features.igtf) out.push({ k: 'igtf', t: b.features.igtf ? 'Se habilita el IGTF (actívalo en Ajustes si te corresponde).' : 'El IGTF deja de calcularse en las ventas nuevas.' });
-    if (a.tax.rates.join() !== b.tax.rates.join()) out.push({ k: 'tax', t: b.tax.name + ': tipos disponibles ' + b.tax.rates.map(x => x + '%').join(', ') + '. Los productos conservan el % que tienen; revisa los que no existan en ' + b.name + '.' });
+    if (b.taxCustom) out.push({ k: 'tax', t: 'Se conservan los impuestos que configuraste (' + (b.taxes.map(t => t.name + ' ' + t.rate + '%').join(', ') || 'ninguno') + '). Puedes cambiarlos en Ajustes → Impuestos.' });
+    else if (b.taxUnset) out.push({ k: 'tax', t: 'StockSoft no tiene impuestos predefinidos para ' + b.name + ': no se asume ningún porcentaje. Podrás configurar los tuyos en Ajustes → Impuestos.' });
+    else if (a.tax.rates.join() !== b.tax.rates.join()) out.push({ k: 'tax', t: b.tax.name + ': tipos sugeridos ' + b.tax.rates.map(x => x + '%').join(', ') + '. Los productos conservan el % que tienen; revisa los que no existan en ' + b.name + '.' });
     out.push({ k: 'pay', t: 'Formas de pago: ' + b.payments.map(p => p[1]).join(', ') + '.' });
     if (a.tz !== b.tz) out.push({ k: 'tz', t: 'Zona horaria: ' + b.tz + '.' });
     if (a.taxId !== b.taxId) out.push({ k: 'taxid', t: 'El número fiscal se llamará ' + b.taxId + '.' });
@@ -166,5 +239,5 @@
     return out;
   }
 
-  return { REGIONS, CURRENCIES, DEFAULT, BCV_KEYS, isCode, fromConfig, get, list, money, diff, tzOk };
+  return { REGIONS, CURRENCIES, COUNTRIES, DEFAULT, BCV_KEYS, isCode, isPreset, fromConfig, get, list, money, diff, tzOk, normTax, curInfo };
 });

@@ -23,6 +23,24 @@ const D = 864e5, NOW = Date.UTC(2026, 11, 10, 12);
 { const d = R.diff({ country: 'ES' }, 'VE'); T('R14', 'Vista previa ES→VE avisa de que se activa BCV', d.some(x => x.k === 'bcv' && /activan/.test(x.t)), d); }
 { T('R15', 'Mismo país: sin cambios', R.diff({ country: 'ES' }, 'ES').length === 0); }
 
+// --- Países sin configuración propia, monedas e impuestos del negocio ---
+{ const c = R.fromConfig({ country: 'CO' }), m = R.fromConfig({ country: 'MX' }), e = R.fromConfig({ country: 'ES' });
+  T('R16', 'Monedas: Colombia COP $ sin decimales, México MXN $, España EUR €; ninguno con BCV', c.currency.code === 'COP' && c.currency.dec === 0 && m.currency.code === 'MXN' && e.currency.symbol === '€' && ![c, m, e].some(r => r.features.bcv), [c.currency, m.currency, e.currency]); }
+{ const r = R.fromConfig({ country: 'PE' });
+  T('R17', 'País sin configuración (Perú): PEN S/, sin BCV y SIN ningún impuesto asumido (se configura a mano)', r.currency.code === 'PEN' && r.currency.symbol === 'S/' && !r.features.bcv && r.taxes.length === 0 && r.taxUnset && r.tax.def === 0 && r.methods.efectivo, { cur: r.currency, taxes: r.taxes, unset: r.taxUnset }); }
+{ const r = R.fromConfig({ country: 'GB' }), cl = R.fromConfig({ country: 'CL' });
+  T('R18', 'Moneda coherente con el país aunque no esté configurado: Reino Unido GBP £, Chile CLP sin decimales', r.currency.code === 'GBP' && r.currency.symbol === '£' && cl.currency.code === 'CLP' && cl.currency.dec === 0, [r.currency, cl.currency]); }
+{ const r = R.fromConfig({ country: 'PE', taxes: [{ id: 'igv', name: 'IGV', rate: 18, inc: true }, { id: 'isc', name: 'ISC', rate: 10, inc: false }, { name: 'malo', rate: -1 }], taxDef: 'igv' });
+  T('R19', 'Impuestos propios: nombre, %, incluido o sumado aparte, por defecto; se descartan los no válidos', r.taxes.length === 2 && r.taxDef.id === 'igv' && r.taxes[1].inc === false && r.tax.rates.join() === '18,10,0' && !r.taxUnset, r.taxes); }
+{ const r = R.fromConfig({ country: 'ES', taxes: [], taxDef: '' });
+  T('R20', 'El administrador puede dejar el negocio sin impuestos (lista vacía) aunque el país tenga sugeridos', r.taxes.length === 0 && r.taxCustom && !r.taxUnset && r.tax.def === 0); }
+{ const r = R.fromConfig({ country: 'VE', taxes: [{ id: 'x', name: 'IVA', rate: 16 }], taxDef: 'x' }), v = R.fromConfig({});
+  T('R21', 'Venezuela sin configurar = IVA 16/8 incluidos de siempre (p16 por defecto, 0 = Exento)', v.taxes.map(t => t.rate + ':' + t.inc).join() === '16:true,8:true' && v.taxDef.id === 'p16' && v.tax.labels[0] === 'Exento' && r.taxes.length === 1, v.taxes); }
+{ const d = R.diff({ country: 'ES', taxes: [{ id: 'a', name: 'IVA', rate: 21 }] }, 'PE'); const u = R.diff({ country: 'ES' }, 'PE');
+  T('R22', 'Cambio de país: los impuestos propios se conservan; a un país sin configuración no se le asume ninguno', d.some(x => x.k === 'tax' && /conservan/.test(x.t)) && u.some(x => x.k === 'tax' && /no se asume/.test(x.t)), [d, u]); }
+{ const rules = require('fs').readFileSync(require('path').join(__dirname, '..', 'firestore.rules'), 'utf8'); const m = rules.match(/country in \[([^\]]+)\]/); const inRules = m ? m[1].match(/'([A-Z]{2})'/g).map(x => x.slice(1, 3)).sort().join() : '';
+  T('R23', 'Las reglas admiten exactamente los países del catálogo', inRules === [...Object.keys(R.REGIONS), ...Object.keys(R.COUNTRIES)].sort().join(), inRules); }
+
 // --- Precios ---
 const ctx = (o) => ({ now: NOW, store: { promoStart: NOW - 10 * D }, isNew: true, ...o });
 { const q = ['m1', 'm3', 'm6', 'm12'].map(d => P.quote('VE', d, { now: NOW, store: {}, isNew: true }));

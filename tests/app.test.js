@@ -26,4 +26,14 @@ const items = [{ price: 8.5, qty: 1, iva: 10 }, { price: 4.2, qty: 1, iva: 21 },
   T('A7', 'Regresión: negocio nuevo de España se crea SIN campos BCV ni IGTF (las reglas los rechazarían)', !SSRegion.BCV_KEYS.some(k => k in c) && !('igtf' in c) && c.name === 'X', Object.keys(c));
   const v = e.newBizCfg({ country: 'VE', name: 'Y' });
   T('A8', 'Negocio nuevo de Venezuela conserva bcv/eur/igtf por defecto', 'bcv' in v && 'igtf' in v, Object.keys(v)); }
+{ const e = env('US', {}); e.REG = SSRegion.fromConfig({ country: 'US', taxes: [{ id: 'st', name: 'Sales tax', rate: 8.875, inc: false }], taxDef: 'st' });
+  const t = e.taxCalc([{ price: 10, qty: 2, iva: 8.875, ivaN: 'Sales tax', ivaInc: false }, { price: 5, qty: 1, iva: 0 }], 0);
+  T('A9', 'Impuesto que se suma aparte: base 20, impuesto 1,78 se añade al total (26,78); exento 5', t.sub === 25 && t.add === 1.78 && t.total === 26.78 && t.rows[0].x === true && t.rows[0].n === 'Sales tax' && t.ex === 5, t);
+  T('A10', 'Regresión: venta con impuesto sumado tampoco contiene listas anidadas', !nested({ tax: { rows: t.rows } }), t.rows);
+  T('A11', 'taxRows devuelve nombre y si se suma (para facturas y reportes)', JSON.stringify(e.taxRows({ rows: t.rows })[0]) === '[8.875,20,1.78,"Sales tax",true]', e.taxRows({ rows: t.rows })); }
+{ const e = env('PE', {}); const t = e.taxCalc([{ price: 10, qty: 1 }], 0);
+  T('A12', 'País sin impuestos configurados: se vende sin impuesto (no se asume ningún %)', t.total === 10 && t.rows.length === 0 && t.ex === 10, t); }
+{ const e = env('PE', {}); e.REG = SSRegion.fromConfig({ country: 'PE', taxes: [{ id: 'igv', name: 'IGV', rate: 18 }], taxDef: 'igv' });
+  const t = e.taxCalc([{ price: 11.8, qty: 1, iva: 18, ivaN: 'IGV' }], 0);
+  T('A13', 'Impuesto propio incluido (IGV 18 %): base 10, IGV 1,80, total 11,80 sin sumar nada', t.total === 11.8 && t.add === 0 && t.rows[0].b === 10 && t.rows[0].i === 1.8 && t.rows[0].n === 'IGV', t); }
 process.exit(end() ? 0 : 1);
