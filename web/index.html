@@ -812,7 +812,9 @@ function regionCard(){
    El administrador crea, edita y borra sus impuestos (nombre, %, incluido o sumado) y elige el de por defecto.
    Se guardan en config/main (taxes, taxDef). Los sugeridos del país son solo un punto de partida, sin validar. */
 function prodTaxOpts(p){
-  const cur = taxOfP(p), opts = taxChoices().map(t => [t.id || '__none', taxLbl(t), sameTax(t, cur)]);
+  // Con los tipos sugeridos del país se usan sus nombres de siempre (Venezuela: General 16%, Reducido 8%, Exento).
+  const lbl = t => (!REG.taxCustom && REG.tax.labels[t.rate]) || taxLbl(t);
+  const cur = taxOfP(p), opts = taxChoices().map(t => [t.id || '__none', lbl(t), sameTax(t, cur)]);
   if (cur.rate && !REG.taxes.some(t => sameTax(t, cur))) opts.unshift(['r:' + cur.rate + ':' + (cur.inc ? 1 : 0), taxLbl(cur) + ' (valor anterior)', true]);
   return opts.map(([v, l, s]) => `<option value="${esc(v)}" ${s ? 'selected' : ''}>${esc(l)}</option>`).join('');
 }
