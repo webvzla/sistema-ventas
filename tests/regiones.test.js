@@ -41,6 +41,19 @@ const D = 864e5, NOW = Date.UTC(2026, 11, 10, 12);
 { const rules = require('fs').readFileSync(require('path').join(__dirname, '..', 'firestore.rules'), 'utf8'); const m = rules.match(/country in \[([^\]]+)\]/); const inRules = m ? m[1].match(/'([A-Z]{2})'/g).map(x => x.slice(1, 3)).sort().join() : '';
   T('R23', 'Las reglas admiten exactamente los países del catálogo', inRules === [...Object.keys(R.REGIONS), ...Object.keys(R.COUNTRIES)].sort().join(), inRules); }
 
+// --- Documentos, modalidad de precios y número fiscal ---
+{ const v = R.fromConfig({}), e = R.fromConfig({ country: 'ES' }), m = R.fromConfig({ country: 'MX' });
+  T('D1', 'Documentos: Venezuela factura fiscal + nota de entrega (con consumidor final); España venta sin documento, factura simplificada (por defecto) y completa', v.docs.kinds.join() === 'fiscal,nota' && v.docs.cf && e.docs.kinds.join() === 'venta,simple,fiscal' && e.docs.def === 'simple' && e.docs.labels.simple === 'Factura simplificada' && !e.docs.cf && m.docs.kinds.join() === 'venta,simple,fiscal' && m.docs.def === 'venta', [v.docs, e.docs]); }
+{ T('D2', 'Modalidad de precios por defecto: España y Venezuela con impuestos incluidos, EE. UU. sin incluir', R.fromConfig({ country: 'ES' }).taxMode === 'inc' && R.fromConfig({}).taxMode === 'inc' && R.fromConfig({ country: 'US' }).taxMode === 'exc');
+  const x = R.fromConfig({ country: 'ES', taxMode: 'exc' });
+  T('D3', 'El negocio elige "no incluyen": todos sus impuestos pasan a sumarse al cobrar', x.taxMode === 'exc' && x.taxes.every(t => t.inc === false) && x.taxModeSet, x.taxes);
+  const mx = R.fromConfig({ country: 'PE', taxes: [{ id: 'a', name: 'IGV', rate: 18, inc: true }, { id: 'b', name: 'R', rate: 10, inc: false }] });
+  T('D4', 'Impuestos propios anteriores con modos distintos se respetan ("mixto") hasta que se elija una modalidad', mx.taxMode === 'mixed' && mx.taxes[0].inc && !mx.taxes[1].inc && R.fromConfig({ country: 'PE', taxMode: 'inc', taxes: mx.taxes }).taxes.every(t => t.inc)); }
+{ const ok = (c, v) => R.validTaxId(c, v).ok;
+  T('D5', 'NIF de España: DNI, NIE y CIF con dígito de control; letra incorrecta rechazada', ok('ES', '12345678Z') && !ok('ES', '12345678A') && ok('ES', 'X1234567L') && ok('ES', 'b-1234567-4') && !ok('ES', '1234'));
+  T('D6', 'Nunca valores de relleno fuera de Venezuela: V00000000 rechazado en España (y en México); en Venezuela sigue siendo el consumidor final', !ok('ES', 'V00000000') && !ok('MX', '000000000000') && ok('VE', 'V00000000'));
+  T('D7', 'RFC de México y NIT de Colombia', ok('MX', 'GODE561231GR8') && !ok('MX', 'ABC') && ok('CO', '900123456') && !ok('CO', 'ABC')); }
+
 // --- Precios ---
 const ctx = (o) => ({ now: NOW, store: { promoStart: NOW - 10 * D }, isNew: true, ...o });
 { const q = ['m1', 'm3', 'm6', 'm12'].map(d => P.quote('VE', d, { now: NOW, store: {}, isNew: true }));

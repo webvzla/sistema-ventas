@@ -105,7 +105,8 @@ service cloud.firestore {
         allow create: if validMember() && (
           (signed() && b == request.auth.uid && uid == request.auth.uid && request.resource.data.role == 'admin' && licensedAfter(b)) ||
           admin(b));
-        allow update: if validMember() && admin(b);
+        // Cada usuario puede marcar en su propia ficha que ya vio el tutorial (y nada más).
+        allow update: if validMember() && (admin(b) || (member(b) && uid == request.auth.uid && onlyKeys(['tourDone'])));
         allow delete: if admin(b);
       }
       // Configuración regional: el país (config/main.country) solo lo cambia el administrador y queda firmado.
@@ -121,7 +122,7 @@ service cloud.firestore {
         allow read: if member(b);
         allow create: if admin(b) && countryOk() && (!bcvTouched() || veAfter());
         allow update: if (admin(b) && countryOk() && (!bcvTouched() || veAfter()))
-          || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']) && (!bcvTouched() || veAfter()));
+          || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'simpSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']) && (!bcvTouched() || veAfter()));
       }
       function isVE() { let c = /databases/$(database)/documents/biz/$(b)/config/main; return !exists(c) || get(c).data.get('country', 'VE') == 'VE'; }
       match /rates/{d} { allow read: if member(b); allow write: if member(b) && isVE(); }

@@ -37,4 +37,11 @@ const items = [{ price: 8.5, qty: 1, iva: 10 }, { price: 4.2, qty: 1, iva: 21 },
   const t = e.taxCalc([{ price: 11.8, qty: 1, iva: 18, ivaN: 'IGV' }], 0);
   T('A13', 'Impuesto propio incluido (IGV 18 %): base 10, IGV 1,80, total 11,80 sin sumar nada', t.total === 11.8 && t.add === 0 && t.rows[0].b === 10 && t.rows[0].i === 1.8 && t.rows[0].n === 'IGV', t); }
 T('A14', 'Regresión: la app no busca países solo entre los configurados (fallaba al cambiar desde Perú)', !/SSRegion\.REGIONS\[/.test(H));
+{ const e = env('ES', {}); const inc = e.taxCalc([{ price: 1.2, qty: 1, iva: 21, ivaN: 'IVA', ivaInc: true }], 0), exc = e.taxCalc([{ price: 1.2, qty: 1, iva: 21, ivaN: 'IVA', ivaInc: false }], 0);
+  T('A15', 'Ejemplo de España con IVA incluido: precio 1,20 → base 0,99 + IVA 0,21 = 1,20', inc.rows[0].b === 0.99 && inc.rows[0].i === 0.21 && inc.total === 1.2 && inc.add === 0, inc);
+  T('A16', 'Ejemplo de España sin IVA incluido: precio 1,20 → base 1,20 + IVA 0,25 = 1,45', exc.rows[0].b === 1.2 && exc.rows[0].i === 0.25 && exc.total === 1.45 && exc.add === 0.25, exc);
+  const two = e.taxCalc([{ price: 1.2, qty: 2, iva: 21, ivaInc: false }, { price: 1.2, qty: 1, iva: 21, ivaInc: false }], 0);
+  T('A17', 'Sin duplicar impuestos: tres unidades sin IVA incluido = 3,60 + 0,76 una sola vez (4,36)', two.rows.length === 1 && two.total === 4.36 && two.add === 0.76, two); }
+T('A18', 'Consumidor final con V00000000 solo cuando el país lo permite (Venezuela), nunca fijo para todos', /REG\.docs\.cf \? `<button[^`]*V00000000/.test(H) && !/onclick="ui\.cust=\{rif:'V00000000'[^"]*"\>Consumidor final<\/button><\/div>\s*\n\s*<div class="grid2"><div><label>\$\{REG\.code === 'VE'/.test(H));
+T('A19', 'Tutorial y Ayuda presentes: pasos sobre la interfaz real (navegación y Más) y buscador', /const TOUR = \[/.test(H) && /#nav button\[data-v="vender"\]/.test(H) && /function helpSearch/.test(H) && /window\.SSHelp/.test(H));
 process.exit(end() ? 0 : 1);

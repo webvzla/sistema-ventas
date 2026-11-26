@@ -207,12 +207,24 @@ a{color:var(--acc2)}
 .lg-card h2{margin-top:18px}
 body.locked header,body.locked nav,body.locked main{visibility:hidden}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}.btn::after{display:none}}
+
+/* Tutorial de bienvenida y centro de ayuda */
+#tour{position:fixed;inset:0;z-index:9000;display:none}
+#tour.on{display:block}
+#tour .tour-hl{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(3,8,20,.62);outline:2px solid var(--acc);transition:all .2s ease;pointer-events:none}
+#tour .tour-pop{position:fixed;background:var(--solid,#101a33);color:var(--tx);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:0 12px 40px rgba(0,0,0,.45);max-width:calc(100vw - 24px)}
+#tour .tour-step{font-size:12px;color:var(--mut);float:right}
+#tour .tour-dots{display:flex;gap:4px;margin-bottom:8px}#tour .tour-dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}#tour .tour-dots i.on{background:var(--acc)}
+#tour .tour-t{font-weight:800;font-size:16px;margin-bottom:4px}#tour .tour-d{font-size:14px;line-height:1.45;color:var(--tx)}
+#tour .tour-btns{display:flex;gap:6px;margin-top:12px;align-items:center;flex-wrap:wrap}
+.help-cats{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.help-cats .chip.on{background:var(--acc);color:#04121f}
+.help-a summary{cursor:pointer;list-style:none}.help-a summary::-webkit-details-marker{display:none}.help-a .help-body{font-size:14px;line-height:1.5;margin-top:8px}.help-a .help-body ol,.help-a .help-body ul{margin:6px 0 0 18px}
 </style>
 </head>
 <body>
 <header>
   <div class="brand" id="brand">Mi <span>Negocio</span></div>
-  <div class="row" style="gap:6px"><button class="chip" id="rateChip" onclick="go('tasas')">Tasa: <b>—</b></button><button class="chip" id="userChip" onclick="userMenu()" aria-label="Usuario">👤</button></div>
+  <div class="row" style="gap:6px"><button class="chip" id="rateChip" onclick="go('tasas')">Tasa: <b>—</b></button><button class="chip" id="helpChip" onclick="go('mas','ayuda')" aria-label="Ayuda" title="Ayuda">?</button><button class="chip" id="userChip" onclick="userMenu()" aria-label="Usuario">👤</button></div>
 </header>
 <main id="main"></main>
 <nav id="nav"></nav>
@@ -305,6 +317,7 @@ function applyRegion(){
   if (applyRegion.sig !== sig){
     applyRegion.sig = sig; setRegionFormats(r); shellFor = '';
     try { if (ui.pay && !r.methods[ui.pay.method]) ui.pay.method = Object.keys(r.methods)[0]; } catch(e){}
+    try { if (!r.docs.kinds.includes(ui.doc)) ui.doc = docDefault(); } catch(e){}
   }
   // Temporizadores de tasa: solo con un negocio de Venezuela abierto y su configuración ya cargada.
   try { if (r.features.bcv && me) ensureRateTimers(); else stopRateTimers(); } catch(e){}
@@ -413,7 +426,7 @@ async function initData(){
   }, e => { pending.delete('cfg'); render(); });
 }
 
-function onLoaded(){ ui.doc = cfg.docDefault || 'fiscal'; if (CLOUD()){ if (me) checkSession(); return; } if (me) checkSession(); else tryResume(); }
+function onLoaded(){ ui.doc = docDefault(); if (CLOUD()){ if (me) checkSession(); return; } if (me) checkSession(); else tryResume(); }
 /* ============ Cálculos ============ */
 const products = () => Object.entries(S.products).map(([id, p]) => ({id, ...p})).sort((a, b) => String(a.name).localeCompare(b.name, 'es'));
 const clients = () => Object.entries(S.clients).map(([id, c]) => ({id, ...c}));
@@ -701,6 +714,7 @@ function stopRateTimers(){
 }
 function afterLogin(){
   checkPaymentReturn();
+  setTimeout(() => { try { if (tourAuto()) startTour(); } catch(e){ console.warn('tutorial', e); } }, 2500);
   autoRates(); setTimeout(smartDaily, 8000);
   if (window.desktop) setTimeout(() => autoBackup(), 4000);
   if (afterLoginDone) return; afterLoginDone = true;
@@ -778,6 +792,25 @@ function countryOptions(sel){
   const L = SSRegion.list(), o = r => `<option value="${r.code}" ${r.code === sel ? 'selected' : ''}>${r.flag} ${esc(r.name)}</option>`;
   return `<optgroup label="Configurados en StockSoft">${L.filter(r => r.preset).map(o).join('')}</optgroup><optgroup label="Otros países (impuestos a configurar)">${L.filter(r => !r.preset).map(o).join('')}</optgroup>`;
 }
+/* ---- Documentos al cobrar según el país ----
+   Venezuela: factura fiscal y nota de entrega (como siempre). Resto: venta sin documento, documento simplificado y
+   factura completa con los datos fiscales reales del cliente. Que el comprador no pida factura NO significa que la
+   venta no se registre: todas quedan en ventas, caja, inventario e informes (con sus impuestos). */
+const DOC_TITLE = {fiscal:'Factura', simple:'Factura simplificada', nota:'Nota de entrega', venta:'Venta', devolucion:'Devolución'};
+const docKinds = () => REG.docs.kinds;
+const docLabel = k => (REG.docs.labels && REG.docs.labels[k]) || DOC_TITLE[k] || k;
+function docDefault(){ const k = docKinds(), d = cfg.docDefault; if (REG.code !== 'VE' && !cfg.docSet) return REG.docs.def; return k.includes(d) ? d : REG.docs.def; }
+const taxedDoc = s => s.doc !== 'nota' && s.doc !== 'devolucion'; // la nota de entrega venezolana no es documento fiscal
+const docTitle = s => s.doc === 'simple' ? withSaleRegion(s, () => docLabel('simple')) : s.doc === 'venta' ? 'Venta sin documento' : DOC_TITLE[s.doc] || 'Venta';
+const docNo = s => s.doc === 'fiscal' ? s.fiscalNo || '' : s.doc === 'simple' ? s.simpNo || '' : s.noteNo || '';
+function docHint(t){
+  if (REG.code === 'VE') return '';
+  const k = ui.doc, max = REG.docs.simpleMax;
+  if (k === 'venta') return '<p class="note" style="margin-top:6px">Se registra la venta (inventario, pago, caja e impuestos) sin entregar documento al comprador. Queda en tus ventas e informes.</p>';
+  if (k === 'simple') return `<p class="note" style="margin-top:6px">${REG.code === 'ES' ? 'El cliente no necesita dar sus datos.' : 'Documento de control interno; consulta si en tu país tiene validez fiscal.'}</p>${max && t && t.total > max ? `<div class="warnbox" style="margin-top:6px">El importe supera ${esc(usd(max))}: normalmente corresponde factura completa. Revísalo con tu asesor.</div>` : ''}`;
+  if (k === 'fiscal') return `<p class="note" style="margin-top:6px">Pide los datos fiscales reales del cliente (${esc(REG.taxId)}, nombre${REG.docs.fullAddr ? ' y dirección' : ''}). StockSoft no inventa ni completa números.</p>`;
+  return '';
+}
 function regionInit(code, byUid, byName){
   const r = SSRegion.get(SSRegion.isCode(code) ? code : SSRegion.DEFAULT), now = Date.now();
   return {country:r.code, regionAt:now, regionBy:byUid, regionByName:byName || '', tz:r.tz, cc:r.cc || '58', regionLog:[{from:'', to:r.code, at:now, by:byUid, name:byName || ''}]};
@@ -826,7 +859,11 @@ function prodTaxVal(v){
 }
 function taxCard(){
   const r = REG, L = r.taxes, def = r.taxDef ? r.taxDef.id : '';
+  const md = r.taxMode;
   return `<h3>Impuestos</h3><div class="card">
+  <div class="name" style="font-size:14px">Precios de venta</div>
+  <div class="seg" style="margin:6px 0 4px;flex-wrap:wrap"><button class="${md === 'inc' ? 'on' : ''}" onclick="taxModeForm('inc')">Incluyen impuestos</button><button class="${md === 'exc' ? 'on' : ''}" onclick="taxModeForm('exc')">No incluyen impuestos</button></div>
+  <p class="note" style="margin-top:2px">${md === 'inc' ? 'El precio que pones es el que paga el cliente; StockSoft separa la base y el impuesto.' : md === 'exc' ? 'El precio que pones es la base; al cobrar se suma el impuesto.' : 'Tus impuestos tienen modos distintos (cada uno el suyo). Elige uno para todo el negocio.'}</p>
   ${r.taxUnset ? `<div class="warnbox" style="margin-bottom:10px">StockSoft no tiene impuestos predefinidos para ${esc(r.name)}. Añade los que uses (nombre y porcentaje) o trabaja sin impuesto mientras decides.</div>` : ''}
   ${!r.taxCustom && L.length ? `<p class="note" style="margin-top:0">${r.code === 'VE' ? 'Tipos de IVA de siempre en StockSoft.' : 'Tipos sugeridos para ' + esc(r.name) + ', <b>no validados oficialmente</b>: revísalos con tu contador.'} Puedes cambiarlos.</p>` : ''}
   <div class="list">${L.map(t => `<div class="item row"><div class="grow"><div class="name">${esc(t.name)} ${nfq.format(t.rate)}%${def === t.id ? ' <span class="pill ok">por defecto</span>' : ''}</div><div class="sub">${t.inc ? 'Incluido en el precio' : 'Se suma al precio al cobrar'}</div></div><button class="btn sm sec" onclick="taxForm('${esc(t.id)}')">Editar</button></div>`).join('') || '<div class="empty">Sin impuestos: las ventas no llevan impuesto.</div>'}</div>
@@ -847,12 +884,12 @@ function taxForm(id){
   openSheet(`<h2>${t ? 'Editar impuesto' : 'Nuevo impuesto'}</h2>
   <div class="grid2"><div><label>Nombre</label><input id="txN" maxlength="30" value="${esc(t ? t.name : '')}" placeholder="Ej: IVA, IGV, GST, Sales tax" autofocus></div>
   <div><label>Porcentaje (%)</label><input id="txR" inputmode="decimal" value="${t ? esc(String(t.rate).replace('.', ',')) : ''}" placeholder="Ej: 18"></div></div>
-  <label>¿Cómo se aplica?</label><select id="txI"><option value="1" ${!t || t.inc ? 'selected' : ''}>Incluido en el precio (el precio ya lo lleva)</option><option value="0" ${t && !t.inc ? 'selected' : ''}>Se suma aparte al cobrar</option></select>
+  ${REG.taxMode === 'mixed' ? `<label>¿Cómo se aplica?</label><select id="txI"><option value="1" ${!t || t.inc ? 'selected' : ''}>Incluido en el precio (el precio ya lo lleva)</option><option value="0" ${t && !t.inc ? 'selected' : ''}>Se suma aparte al cobrar</option></select>` : `<p class="note">Se aplica según la modalidad del negocio: ${REG.taxMode === 'inc' ? 'incluido en el precio' : 'se suma al precio al cobrar'}.</p>`}
   <label class="row" style="gap:8px;margin-top:12px;color:var(--tx);font-size:14px"><input type="checkbox" id="txD" class="chk" ${!REG.taxDef || (t && REG.taxDef.id === t.id) ? 'checked' : ''}> Usarlo por defecto en los productos nuevos</label>
   <div class="sheet-actions">${t ? `<button class="btn bad" onclick="taxDel('${esc(t.id)}')">Eliminar</button>` : `<button class="btn sec" onclick="closeSheet()">Cancelar</button>`}<button class="btn" onclick="taxSave(${t ? `'${esc(t.id)}'` : 'null'})">Guardar</button></div>`);
 }
 function taxSave(id){
-  const name = $('#txN').value.trim().slice(0, 30), rate = Math.round(num($('#txR').value) * 1000) / 1000, inc = $('#txI').value === '1';
+  const name = $('#txN').value.trim().slice(0, 30), rate = Math.round(num($('#txR').value) * 1000) / 1000, inc = $('#txI') ? $('#txI').value === '1' : REG.taxMode !== 'exc';
   if (!name){ toast('Ponle un nombre (ej: IVA)'); return; }
   if (!(rate > 0 && rate <= 50)){ toast('El porcentaje debe ser mayor que 0 y como mucho 50'); return; }
   const L = taxList(), nid = id || ('t' + Date.now().toString(36)), cur = REG.taxDef ? REG.taxDef.id : '';
@@ -866,6 +903,22 @@ function taxDel(id){
     const cur = REG.taxDef ? REG.taxDef.id : '';
     saveTaxes(taxList().filter(x => x.id !== id), cur === id ? '' : cur, 'Impuesto eliminado: ' + t.name);
   });
+}
+// Cambiar la modalidad: los precios guardados NO se tocan; se avisa con un ejemplo real de cómo cambia el precio final.
+function taxModeForm(mode){
+  if (!isAdmin()){ toast('Solo el administrador puede cambiar los impuestos'); return; }
+  if (REG.taxMode === mode && REG.taxModeSet) return;
+  const p = products().find(x => num(taxOfP(x).rate)) || null, tx = p ? taxOfP(p) : (REG.taxDef || REG.taxes[0]);
+  let ej = '';
+  if (tx && num(tx.rate)){
+    const price = p ? num(p.price) : 100, r = num(tx.rate), fmt = n => usd(r2(n));
+    const now = REG.taxMode === 'exc' ? price * (1 + r / 100) : price, then = mode === 'exc' ? price * (1 + r / 100) : price;
+    ej = `<div class="card" style="margin-top:8px">Ejemplo${p ? ' con <b>' + esc(p.name) + '</b>' : ''} (precio ${fmt(price)}, ${esc(tx.name)} ${nfq.format(r)}%):<br>ahora se cobra <b>${fmt(now)}</b> → pasará a cobrarse <b>${fmt(then)}</b>.<br><span class="sub">${mode === 'exc' ? 'Base ' + fmt(price) + ' + impuesto ' + fmt(price * r / 100) : 'Base ' + fmt(price / (1 + r / 100)) + ' + impuesto ' + fmt(price - price / (1 + r / 100))}</span></div>`;
+  }
+  ask(mode === 'inc' ? 'Precios con impuestos incluidos' : 'Precios sin impuestos', (mode === 'inc' ? 'El precio de cada producto será el precio final.' : 'Al cobrar se sumará el impuesto al precio de cada producto.') + ' Tus precios guardados no cambian y las ventas anteriores tampoco. Si quieres mantener el mismo precio final, revisa tus precios después.', 'Cambiar', async () => {
+    if (await putCfg({taxMode:mode})){ logA('admin', 'Impuestos cambiados', mode === 'inc' ? 'Precios con impuestos incluidos' : 'Precios sin impuestos (se suman al cobrar)'); const mx = $('#mx'); if (mx) delete mx.dataset.done; shellFor = ''; render(); toast(mode === 'inc' ? 'Precios con impuestos incluidos' : 'Los impuestos se sumarán al cobrar'); }
+  }, false);
+  if (ej) $('#sheet .note').insertAdjacentHTML('afterend', ej);
 }
 function taxSetDef(v){ saveTaxes(taxList(), v, v ? 'Impuesto por defecto: ' + taxLbl(taxById(v)) : 'Productos nuevos sin impuesto por defecto'); }
 function taxReset(){
@@ -1034,6 +1087,130 @@ async function savePromo(clear){
   const start = clear || !v ? 0 : new Date(v + 'T00:00:00').getTime();
   try { await FB.fs.doc('store/config').set({promoStart:start, promoDays:SSPrices.PROMO.days, updatedAt:Date.now(), updatedBy:me.u}, {merge:true}); toast(start ? 'Promoción guardada' : 'Promoción quitada'); fillLicenses(); } catch(e){ toast(fbMsg(e)); }
 }
+
+/* ============ Tutorial de bienvenida ============
+   Recorre las secciones reales señalando el botón o la opción de la interfaz. Se muestra solo la primera vez
+   (negocio sin ventas o usuario recién creado) y se puede repetir desde Ayuda. Se recuerda por usuario (en la nube,
+   campo tourDone de su ficha) y en este dispositivo. */
+const TOUR = [
+  {v:'panel', admin:true, sel:'#nav button[data-v="panel"]', t:'Dashboard', d:'Tu resumen: ventas, ganancia, gastos y actividad del negocio de un vistazo.'},
+  {v:'inicio', vend:true, sel:'#nav button[data-v="inicio"]', t:'Inicio', d:'Resumen del día: lo vendido hoy y los avisos importantes.'},
+  {v:'vender', sel:'#nav button[data-v="vender"]', t:'Vender', d:'Busca o escanea productos, revisa el total con impuestos, elige el documento y la forma de pago, y cobra.'},
+  {v:'inventario', sel:'#nav button[data-v="inventario"]', t:'Inventario', d:'Añade productos con precio, costo, stock e impuesto. También puedes importar tu Excel.'},
+  {v:'fiados', sel:'#nav button[data-v="fiados"]', t:'Clientes', d:'Registra clientes, consulta cuánto te deben (fiados) y anota sus abonos.'},
+  {v:'proveedores', admin:true, sel:'#nav button[data-v="proveedores"]', t:'Proveedores', d:'Guarda tus proveedores, registra las compras y lo que les pagas.'},
+  {v:'mas', sel:'#main .item[onclick*="\'caja\'"]', t:'Caja', d:'Abre la caja con el efectivo inicial y ciérrala al final del día: StockSoft calcula lo esperado y las diferencias.'},
+  {v:'mas', admin:true, sel:'#main .item[onclick*="\'reportes\'"]', t:'Reportes', d:'Ventas, ganancias, impuestos y lo más vendido por periodo.'},
+  {v:'mas', sel:'#main .item[onclick*="\'ayuda\'"]', t:'Ayuda', d:'Guías paso a paso y preguntas frecuentes. Desde aquí puedes repetir este recorrido.'}
+];
+const tourKey = () => 'ss_tour_' + (me ? me.u : '');
+function tourSeen(){ let l = null; try { l = localStorage.getItem(tourKey()); } catch(e){} return !!l || !!(me && S.users[me.u] && S.users[me.u].tourDone); }
+function tourAuto(){
+  if (!me || tourSeen() || ui.renew || $('#ov').classList.contains('on')) return false;
+  const created = num((S.users[me.u] || {}).created);
+  return !Object.keys(S.sales).length || (created && Date.now() - created < 7 * 864e5);
+}
+async function tourDone(){
+  try { localStorage.setItem(tourKey(), String(Date.now())); } catch(e){}
+  if (!me) return;
+  if (S.users[me.u]) S.users[me.u].tourDone = Date.now();
+  try { if (backend === 'cloud') await DB.collection('users').doc(me.u).set({tourDone:Date.now()}, {merge:true}); else saveLocal(); } catch(e){ console.warn('tutorial', e); }
+}
+let tour = null;
+function startTour(){
+  const steps = TOUR.filter(x => (!x.admin || isAdmin()) && (!x.vend || !isAdmin()));
+  closeSheet(); tour = {steps, i:0};
+  if (!$('#tour')) document.body.insertAdjacentHTML('beforeend', '<div id="tour" role="dialog" aria-modal="true" aria-label="Tutorial de bienvenida"><div class="tour-hl"></div><div class="tour-pop"></div></div>');
+  window.addEventListener('resize', tourPlace); document.addEventListener('keydown', tourKeys);
+  tourShow();
+}
+function tourKeys(e){ if (!tour) return; if (e.key === 'Escape') tourEnd(); else if (e.key === 'ArrowRight') tourNext(1); else if (e.key === 'ArrowLeft') tourNext(-1); }
+function tourShow(){
+  const st = tour.steps[tour.i];
+  if (view !== st.v || sub) go(st.v);
+  setTimeout(() => {
+    const el = document.querySelector(st.sel);
+    if (!el){ // la opción no existe para este usuario: se salta
+      if (tour.i < tour.steps.length - 1){ tour.steps.splice(tour.i, 1); tourShow(); } else tourEnd(true);
+      return;
+    }
+    el.scrollIntoView({block:'center', behavior:'instant'});
+    const n = tour.steps.length, last = tour.i === n - 1;
+    $('#tour .tour-pop').innerHTML = `<div class="tour-step">${tour.i + 1} de ${n}</div><div class="tour-dots">${tour.steps.map((x, k) => `<i class="${k === tour.i ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="tour-t">${esc(st.t)}</div><div class="tour-d">${esc(st.d)}</div>
+      <div class="tour-btns"><button class="btn sm sec" onclick="tourEnd()">Saltar tutorial</button><span class="grow"></span>${tour.i ? '<button class="btn sm sec" onclick="tourNext(-1)">Anterior</button>' : ''}<button class="btn sm" onclick="tourNext(1)">${last ? 'Terminar' : 'Siguiente'}</button></div>`;
+    $('#tour').classList.add('on'); tourPlace();
+  }, 260);
+}
+function tourPlace(){
+  if (!tour || !$('#tour')) return;
+  const el = document.querySelector(tour.steps[tour.i].sel), hl = $('#tour .tour-hl'), pop = $('#tour .tour-pop');
+  if (!el) return;
+  const r = el.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight, pad = 6;
+  Object.assign(hl.style, {left:(r.left - pad) + 'px', top:(r.top - pad) + 'px', width:(r.width + pad * 2) + 'px', height:(r.height + pad * 2) + 'px'});
+  const w = Math.min(340, vw - 24); pop.style.width = w + 'px';
+  pop.style.left = Math.max(12, Math.min(vw - w - 12, r.left + r.width / 2 - w / 2)) + 'px';
+  if (r.top + r.height / 2 > vh / 2){ pop.style.top = ''; pop.style.bottom = (vh - r.top + 14) + 'px'; } else { pop.style.bottom = ''; pop.style.top = (r.bottom + 14) + 'px'; }
+}
+function tourNext(d){ if (!tour) return; const j = tour.i + d; if (j >= tour.steps.length) return tourEnd(true); if (j < 0) return; tour.i = j; tourShow(); }
+function tourEnd(completed){
+  tour = null; const t = $('#tour'); if (t) t.remove();
+  window.removeEventListener('resize', tourPlace); document.removeEventListener('keydown', tourKeys);
+  tourDone(); toast(completed ? '¡Listo! Puedes repetir el tutorial desde Ayuda' : 'Tutorial omitido. Lo tienes en Más → Ayuda');
+}
+
+/* ============ Centro de Ayuda ============
+   Guías por módulo con buscador. Cada artículo: {id, cat, q (pregunta), a (respuesta en HTML), go:[vista, sub], admin, k (palabras clave)}.
+   window.SSHelp expone los artículos y la búsqueda: es el punto de entrada previsto para un futuro asistente propio
+   (sin IA ni servicios externos por ahora). */
+const HELP_CATS = ['Primeros pasos', 'Dashboard', 'Ventas y cobros', 'Productos e inventario', 'Excel', 'Clientes y fiados', 'Proveedores y compras', 'Caja', 'Reportes', 'Configuración', 'Usuarios y seguridad', 'Licencia'];
+const HELP = [
+  {id:'inicio', cat:'Primeros pasos', q:'¿Por dónde empiezo?', a:'<ol><li>En <b>Más → Ajustes del negocio</b> revisa tu país, la moneda y tus impuestos, y completa nombre, número fiscal y dirección (salen en tus documentos).</li><li>En <b>Inventario</b> añade tus productos con <b>+ Producto</b> o impórtalos desde Excel.</li><li>Si tendrás empleados, créalos en <b>Más → Usuarios</b>.</li><li>Abre la caja en <b>Más → Caja</b> y empieza a vender en <b>Vender</b>.</li></ol>', go:['mas', 'ajustes'], admin:true, k:'empezar configurar negocio'},
+  {id:'tutorial', cat:'Primeros pasos', q:'¿Cómo repito el tutorial de bienvenida?', a:'Pulsa <b>Repetir el tutorial</b> arriba en esta página. Puedes saltarlo en cualquier momento.', k:'recorrido guia'},
+  {id:'dash', cat:'Dashboard', q:'¿Qué muestra el Dashboard?', a:'Las ventas, la ganancia bruta, los gastos y el resultado del periodo, con gráficos y la actividad reciente. Toca un indicador (por ejemplo Gastos) para ir a su sección.', go:['panel'], admin:true, k:'panel resumen ganancias'},
+  {id:'vender', cat:'Ventas y cobros', q:'¿Cómo registro una venta?', a:'<ol><li>Entra en <b>Vender</b> y busca o escanea los productos (o usa <b>+ Servicio o artículo libre</b>).</li><li>Ajusta cantidades y, si hace falta, el impuesto de cada línea tocando su etiqueta.</li><li>Elige el <b>Documento</b> y la <b>Forma de pago</b> (o pago mixto).</li><li>Revisa el total (con la base y el impuesto) y pulsa <b>Cobrar</b>.</li></ol>', go:['vender'], k:'cobrar vender ticket'},
+  {id:'docs', cat:'Ventas y cobros', q:'¿Qué documento elijo al cobrar?', a:'Depende de tu país (se ve en el botón <b>Documento</b>). Fuera de Venezuela:<ul><li><b>Venta sin documento</b>: se registra la venta (inventario, pago, caja e impuestos) sin entregar documento al comprador.</li><li><b>Factura simplificada / ticket</b>: el cliente no tiene que dar datos.</li><li><b>Factura completa</b>: pide el número fiscal real, el nombre y, en España, la dirección del cliente.</li></ul>En Venezuela: <b>Factura fiscal</b> o <b>Nota de entrega</b>. El documento por defecto se cambia en Ajustes. Los documentos de StockSoft son de control interno: revisa con tu asesor tus obligaciones fiscales.', go:['vender'], k:'factura simplificada completa consumidor final nif'},
+  {id:'mixto', cat:'Ventas y cobros', q:'¿Cómo cobro con dos formas de pago?', a:'En <b>Vender</b>, en Forma de pago elige <b>Pago mixto</b> y añade cada pago con su monto hasta cubrir el total.', go:['vender'], k:'pago mixto dividir'},
+  {id:'devol', cat:'Ventas y cobros', q:'¿Cómo corrijo, anulo o devuelvo una venta?', a:'Abre la venta (desde el Dashboard o Inicio) y en <b>¿Hubo un error?</b> usa <b>Corregir venta</b>, <b>Cambiar forma de pago</b>, <b>Devolver productos</b> o <b>Anular</b>. Solo el administrador puede hacerlo.', admin:true, k:'anular devolucion error'},
+  {id:'cotiz', cat:'Ventas y cobros', q:'¿Cómo hago una cotización?', a:'En <b>Vender</b> añade los productos y pulsa <b>Cotización</b>. Las tienes en <b>Más → Cotizaciones</b>, en PDF o para enviar por WhatsApp, y puedes convertirlas en venta.', go:['mas', 'cotizaciones'], k:'presupuesto'},
+  {id:'precioimp', cat:'Ventas y cobros', q:'¿Los precios incluyen impuestos?', a:'Lo decide el administrador en <b>Más → Ajustes del negocio → Impuestos → Precios de venta</b>: <b>Incluyen impuestos</b> (el precio es el final) o <b>No incluyen impuestos</b> (se suman al cobrar). Cambiarlo no modifica tus precios guardados ni las ventas anteriores.', go:['mas', 'ajustes'], admin:true, k:'iva incluido base imponible'},
+  {id:'prod', cat:'Productos e inventario', q:'¿Cómo añado un producto?', a:'En <b>Inventario</b> pulsa <b>+ Producto</b>: nombre, precio de venta, costo, stock, impuesto y, si quieres, código de barras, foto, precio al mayor y vencimientos por lote.', go:['inventario'], admin:true, k:'nuevo producto articulo'},
+  {id:'stock', cat:'Productos e inventario', q:'¿Cómo repongo stock?', a:'Abre el producto y pulsa <b>+ Reponer stock</b>, o registra una compra en <b>Proveedores</b> para que el stock suba solo.', go:['inventario'], admin:true, k:'reponer existencias'},
+  {id:'etiq', cat:'Productos e inventario', q:'¿Cómo imprimo etiquetas o ajusto precios?', a:'En <b>Inventario</b>, en el menú de opciones: <b>Imprimir etiquetas</b> y <b>Ajustar precios en bloque</b> (sube o baja un % por categoría).', go:['inventario'], admin:true, k:'etiquetas codigo barras precios porcentaje'},
+  {id:'impxl', cat:'Excel', q:'¿Cómo importo mi inventario desde Excel?', a:'<ol><li>En <b>Inventario</b>, menú de opciones → <b>Importar desde Excel</b>.</li><li>Elige tu archivo: StockSoft encuentra la fila de títulos y las columnas.</li><li>Confirma lo que te pregunta (impuesto, si los precios lo incluyen, stock).</li><li>Revisa la vista previa e importa. Si te equivocas, usa <b>Deshacer última importación</b>.</li></ol>', go:['inventario'], admin:true, k:'importar excel csv'},
+  {id:'expxl', cat:'Excel', q:'¿Cómo exporto a Excel?', a:'En <b>Inventario</b> → <b>Exportar inventario a Excel</b>, o en <b>Más → Respaldo y exportar</b> para ventas, fiados y una copia completa.', go:['mas', 'respaldo'], admin:true, k:'exportar csv respaldo copia'},
+  {id:'cli', cat:'Clientes y fiados', q:'¿Cómo registro un cliente y sus fiados?', a:'En <b>Clientes</b> pulsa <b>+ Nuevo cliente</b>. Para vender fiado elige la forma de pago <b>Fiado</b> y el cliente. En su ficha ves lo que debe y anotas los <b>abonos</b>.', go:['fiados'], k:'fiado deuda abono saldo'},
+  {id:'prov', cat:'Proveedores y compras', q:'¿Cómo registro una compra a un proveedor?', a:'En <b>Proveedores</b> crea el proveedor con <b>+ Nuevo proveedor</b> y, en su ficha, registra la compra (sube el stock) y los pagos. Ves lo que le debes.', go:['proveedores'], admin:true, k:'compra proveedor pago'},
+  {id:'caja', cat:'Caja', q:'¿Cómo abro y cierro la caja?', a:'<ol><li><b>Más → Caja → Abrir caja</b> con el efectivo inicial.</li><li>Al final del día, <b>Cerrar caja</b>: cuenta el efectivo y StockSoft te muestra lo esperado y las diferencias.</li></ol>', go:['mas', 'caja'], k:'apertura cierre efectivo'},
+  {id:'gastos', cat:'Caja', q:'¿Dónde anoto los gastos?', a:'En <b>Más → Gastos</b> con <b>+ Registrar gasto</b> (alquiler, servicios, sueldos…). Se descuentan de la ganancia en el Dashboard.', go:['mas', 'gastos'], admin:true, k:'gasto alquiler sueldo'},
+  {id:'rep', cat:'Reportes', q:'¿Dónde veo ventas, ganancias e impuestos?', a:'En <b>Más → Reportes</b>: elige el periodo y verás lo vendido, la ganancia estimada, los documentos, los impuestos, por vendedor, por forma de pago y lo más vendido.', go:['mas', 'reportes'], admin:true, k:'informes estadisticas'},
+  {id:'pais', cat:'Configuración', q:'¿Cómo cambio el país, la moneda o los impuestos?', a:'En <b>Más → Ajustes del negocio</b>: <b>Configuración regional → Cambiar país</b> (con vista previa; las ventas anteriores no cambian) e <b>Impuestos</b> para crear, editar o borrar los tuyos y elegir el de por defecto.', go:['mas', 'ajustes'], admin:true, k:'pais moneda impuesto iva'},
+  {id:'datos', cat:'Configuración', q:'¿Cómo pongo mi logo y mis datos en las facturas?', a:'En <b>Más → Ajustes del negocio</b>: nombre, número fiscal, dirección, teléfono, correo y logo.', go:['mas', 'ajustes'], admin:true, k:'logo datos negocio'},
+  {id:'users', cat:'Usuarios y seguridad', q:'¿Cómo creo un usuario para un empleado?', a:'En <b>Más → Usuarios → + Nuevo usuario</b>. El <b>vendedor</b> vende y cobra pero no cambia precios, ajustes ni ve ganancias; el <b>administrador</b> puede todo.', go:['mas', 'usuarios'], admin:true, k:'empleado vendedor permisos'},
+  {id:'pass', cat:'Usuarios y seguridad', q:'¿Cómo cambio mi contraseña?', a:'En <b>Más → Cambiar mi contraseña</b>. Si la olvidaste, en la pantalla de entrada toca <b>¿Olvidaste tu contraseña?</b>.', go:['mas'], k:'contraseña clave'},
+  {id:'log', cat:'Usuarios y seguridad', q:'¿Puedo ver quién hizo cada cosa?', a:'Sí, en <b>Más → Registro de actividad</b>: ventas, cambios de precio, caja, correcciones y ajustes.', go:['mas', 'log'], admin:true, k:'actividad historial'},
+  {id:'lic', cat:'Licencia', q:'¿Cómo veo o renuevo mi licencia?', a:'En <b>Más → Mi licencia</b> ves el estado, el vencimiento y el historial, y las opciones para renovar. También puedes activar un código de activación cuando vence.', go:['mas', 'licencia'], admin:true, k:'licencia activar codigo renovar prueba'}
+];
+const helpNorm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function helpSearch(q, cat){
+  const words = helpNorm(q).split(/\s+/).filter(w => w.length > 1);
+  return HELP.filter(a => (!a.admin || isAdmin()) && (!cat || a.cat === cat) && words.every(w => helpNorm(a.q + ' ' + a.a.replace(/<[^>]+>/g, ' ') + ' ' + (a.k || '') + ' ' + a.cat).includes(w)));
+}
+window.SSHelp = {articles:HELP, categories:HELP_CATS, search:helpSearch};
+function fillHelp(){
+  const el = $('#mx'); if (!el) return;
+  el.innerHTML = `<div class="card help-top"><input id="hlQ" placeholder="Busca tu duda: factura, importar Excel, caja…" value="${esc(ui.hlQ || '')}" oninput="ui.hlQ=this.value;helpList()" autocomplete="off">
+    <div class="help-cats">${['', ...HELP_CATS].filter(c => !c || HELP.some(a => a.cat === c && (!a.admin || isAdmin()))).map(c => `<button class="chip ${(ui.hlC || '') === c ? 'on' : ''}" onclick="ui.hlC='${c}';fillHelp()">${c ? esc(c) : 'Todo'}</button>`).join('')}</div>
+    <div class="gap" style="margin-top:10px"><button class="btn sm" onclick="startTour()">Repetir el tutorial</button><button class="btn sm sec" onclick="helpSheet()">Contactar con soporte</button></div></div>
+  <div id="hlList" class="list" style="margin-top:12px"></div>`;
+  helpList();
+}
+function helpList(){
+  const L = helpSearch(ui.hlQ || '', ui.hlC || ''), box = $('#hlList'); if (!box) return;
+  box.innerHTML = L.length ? L.map(a => `<details class="item help-a" id="h_${a.id}"><summary><span class="sub">${esc(a.cat)}</span><div class="name">${esc(a.q)}</div></summary><div class="help-body">${a.a}${a.go ? `<button class="btn sm sec" style="margin-top:10px" onclick="helpGo('${a.go[0]}','${a.go[1] || ''}')">Ir a la sección →</button>` : ''}</div></details>`).join('')
+    : '<div class="empty">No encontramos esa duda. Prueba con otras palabras o escríbenos desde «Contactar con soporte».</div>';
+}
+function helpGo(v, s){ go(v, s || ''); }
 
 /* ============ Usuarios y contraseña ============ */
 let me = null;
@@ -1845,7 +2022,8 @@ function taxOfP(p){
   if (p.tax && taxById(p.tax)) return taxById(p.tax);
   if (p.iva == null || p.iva === '') return p.tax === '' ? TAX_NONE : (REG.taxDef || TAX_NONE);
   const r = num(p.iva); if (!r) return TAX_NONE;
-  const inc = p.taxInc !== false;
+  // Con una modalidad de precios para todo el negocio manda esa; con impuestos "mixtos", lo que tenía el producto.
+  const inc = REG.taxMode === 'mixed' ? p.taxInc !== false : REG.taxMode === 'inc';
   // Impuesto borrado o producto anterior: se conserva su porcentaje (y su nombre si lo tenía).
   return REG.taxes.find(t => t.rate === r && t.inc === inc) || {id:p.tax || '', name:p.taxN || REG.tax.name, rate:r, inc};
 }
@@ -2018,16 +2196,17 @@ function renderCart(){
     <div class="bsline" style="font-size:22px" id="totB">${cfg.bcv ? bs(t.total) : REG.features.bcv ? '<span style="font-size:14px;color:var(--warn)">Pon la tasa para ver Bs</span>' : ''}</div>
     <div class="s">${cfg.bcv ? 'Tasa dólar BCV ' + nf2.format(cfg.bcv) : ''}${cfg.eur && cfg.bcv ? ' · ≈ ' + eurF(usdToEur(t.total)) : ''}${t.igtf ? ' · incluye IGTF' : ''}</div></div>
     <label>Documento</label>
-    <div class="seg" style="margin:0"><button class="${fiscal ? 'on' : ''}" onclick="ui.doc='fiscal';renderCart()">Factura fiscal</button><button class="${!fiscal ? 'on' : ''}" onclick="ui.doc='nota';renderCart()">Nota de entrega (sin factura)</button></div>
+    <div class="seg" style="margin:0;flex-wrap:wrap">${docKinds().map(k => `<button class="${ui.doc === k ? 'on' : ''}" onclick="ui.doc='${k}';renderCart()">${esc(docLabel(k))}</button>`).join('')}</div>
+    ${docHint(t)}
     ${fiscal ? `<div class="card" style="margin-top:10px">
-      <div class="row between"><div class="name" style="font-size:14px">Datos para la factura</div><button class="btn sm sec" onclick="ui.cust={rif:'V00000000',name:'Consumidor final',addr:'',phone:''};renderCart()">Consumidor final</button></div>
+      <div class="row between"><div class="name" style="font-size:14px">Datos para la factura</div>${REG.docs.cf ? `<button class="btn sm sec" onclick="ui.cust={rif:'V00000000',name:'Consumidor final',addr:'',phone:''};renderCart()">Consumidor final</button>` : ''}</div>
       <div class="grid2"><div><label>${REG.code === 'VE' ? 'Cédula / RIF' : esc(REG.taxId)}</label><input id="f_rif" list="rifList" value="${esc(C.rif)}" placeholder="${REG.code === 'VE' ? 'V12345678 / J123456789' : ''}" oninput="custInput('rif',this.value)"><datalist id="rifList">${cl.filter(c => c.rif).map(c => `<option value="${esc(c.rif)}">${esc(c.name)}</option>`).join('')}</datalist></div>
       <div><label>Nombre o razón social</label><input id="f_name" value="${esc(C.name)}" oninput="custInput('name',this.value)"></div></div>
       <div id="rifHint" class="note" style="color:var(--acc)"></div>
-      <div class="grid2"><div><label>Dirección fiscal</label><input id="f_addr" value="${esc(C.addr)}" oninput="custInput('addr',this.value)" placeholder="Opcional"></div>
+      <div class="grid2"><div><label>Dirección fiscal</label><input id="f_addr" value="${esc(C.addr)}" oninput="custInput('addr',this.value)" placeholder="${REG.docs.fullAddr ? 'Obligatoria' : 'Opcional'}"></div>
       <div><label>Teléfono</label><input id="f_phone" value="${esc(C.phone)}" oninput="custInput('phone',this.value)" inputmode="tel" placeholder="Opcional"></div></div>
     </div>` : ''}
-    ${taxHtml(t, cfg.bcv, fiscal)}
+    ${taxHtml(t, cfg.bcv, fiscal || REG.code !== 'VE')}
     <label>Forma de pago</label>
     <div class="seg" style="margin:0 0 8px"><button class="${P.mode !== 'mixto' ? 'on' : ''}" onclick="ui.pay.mode='simple';renderCart()">Un solo pago</button><button class="${P.mode === 'mixto' ? 'on' : ''}" onclick="ui.pay.mode='mixto';if(!ui.pay.lines.length){ui.pay.lines=[];addPayLine()}else renderCart()">Pago mixto</button></div>
     ${P.mode !== 'mixto' ? `<select id="payM" onchange="ui.pay.method=this.value;renderCart()">${methodOpts(P.method)}</select>
@@ -2066,7 +2245,15 @@ async function checkout(){
   const clientId = st.fiado > 0 ? (($('#payC') || {}).value || P.client) : '';
   if (st.fiado > 0 && !clientId){ toast('Elige el cliente del fiado'); return; }
   const C = {...ui.cust, rif:normRif(ui.cust.rif) ? String(ui.cust.rif).toUpperCase().replace(/\s/g, '') : '', name:(ui.cust.name || '').trim()};
-  if (fiscal && (!C.rif || !C.name)){ toast('Para la factura pon ' + (REG.code === 'VE' ? 'cédula/RIF' : REG.taxId) + ' y nombre'); $('#f_rif') && $('#f_rif').focus(); return; }
+  if (fiscal && REG.code === 'VE' && (!C.rif || !C.name)){ toast('Para la factura pon cédula/RIF y nombre'); $('#f_rif') && $('#f_rif').focus(); return; }
+  if (fiscal && REG.code !== 'VE'){
+    // Factura completa: datos fiscales reales del cliente, validados según el país (nunca valores de relleno).
+    const vt = SSRegion.validTaxId(REG.code, C.rif);
+    if (!vt.ok){ toast(vt.msg); $('#f_rif') && $('#f_rif').focus(); return; }
+    C.rif = vt.v;
+    if (!C.name){ toast('Pon el nombre o la razón social del cliente'); $('#f_name') && $('#f_name').focus(); return; }
+    if (REG.docs.fullAddr && !String(C.addr || '').trim()){ toast('Para la factura completa pon la dirección del cliente'); $('#f_addr') && $('#f_addr').focus(); return; }
+  }
   busy = true;
   const items = st.items, t = st.t, id = uid(), now = Date.now();
   let customer = null;
@@ -2078,13 +2265,14 @@ async function checkout(){
   } else if (fiscal) customer = {clientId:'', name:C.name, rif:C.rif, addr:'', phone:''};
   if (!customer && ui.saleClient && S.clients[ui.saleClient]){ const c = S.clients[ui.saleClient]; customer = {clientId:ui.saleClient, name:c.name, rif:c.rif || '', addr:c.addr || '', phone:c.phone || ''}; }
   const sale = {ts:now, items, total:t.total, sub:t.sub, igtf:t.igtf, disc:discUsd(), tax:{ex:t.ex, b8:t.b8, i8:t.i8, b16:t.b16, i16:t.i16, rows:t.rows}, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, rg:REG.code, bc:REG.currency.code,
-    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || ui.saleClient || '', doc:fiscal ? 'fiscal' : 'nota', fiscalNo:fiscal ? nextInvNo() : '', customer, user:me ? me.u : '', userName:me ? me.name : ''};
+    method:P.mode === 'mixto' ? 'mixto' : P.method, clientId:clientId || (customer && customer.clientId) || ui.saleClient || '', doc:docKinds().includes(ui.doc) ? ui.doc : docDefault(), fiscalNo:fiscal ? nextInvNo() : '', customer, user:me ? me.u : '', userName:me ? me.name : ''};
   if (P.mode === 'mixto'){
     sale.payments = st.lines.map(l => ({m:l.m, usd:l.usd, raw:l.raw}));
     if (st.rest < -0.009) sale.change = {usd:r2(-st.rest), cur:P.changeCur || 'usd', raw:r2(toCur(-st.rest, P.changeCur || 'usd'))};
   }
   if (ui.fromQuote) sale.quoteId = ui.fromQuote;
-  if (!fiscal){ const seq = num(cfg.noteSeq) + 1; sale.noteNo = 'NE-' + String(seq).padStart(6, '0'); await putCfg({noteSeq:seq}); }
+  if (sale.doc === 'nota'){ const seq = num(cfg.noteSeq) + 1; sale.noteNo = 'NE-' + String(seq).padStart(6, '0'); await putCfg({noteSeq:seq}); }
+  else if (sale.doc === 'simple'){ const seq = num(cfg.simpSeq) + 1; sale.simpNo = 'FS-' + String(seq).padStart(6, '0'); await putCfg({simpSeq:seq}); } // numeración propia y correlativa
   const ok = await put('sales', id, sale);
   if (ok){
     const warn = [];
@@ -2095,8 +2283,8 @@ async function checkout(){
     }
     if (st.fiado > 0) await put('movs', uid(), {clientId, type:'deuda', amount:st.fiado, rate:cfg.bcv || 0, ts:now, saleId:id, note:items.map(i => nfq.format(i.qty) + ' ' + i.name).join(', ')});
     if (ui.fromQuote && S.quotes[ui.fromQuote]) await put('quotes', ui.fromQuote, {...S.quotes[ui.fromQuote], status:'vendida', saleId:id});
-    cart = []; lastScan = null; ui.saleClient = ''; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = cfg.docDefault || 'fiscal'; ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
-    logA('venta', 'Venta', (sale.doc === 'fiscal' ? 'Factura' : 'Nota ' + (sale.noteNo || '')) + ' · ' + usd(sale.total) + ' · ' + payLabel(sale) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (sale.customer ? ' · ' + sale.customer.name : ''), 'sale:' + id);
+    cart = []; lastScan = null; ui.saleClient = ''; ui.cust = {rif:'', name:'', addr:'', phone:''}; ui.doc = docDefault(); ui.disc = {type:'pct', v:''}; ui.pay.lines = []; ui.pay.mode = 'simple'; ui.pay.client = ''; ui.fromQuote = null;
+    logA('venta', 'Venta', (sale.doc === 'nota' ? 'Nota ' + (sale.noteNo || '') : docTitle(sale) + (docNo(sale) ? ' ' + docNo(sale) : '')) + ' · ' + usd(sale.total) + ' · ' + payLabel(sale) + ' · ' + items.length + ' producto' + (items.length === 1 ? '' : 's') + (sale.customer ? ' · ' + sale.customer.name : ''), 'sale:' + id);
     shellFor = ''; render(); showSale(id, true);
     if (warn.length) setTimeout(() => stockAlert(warn), 700);
   }
@@ -2104,7 +2292,7 @@ async function checkout(){
 }
 function receiptText(s){
   const lines = (s.items || []).map(i => `${nfq.format(num(i.qty))} × ${i.name} — ${usd(r2(num(i.price) * num(i.qty)))}`).join('\n');
-  const docTxt = s.doc === 'devolucion' ? 'Devolución' : s.doc === 'fiscal' ? 'Factura' + (s.fiscalNo ? ' Nº ' + s.fiscalNo : '') : 'Nota de entrega ' + (s.noteNo || '');
+  const docTxt = s.doc === 'devolucion' ? 'Devolución' : s.doc === 'nota' ? 'Nota de entrega ' + (s.noteNo || '') : docTitle(s) + (docNo(s) ? ' Nº ' + docNo(s) : '');
   return `*${cfg.name}*\n${docTxt} · ${fmtDate(s.ts)}\n\n${lines}\n\n${s.disc ? 'Descuento: −' + usd(s.disc) + '\n' : ''}${s.igtf ? 'IGTF: ' + usd(s.igtf) + '\n' : ''}*Total: ${usd(num(s.total))}*${s.rate ? '\n' + bs(num(s.total), s.rate) + ' (tasa ' + nf2.format(s.rate) + ')' : ''}\nPago: ${payLabel(s)}\n\n¡Gracias por su compra!`;
 }
 function returnedQty(saleId, idx){ let q = 0; for (const s of Object.values(S.sales)) if (s.refOf === saleId) for (const it of (s.items || [])) if (it.ix === idx) q += -num(it.qty); return q; }
@@ -2117,7 +2305,7 @@ function showSale(id, justDone){
   const pays = salePayments(s);
   const rets = Object.entries(S.sales).filter(([, x]) => x.refOf === id);
   openSheet(`${justDone ? '<div class="pill ok" style="display:inline-block;margin-bottom:8px">Venta registrada</div>' : ''}
-  <h2>${isRet ? 'Devolución' : fiscal ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega ' + esc(s.noteNo || '') : 'Venta'} · ${usd(num(s.total))}</h2>
+  <h2>${isRet ? 'Devolución' : fiscal ? (REG.code === 'VE' ? 'Factura fiscal' : 'Factura completa') : s.doc === 'nota' ? 'Nota de entrega ' + esc(s.noteNo || '') : s.doc === 'simple' ? esc(docTitle(s)) + ' ' + esc(s.simpNo || '') : s.doc === 'venta' ? 'Venta sin documento' : 'Venta'} · ${usd(num(s.total))}</h2>
   <div class="sub">${fmtDate(s.ts)}${s.userName ? ' · ' + (isRet ? 'registró ' : 'vendió ') + esc(s.userName) : ''}${s.rate ? ' · tasa $ ' + nf2.format(s.rate) : ''}</div>
   ${isRet && S.sales[s.refOf] ? `<div class="sub">De la venta del ${fmtDate(S.sales[s.refOf].ts)} · <a href="#" onclick="showSale('${s.refOf}');return false">ver venta</a></div>` : ''}
   ${s.customer ? `<div class="sub" style="margin-top:4px">Cliente: <b>${esc(s.customer.name)}</b> · ${esc(s.customer.rif)}${s.customer.addr ? ' · ' + esc(s.customer.addr) : ''}</div>` : cl ? `<div class="sub" style="margin-top:4px">Cliente: ${esc(cl.name)}</div>` : ''}
@@ -2130,7 +2318,7 @@ function showSale(id, justDone){
     <p class="note">${s.fiscalNo ? 'El número se puso solo. Si usas otro (el de tu máquina fiscal o talonario), cámbialo aquí; las siguientes facturas seguirán a partir del más alto.' : 'Escribe el número de la factura.'}</p>
     <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>
     <button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver factura</button>`
-  : s.doc === 'nota' ? `<button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver nota de entrega</button>` : ''}
+  : s.doc === 'nota' || s.doc === 'simple' ? `<button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">${s.doc === 'nota' ? 'Ver nota de entrega' : 'Ver ' + esc(docTitle(s).toLowerCase())}</button>` : ''}
   <a class="btn wa full" style="margin-top:8px" href="${waLink(phone, receiptText(s))}" target="_blank" rel="noopener">Enviar recibo por WhatsApp</a>
   ${isAdmin() ? `<div class="card" style="margin-top:12px;padding:10px 12px"><div class="sub" style="font-weight:600;margin:0 0 8px">¿Hubo un error? (solo administrador)</div><div class="gap">
     ${!isRet ? `<button class="btn sm sec" onclick="correctSale('${id}')">Corregir venta</button>` : ''}
@@ -2176,7 +2364,7 @@ async function notaPDF(id){
   if (!window.jspdf){ toast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf;
   const items = s.items || [];
-  const h = 125 + (showLogo() ? 22 : 0) + (cfg.email ? 4 : 0) + items.reduce((a, i) => a + 4 + Math.ceil(String(i.name).length / 34) * 3.6, 0) + (s.igtf ? 6 : 0) + (s.customer ? 12 : 0);
+  const h = 125 + (showLogo() ? 22 : 0) + (cfg.email ? 4 : 0) + items.reduce((a, i) => a + 4 + Math.ceil(String(i.name).length / 34) * 3.6, 0) + (s.igtf ? 6 : 0) + (s.customer ? 12 : 0) + taxRows(s.tax).length * 4;
   const doc = new jsPDF({unit:'mm', format:[80, h]});
   const c = 40, L = 5, R = 75; let y = 9;
   const center = (t, size, bold) => { doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.splitTextToSize(String(t), 70).forEach(l => { doc.text(l, c, y, {align:'center'}); y += size * 0.42; }); };
@@ -2189,8 +2377,8 @@ async function notaPDF(id){
   if (cfg.addr) center(cfg.addr, 7.5);
   if (cfg.phone) center('Tel: ' + cfg.phone, 7.5);
   if (cfg.email) center(cfg.email, 7.5);
-  y += 2; center('NOTA DE ENTREGA', 11, true); center('Documento no fiscal', 7.5); y += 1.5;
-  lr('Nº ' + (s.noteNo || ''), new Date(s.ts).toLocaleString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}));
+  y += 2; center(docTitle(s).toUpperCase(), 11, true); center(s.doc === 'nota' ? 'Documento no fiscal' : 'Documento de control interno', 7.5); y += 1.5;
+  lr('Nº ' + docNo(s), new Date(s.ts).toLocaleString(REG.locale, {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}));
   const cl = s.customer || (s.clientId && S.clients[s.clientId]);
   if (cl){ lr('Cliente: ' + String(cl.name).slice(0, 34), ''); if (cl.rif) lr((REG.code === 'VE' ? 'C.I./RIF' : REG.taxId) + ': ' + cl.rif, ''); if (cl.addr) lr(String(cl.addr).slice(0, 40), '', false, 7.5); if (cl.phone) lr('Tel: ' + cl.phone, '', false, 7.5); }
   hr();
@@ -2201,7 +2389,8 @@ async function notaPDF(id){
   });
   hr();
   if (s.igtf){ lr('Subtotal', usd(s.sub)); lr('IGTF 3%', usd(s.igtf)); }
-  lr('TOTAL $', usd(num(s.total)), true, 11);
+  if (REG.code !== 'VE') for (const [r, b, i, n, x] of taxRows(s.tax)) lr((n || REG.tax.name) + ' ' + nfq.format(r) + '%' + (x ? '' : ' (incl.)'), usd(i), false, 8);
+  lr('TOTAL ' + CUR_SYM.usd, usd(num(s.total)), true, 11);
   if (s.rate){ lr('TOTAL Bs', bs(num(s.total), s.rate).replace('Bs ', ''), true, 10); lr('Tasa BCV', nf2.format(s.rate), false, 7.5); }
   if (s.disc) lr('Descuento', '−' + usd(s.disc), false, 8);
   salePayments(s).forEach(p => lr(METHODS[p.m] || p.m, fmtCur(p.raw, p.cur), false, 8));
@@ -2260,7 +2449,7 @@ function invNoParts(){
 function nextInvNo(){ const {n, len} = invNoParts(); return String(n).padStart(len, '0'); }
 /* ---- Vista previa de la factura / nota (antes de descargarla) ---- */
 function facturaHTML(s){
-  const fiscal = s.doc === 'fiscal', rate = num(s.rate), inBs = rate > 0;
+  const fiscal = s.doc === 'fiscal' || s.doc === 'simple', rate = num(s.rate), inBs = rate > 0;
   const m = v => inBs ? 'Bs ' + nf2.format(r2(v * rate)) : usd(v);
   const cl = s.customer || (s.clientId && S.clients[s.clientId]) || {}, t = s.tax || {}, dt = new Date(s.ts);
   const tl = [['Sub-total', num(s.sub ?? s.total)]];
@@ -2272,7 +2461,7 @@ function facturaHTML(s){
   return `<div class="fv">
     <div class="fv-top"><div class="fv-biz">${showLogo() ? `<img class="fvLogo" alt="" style="visibility:hidden">` : ''}<div><b>${esc(cfg.name || 'Mi Negocio')}</b>
       ${cfg.rif ? `<div>${esc(REG.taxId)}: ${esc(cfg.rif)}</div>` : ''}${cfg.addr ? `<div>${esc(cfg.addr)}</div>` : ''}<div>${[cfg.phone && 'Tlf: ' + esc(cfg.phone), cfg.email && esc(cfg.email)].filter(Boolean).join(' · ')}</div></div></div>
-      <div class="fv-box"><b class="${fiscal ? 'red' : ''}">${fiscal ? 'FACTURA' : 'NOTA DE ENTREGA'}</b><div class="no">${fiscal ? (s.fiscalNo ? 'Nº ' + esc(s.fiscalNo) : 'Nº ______') : 'Nº ' + esc(s.noteNo || '')}</div><small>Fecha de emisión</small><div>${dt.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'})}</div></div></div>
+      <div class="fv-box"><b class="${fiscal ? 'red' : ''}">${esc(docTitle(s).toUpperCase())}</b><div class="no">${s.doc === 'fiscal' ? (s.fiscalNo ? 'Nº ' + esc(s.fiscalNo) : 'Nº ______') : 'Nº ' + esc(docNo(s))}</div><small>Fecha de emisión</small><div>${dt.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'})}</div></div></div>
     <div class="fv-cli"><div class="w2"><small>Nombre o razón social</small><b>${esc(cl.name || '—')}</b></div><div><small>${REG.code === 'VE' ? 'RIF / C.I.' : esc(REG.taxId)}</small><b>${esc(cl.rif || '—')}</b></div>
       <div class="w2"><small>Domicilio fiscal</small><b>${esc(cl.addr || '—')}</b></div><div><small>Teléfono</small><b>${esc(cl.phone || '—')}</b></div><div><small>Condiciones de pago</small><b>${payCond(s)}</b></div></div>
     <table class="fv-t"><thead><tr><th>Cant.</th><th>Descripción</th><th>P. unitario</th><th>Total</th></tr></thead><tbody>
@@ -2280,17 +2469,17 @@ function facturaHTML(s){
     </tbody></table>
     <div class="fv-bot"><div class="fv-pay"><small>Forma de pago</small>${salePayments(s).map(p => `<div>${METHODS[p.m] || p.m}: ${fmtCur(p.raw, p.cur)}</div>`).join('')}${s.userName ? `<div class="mut">Atendido por ${esc(s.userName)}</div>` : ''}</div>
       <div class="fv-tot">${tl.map(([k, v]) => `<div><span>${k}</span><span>${m(v)}</span></div>`).join('')}<div class="big"><span>TOTAL A PAGAR${inBs ? ' Bs' : ''}</span><span>${inBs ? nf2.format(r2(num(s.total) * rate)) : usd(num(s.total))}</span></div>${inBs ? `<div class="mut" style="justify-content:flex-end">Equivale a ${usd(num(s.total))} · tasa ${nf2.format(rate)}</div>` : ''}</div></div>
-    <div class="fv-foot">${fiscal ? 'Copia de control interno. La factura legal es la de tu máquina fiscal o forma libre autorizada.' : 'Documento no fiscal.'}</div>
+    <div class="fv-foot">${REG.code !== 'VE' ? esc(REG.docs.fiscalNote || 'Documento de control interno.') : fiscal ? 'Copia de control interno. La factura legal es la de tu máquina fiscal o forma libre autorizada.' : 'Documento no fiscal.'}</div>
   </div>`;
 }
 async function fillLogos(){ const u = await getLogo(); document.querySelectorAll('.fvLogo').forEach(i => { if (u){ i.src = u; i.style.visibility = ''; } else i.remove(); }); }
 function viewFactura(id){
   const s = S.sales[id]; if (!s) return;
   const fiscal = s.doc === 'fiscal', cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
-  openSheet(`<h2>${fiscal ? 'Factura' : 'Nota de entrega'}</h2>
+  openSheet(`<h2>${esc(docTitle(s))}</h2>
   ${!cfg.rif || !cfg.addr ? `<div class="warnbox">Faltan datos de tu negocio (${[!cfg.rif && REG.taxId, !cfg.addr && 'dirección'].filter(Boolean).join(' y ')}). ${isAdmin() ? `<a href="#" onclick="closeSheet();go('mas','ajustes');return false">Complétalos en Ajustes</a>` : 'Pídele al administrador que los complete en Ajustes.'}</div>` : ''}
   <div class="fv-wrap">${facturaHTML(s)}</div>${showLogo() ? `<img style="display:none" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onload="fillLogos()">` : ''}
-  <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}')">Descargar PDF</button>${s.doc === 'nota' ? `<button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
+  <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}')">Descargar PDF</button>${s.doc === 'nota' || s.doc === 'simple' ? `<button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
   <a class="btn wa full" style="margin-top:8px" href="${waLink(cl.phone || '', receiptText(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
@@ -2299,7 +2488,7 @@ async function facturaPDF(id){
   const s = S.sales[id]; if (!s) return;
   if (!window.jspdf){ toast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf, doc = new jsPDF({unit:'mm', format:'letter'});
-  const W = 215.9, L = 14, R = W - 14, fiscal = s.doc === 'fiscal', rate = num(s.rate);
+  const W = 215.9, L = 14, R = W - 14, fiscal = s.doc === 'fiscal' || s.doc === 'simple', rate = num(s.rate);
   const inBs = rate > 0, money = v => inBs ? 'Bs ' + nf2.format(r2(v * rate)) : usd(v);
   let y = 14;
   const txt = (t, x, yy, o = {}) => { doc.setFont('helvetica', o.b ? 'bold' : 'normal'); doc.setFontSize(o.s || 9); Array.isArray(o.c) ? doc.setTextColor(...o.c) : doc.setTextColor(o.c || 0); doc.text(String(t), x, yy, o.a ? {align:o.a} : undefined); };
@@ -2316,8 +2505,8 @@ async function facturaPDF(id){
   // Recuadro del documento (derecha)
   const bx = 140, bw = R - bx;
   doc.setDrawColor(40); doc.setLineWidth(0.4); doc.roundedRect(bx, y - 4, bw, 30, 2, 2);
-  txt(fiscal ? 'FACTURA' : 'NOTA DE ENTREGA', bx + bw / 2, y + 3, {b:1, s:fiscal ? 14 : 12, a:'center', c:fiscal ? [200, 30, 40] : 0});
-  const no = fiscal ? (s.fiscalNo ? 'Nº ' + s.fiscalNo : 'Nº ________') : 'Nº ' + (s.noteNo || '');
+  txt(docTitle(s).toUpperCase(), bx + bw / 2, y + 3, {b:1, s:s.doc === 'fiscal' ? 14 : s.doc === 'simple' ? 9.5 : 12, a:'center', c:fiscal ? [200, 30, 40] : 0});
+  const no = s.doc === 'fiscal' ? (s.fiscalNo ? 'Nº ' + s.fiscalNo : 'Nº ________') : 'Nº ' + docNo(s);
   txt(no, bx + bw / 2, y + 9.5, {b:1, s:11, a:'center'});
   const dt = new Date(s.ts);
   txt('Fecha de emisión', bx + bw / 2, y + 15.5, {s:7.5, a:'center', c:90});
@@ -2368,7 +2557,7 @@ async function facturaPDF(id){
   py = Math.max(py, ty) + 16;
   doc.setDrawColor(120); doc.line(L, py, L + 60, py); txt('Recibí conforme', L + 30, py + 4.5, {s:8, a:'center', c:90});
   // Pie
-  txt(fiscal ? 'Copia de control interno. La factura legal es la que emite tu máquina fiscal o la forma libre autorizada por el SENIAT.' : 'Documento no fiscal.', W / 2, 266, {s:7, a:'center', c:120});
+  txt(REG.code !== 'VE' ? 'Documento de control interno.' : fiscal ? 'Copia de control interno. La factura legal es la que emite tu máquina fiscal o la forma libre autorizada por el SENIAT.' : 'Documento no fiscal.', W / 2, 266, {s:7, a:'center', c:120});
   txt('Generado con StockSoft · stocksoft.app', W / 2, 270, {s:7, a:'center', c:150});
   await saveFile((fiscal ? 'factura-' + (s.fiscalNo || id) : 'nota-' + (s.noteNo || id)) + '.pdf', doc.output('blob'));
 }
@@ -2388,7 +2577,7 @@ async function undoSale(s, id){
   if (s.quoteId && S.quotes[s.quoteId]) await put('quotes', s.quoteId, {...S.quotes[s.quoteId], status:'abierta', saleId:''});
   await del('sales', id);
 }
-const saleDesc = s => (s.doc === 'fiscal' ? 'Factura' + (s.fiscalNo ? ' ' + s.fiscalNo : '') : s.doc === 'devolucion' ? 'Devolución' : 'Nota ' + (s.noteNo || '')) + ' de ' + fmtDate(s.ts) + ' por ' + usd(num(s.total)) + (s.userName ? ' (vendió ' + s.userName + ')' : '');
+const saleDesc = s => (s.doc === 'nota' ? 'Nota ' + (s.noteNo || '') : docTitle(s) + (docNo(s) ? ' ' + docNo(s) : '')) + ' de ' + fmtDate(s.ts) + ' por ' + usd(num(s.total)) + (s.userName ? ' (vendió ' + s.userName + ')' : '');
 function voidSale(id){
   if (!isAdmin()) return;
   const s0 = S.sales[id]; if (!s0) return;
@@ -2410,7 +2599,7 @@ function correctSale(id){
     cart = (snap.items || []).map(i => ({pid:i.pid, name:i.name, price:num(i.list ?? i.price), cost:num(i.cost), unit:i.unit || 'unidad', qty:num(i.qty), iva:i.iva ?? 16, ivaN:i.ivaN, ivaInc:i.ivaInc, ivaId:i.ivaId}));
     const s0v = cart.reduce((a, c) => a + c.price * c.qty, 0);
     ui.disc = snap.disc ? {type:'usd', v:String(snap.disc)} : (s0v && Math.abs(s0v - num(snap.sub)) > 0.01 && !snap.disc ? {type:'pct', v:''} : {type:'pct', v:''});
-    ui.doc = snap.doc === 'fiscal' ? 'fiscal' : 'nota';
+    ui.doc = docKinds().includes(snap.doc) ? snap.doc : docDefault();
     ui.cust = snap.customer ? {rif:snap.customer.rif || '', name:snap.customer.name || '', addr:snap.customer.addr || '', phone:snap.customer.phone || ''} : {rif:'', name:'', addr:'', phone:''};
     if (snap.method === 'mixto'){ ui.pay.mode = 'mixto'; ui.pay.lines = (snap.payments || []).map(p => ({m:p.m, v:String(p.raw).replace('.', ',')})); }
     else { ui.pay.mode = 'simple'; ui.pay.method = snap.method; ui.pay.lines = []; }
@@ -2530,7 +2719,7 @@ function editProduct(id, preset = {}){
   <div class="grid2"><div><label>Se vende por</label><select id="pU">${['unidad', 'kg', 'g', 'lt', 'paquete', 'caja'].map(u => `<option ${p.unit === u ? 'selected' : ''} value="${u}">${u}</option>`).join('')}</select></div>
   <div><label>Garantía</label><input id="pW" value="${esc(p.warranty || '')}" placeholder="Ej: 6 meses"></div></div>
   <label>Proveedor habitual</label><select id="pSup"><option value="">— Ninguno —</option>${suppliers().map(x => `<option value="${x.id}" ${p.supplierId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-  <label>Impuesto</label><select id="pI">${prodTaxOpts(p)}</select>${REG.taxUnset ? `<p class="note" style="margin-top:4px">Aún no hay impuestos configurados: el producto queda sin impuesto.${isAdmin() ? ` <a href="#" onclick="closeSheet();go('mas','ajustes');return false">Configurar impuestos</a>` : ''}</p>` : ''}
+  <label>Impuesto</label><select id="pI" onchange="pPrev()">${prodTaxOpts(p)}</select>${REG.taxUnset ? `<p class="note" style="margin-top:4px">Aún no hay impuestos configurados: el producto queda sin impuesto.${isAdmin() ? ` <a href="#" onclick="closeSheet();go('mas','ajustes');return false">Configurar impuestos</a>` : ''}</p>` : ''}
   <div class="grid2"><div><label>Stock actual</label><input id="pS" inputmode="decimal" value="${ed(p.stock)}" placeholder="0"></div>
   <div><label>Avisar cuando queden</label><input id="pM" inputmode="decimal" value="${ed(p.min)}" placeholder="${nfq.format(num(cfg.lowDefault))}"></div></div>
   <label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="pT" class="chk" ${p.track !== false ? 'checked' : ''}> Controlar stock de este producto</label>
@@ -2582,11 +2771,17 @@ function addLot(){
 function setCur(c){ $('#pCur').value = c; $('#curU').classList.toggle('on', c === 'usd'); $('#curE').classList.toggle('on', c === 'eur'); pPrev(); }
 function pPrev(){
   const cur = $('#pCur').value, sym = cur === 'eur' ? '€' : CUR_SYM.usd;
-  $('#pPl').textContent = 'Precio de venta (' + sym + ')'; $('#pKl').textContent = 'Costo (' + sym + ')';
+  $('#pPl').textContent = 'Precio de venta (' + sym + ')' + (REG.taxes.length && REG.taxMode === 'exc' ? ' sin impuestos' : REG.taxes.length && REG.taxMode === 'inc' ? ' con impuestos' : ''); $('#pKl').textContent = 'Costo (' + sym + ')';
   const fake = {price:num($('#pP').value), cur};
   let t = fake.price ? pLine(fake) || (!REG.features.bcv ? '' : cur === 'eur' ? 'Pon la tasa del euro para ver Bs' : 'Pon la tasa del dólar para ver Bs') : '';
   const c = num($('#pK').value);
-  if (fake.price && c) t += (t ? '<br>' : '') + `Ganancia: ${(cur === 'eur' ? eurF : usd)(r2(fake.price - c))} por unidad (${Math.round((fake.price - c) / c * 100)}%)`;
+  // Precio final que verá el cliente según la modalidad del negocio (sin duplicar el impuesto).
+  const pi = $('#pI'), tv = pi ? prodTaxVal(pi.value) : null, fmt = cur === 'eur' ? eurF : usd;
+  if (fake.price && tv && num(tv.iva)){
+    const r = num(tv.iva), exc = REG.taxMode === 'mixed' ? tv.taxInc === false : REG.taxMode === 'exc';
+    t += (t ? '<br>' : '') + (exc ? `Precio final con ${esc(tv.taxN || REG.tax.name)} ${nfq.format(r)}%: <b>${fmt(r2(fake.price * (1 + r / 100)))}</b>` : `Incluye ${esc(tv.taxN || REG.tax.name)} ${nfq.format(r)}%: base ${fmt(r2(fake.price / (1 + r / 100)))}`);
+  }
+  if (fake.price && c) t += (t ? '<br>' : '') + `Ganancia: ${fmt(r2(fake.price - c))} por unidad (${Math.round((fake.price - c) / c * 100)}%)`;
   $('#pPrev').innerHTML = t;
 }
 function bcPrev(){
@@ -2798,10 +2993,11 @@ function delClient(id){
 VIEWS.mas = {
   shell(){
     const back = t => `<button class="btn sm sec" onclick="go('mas')">← Más</button><h2 style="margin-top:12px">${t}</h2>`;
-    if (sub && !isAdmin() && !['caja', 'cotizaciones'].includes(sub)) sub = '';
+    if (sub && !isAdmin() && !['caja', 'cotizaciones', 'ayuda'].includes(sub)) sub = '';
     if (sub === 'licencias' && !isOwner()) sub = '';
     if (sub === 'licencias') return back('Licencias y clientes') + `<div id="mx"></div>`;
     if (sub === 'licencia') return back('Mi licencia') + `<div id="mx"></div>`;
+    if (sub === 'ayuda') return back('Ayuda') + `<div id="mx"></div>`;
     if (sub === 'caja') return back('Caja') + `<div id="mx"></div>`;
     if (sub === 'cotizaciones') return back('Cotizaciones') + `<div id="mx"></div>`;
     if (sub === 'reportes') return back('Reportes') + `<div class="seg" id="repSeg"></div><div id="mx"></div>`;
@@ -2810,7 +3006,7 @@ VIEWS.mas = {
     if (sub === 'log') return back('Registro de actividad') + `<div id="mx"></div>`;
     if (sub === 'gastos') return back('Gastos') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="expenseForm()">+ Registrar gasto</button><div id="mx"></div><button class="btn fab" onclick="expenseForm()" aria-label="Registrar gasto">+</button>`;
     if (sub === 'usuarios') return back('Usuarios') + `<button class="btn sm" style="margin:-4px 0 12px" onclick="userForm()">+ Nuevo usuario</button><div id="mx"></div><button class="btn fab" onclick="userForm()" aria-label="Nuevo usuario">+</button>`;
-    const opts = (isOwner() ? [['licencias', '★ Licencias y clientes', 'Códigos de activación, negocios, vencimientos y bloqueos']] : []).concat([['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [...(REG.features.bcv ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial']] : []), ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['licencia', 'Mi licencia', 'Estado, vencimiento, historial de compras y renovación'], ['ajustes', 'Ajustes del negocio', 'Nombre, ' + REG.taxId + ', país y configuración regional, documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []));
+    const opts = [['ayuda', 'Ayuda', 'Guías paso a paso, preguntas frecuentes y tutorial']].concat(isOwner() ? [['licencias', '★ Licencias y clientes', 'Códigos de activación, negocios, vencimientos y bloqueos']] : []).concat([['caja', 'Caja', 'Abrir y cerrar la caja, efectivo esperado y diferencias'], ['cotizaciones', 'Cotizaciones', 'Presupuestos para clientes, en PDF o WhatsApp']].concat(isAdmin() ? [...(REG.features.bcv ? [['tasas', 'Tasas del día', 'Dólar y euro BCV, calculadora e historial']] : []), ['gastos', 'Gastos', 'Alquiler, servicios, sueldos y otros gastos del negocio'], ['reportes', 'Reportes', 'Ventas, facturas, IVA, ganancias y lo más vendido'], ['usuarios', 'Usuarios', 'Quién puede entrar y con qué permisos'], ['licencia', 'Mi licencia', 'Estado, vencimiento, historial de compras y renovación'], ['ajustes', 'Ajustes del negocio', 'Nombre, ' + REG.taxId + ', país y configuración regional, documento por defecto'], ['log', 'Registro de actividad', 'Quién vendió, cotizó, abrió caja, cambió precios o corrigió algo'], ['respaldo', 'Respaldo y exportar', 'Copia de seguridad, Excel (CSV)']] : []));
     return `<h2>Más</h2><div class="list">
       ${opts.map(([k, t, s]) => `<div class="item tap row" onclick="${k === 'tasas' ? "go('tasas')" : `go('mas','${k}')`}"><div class="grow"><div class="name">${t}</div><div class="sub">${s}</div></div><span style="color:var(--mut)">›</span></div>`).join('')}
       <div class="item tap row" onclick="helpSheet()"><div class="grow"><div class="name">Ayuda y contacto</div><div class="sub">Soporte, ventas y licencias</div></div><span style="color:var(--mut)">›</span></div>
@@ -2825,6 +3021,7 @@ VIEWS.mas = {
     if (sub === 'caja') return fillCashView();
     if (sub === 'licencias') return fillLicenses();
     if (sub === 'licencia') return fillLicense();
+    if (sub === 'ayuda') return fillHelp();
     if (sub === 'log') return fillLog();
     if (sub === 'cotizaciones') return fillQuotes();
     if (sub === 'usuarios'){
@@ -2861,7 +3058,7 @@ VIEWS.mas = {
         <p class="note">Nombre, RIF, dirección, teléfono, correo y logo salen arriba en todas tus facturas y notas. Se guardan aquí una sola vez.</p>
         <label>Próximo número de factura</label><input id="aF" inputmode="numeric" value="${esc(nextInvNo())}" placeholder="000001">
         <p class="note">Se pone solo en cada factura y va subiendo (000053 → 000054). Cámbialo si quieres empezar desde otro número, por ejemplo el siguiente de tu talonario.</p>
-        <label>Documento por defecto al cobrar</label><select id="aDoc"><option value="fiscal" ${cfg.docDefault !== 'nota' ? 'selected' : ''}>Factura fiscal</option><option value="nota" ${cfg.docDefault === 'nota' ? 'selected' : ''}>Nota de entrega</option></select>
+        <label>Documento por defecto al cobrar</label><select id="aDoc">${docKinds().map(k => `<option value="${k}" ${docDefault() === k ? 'selected' : ''}>${esc(docLabel(k))}</option>`).join('')}</select>
         <div style="display:${REG.features.igtf ? 'block' : 'none'}"><label class="row" style="gap:8px;margin-top:14px;color:var(--tx);font-size:14px"><input type="checkbox" id="aI" class="chk" ${cfg.igtf ? 'checked' : ''}> Cobrar IGTF 3% en pagos en divisas (efectivo $, efectivo €, Zelle)</label>
         <p class="note">Actívalo si tu negocio está obligado a cobrar el IGTF (consúltalo con tu contador). Se suma al total y aparece desglosado.</p></div>
         <label>Descuento máximo que puede dar un vendedor (%)</label><input id="aX" inputmode="decimal" value="${nf0.format(num(cfg.maxDisc ?? 10))}">
@@ -2904,7 +3101,7 @@ async function saveSmart(){
 }
 async function saveSettings(){
   const tx = $('#aTx') ? {taxRates:$('#aTx').value.split(/[;,\s]+/).map(num).filter(x => x > 0 && x <= 50)} : {};
-  if (await putCfg({...tx, name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, invNext:($('#aF').value.trim() === nextInvNo() ? (cfg.invNext || '') : $('#aF').value.replace(/\D/g, '')), docDefault:$('#aDoc').value, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
+  if (await putCfg({...tx, name:$('#aN').value.trim() || 'Mi Negocio', rif:$('#aR').value.trim().toUpperCase(), phone:$('#aT').value.trim(), addr:$('#aD').value.trim(), email:$('#aE').value.trim(), logoOn:$('#aLg').checked, invNext:($('#aF').value.trim() === nextInvNo() ? (cfg.invNext || '') : $('#aF').value.replace(/\D/g, '')), docDefault:$('#aDoc').value, docSet:true, igtf:$('#aI').checked, cc:($('#aC').value.replace(/\D/g, '') || '58'), lowDefault:num($('#aL').value), cur:$('#aM').value, maxDisc:Math.max(0, Math.min(100, num($('#aX').value)))})){ ui.doc = cfg.docDefault; logA('admin', 'Ajustes modificados', 'Datos del negocio y opciones'); toast('Ajustes guardados'); }
 }
 function fillReports(){
   const ranges = {hoy:'Hoy', '7':'7 días', '30':'30 días', mes:'Este mes'};
@@ -2924,7 +3121,8 @@ function fillReports(){
   const maxT = top.length ? top[0][1].t : 1;
   const fis = ss.filter(x => x.doc === 'fiscal'), notas = ss.filter(x => x.doc === 'nota');
   const sumF = (arr, f) => r2(arr.reduce((a, x) => a + f(x), 0));
-  const ivaT = sumF(fis, x => taxIva(x.tax)), igtfT = sumF(ss, x => num(x.igtf));
+  const taxedS = REG.code === 'VE' ? fis : ss.filter(taxedDoc);
+  const ivaT = sumF(taxedS, x => taxIva(x.tax)), igtfT = sumF(ss, x => num(x.igtf));
   const pend = fis.filter(x => !x.fiscalNo).length;
   const bySeller = {}; ss.forEach(x => { const k = x.userName || '—'; const b = bySeller[k] = bySeller[k] || {n:0, t:0}; if (x.doc !== 'devolucion') b.n++; b.t += num(x.total); });
   const abonos = r2(Object.values(S.movs).filter(m => m.type === 'abono' && m.ts >= from).reduce((a, m) => a + num(m.amount), 0));
@@ -2934,9 +3132,9 @@ function fillReports(){
     <div class="card stat"><div class="k">Ticket promedio</div><div class="v">${usd(ss.length ? r2(tot / ss.length) : 0)}</div></div>
     <div class="card stat"><div class="k">Abonos cobrados</div><div class="v">${usd(abonos)}</div><div class="s">de fiados</div></div></div>
     <h3>Documentos</h3><div class="card">
-      <div class="mv"><span>Facturas fiscales (${fis.length})</span><b>${usd(sumF(fis, x => num(x.total)))}</b></div>
+      ${REG.code === 'VE' ? `<div class="mv"><span>Facturas fiscales (${fis.length})</span><b>${usd(sumF(fis, x => num(x.total)))}</b></div>
       <div class="mv"><span>Notas de entrega (${notas.length})</span><b>${usd(sumF(notas, x => num(x.total)))}</b></div>
-      <div class="mv"><span>IVA en facturas</span><b>${usd(ivaT)}</b></div>
+      <div class="mv"><span>IVA en facturas</span><b>${usd(ivaT)}</b></div>` : docKinds().map(k => { const a = ss.filter(x => x.doc === k); return `<div class="mv"><span>${esc(docLabel(k))} (${a.length})</span><b>${usd(sumF(a, x => num(x.total)))}</b></div>`; }).join('') + `<div class="mv"><span>Impuestos de las ventas</span><b>${usd(ivaT)}</b></div>`}
       ${igtfT ? `<div class="mv"><span>IGTF cobrado</span><b>${usd(igtfT)}</b></div>` : ''}
       ${pend ? `<div class="mv"><span style="color:var(--warn)">Facturas sin nº registrado</span><b style="color:var(--warn)">${pend}</b></div>` : ''}</div>
     ${Object.keys(bySeller).length ? `<h3>Por vendedor</h3><div class="card">${Object.entries(bySeller).sort((a, b) => b[1].t - a[1].t).map(([k, v]) => `<div class="mv"><span>${esc(k)} <span class="sub">· ${v.n} venta${v.n === 1 ? '' : 's'} · promedio ${usd(v.n ? r2(v.t / v.n) : 0)}</span></span><b>${usd(r2(v.t))}</b></div>`).join('')}</div>` : ''}
@@ -3179,7 +3377,7 @@ function dashData(){
   const byCat = {}, byProd = {}, byMethod = {};
   let nSales = 0;
   for (const s of salesArr()){ if (s.ts < R.from) continue; const i = idx[kOf(s.ts)]; if (i == null) continue; nSales++;
-    const tax = taxIva(s.tax), net = num(s.total) - num(s.igtf) - (s.doc === 'fiscal' ? tax : 0);
+    const tax = taxIva(s.tax), net = num(s.total) - num(s.igtf) - ((REG.code === 'VE' ? s.doc === 'fiscal' : taxedDoc(s)) ? tax : 0);
     inc[i] += net; salePayments(s).forEach(p => byMethod[p.m] = (byMethod[p.m] || 0) + p.usd);
     for (const it of (s.items || [])){ const c = num(it.cost) * num(it.qty); cogs[i] += c; const pr = byProd[it.name] = byProd[it.name] || {v:0, g:0}; pr.v += num(it.price) * num(it.qty); pr.g += num(it.price) * num(it.qty) - c; } }
   for (const e of Object.values(S.expenses)){ if (e.ts < R.from) continue; const i = idx[kOf(e.ts)]; if (i == null) continue; exp[i] += num(e.amount); byCat[e.cat] = (byCat[e.cat] || 0) + num(e.amount); }
@@ -3380,15 +3578,16 @@ async function quotePDF(id){
   y = Math.max(y, 44) + 4; doc.setDrawColor(200); doc.line(L, y, R, y); y += 7;
   doc.setFont('helvetica', 'bold'); doc.text('Cliente:', L, y); doc.setFont('helvetica', 'normal'); doc.text(String(q.customer.name) + (q.customer.rif ? '  ·  ' + q.customer.rif : '') + (q.customer.phone ? '  ·  ' + q.customer.phone : ''), L + 18, y); y += 10;
   doc.setFillColor(240, 243, 248); doc.rect(L, y - 5, R - L, 8, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
-  doc.text('Cant.', L + 2, y); doc.text('Descripción', L + 20, y); doc.text('Precio $', 150, y, {align:'right'}); doc.text('Subtotal $', R - 2, y, {align:'right'}); y += 8;
+  doc.text('Cant.', L + 2, y); doc.text('Descripción', L + 20, y); doc.text('Precio ' + CUR_SYM.usd, 150, y, {align:'right'}); doc.text('Subtotal ' + CUR_SYM.usd, R - 2, y, {align:'right'}); y += 8;
   doc.setFont('helvetica', 'normal');
   q.items.forEach(i => { const lines = doc.splitTextToSize(String(i.name), 105); if (y > 265){ doc.addPage(); y = 20; } doc.text(nfq.format(num(i.qty)), L + 2, y); doc.text(lines, L + 20, y); doc.text(nf2.format(num(i.price)), 150, y, {align:'right'}); doc.text(nf2.format(r2(num(i.price) * num(i.qty))), R - 2, y, {align:'right'}); y += 5 * lines.length + 2; });
   y += 2; doc.line(110, y, R, y); y += 7;
   if (q.disc){ doc.text('Descuento incluido: −' + usd(q.disc), R - 2, y, {align:'right'}); y += 6; }
+  if (REG.code !== 'VE'){ doc.setFontSize(9.5); for (const [r, b, i, n, x] of taxRows(taxCalc(q.items || [], 0))){ doc.text((n || REG.tax.name) + ' ' + nfq.format(r) + '%' + (x ? '' : ' (incluido)') + ': ' + usd(i), R - 2, y, {align:'right'}); y += 5; } }
   doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('TOTAL: ' + usd(num(q.total)), R - 2, y, {align:'right'}); y += 6;
   if (cfg.bcv){ doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.text(bs(num(q.total)) + ' a la tasa BCV de hoy (' + nf2.format(cfg.bcv) + ')', R - 2, y, {align:'right'}); y += 5; }
   y += 6; doc.setFontSize(8.5); doc.setTextColor(100);
-  doc.text(doc.splitTextToSize((q.note ? q.note + '. ' : '') + 'Precios en dólares. El monto en bolívares se calcula con la tasa oficial del BCV del día del pago. Sujeto a disponibilidad.', R - L), L, y);
+  doc.text(doc.splitTextToSize((q.note ? q.note + '. ' : '') + (REG.features.bcv ? 'Precios en dólares. El monto en bolívares se calcula con la tasa oficial del BCV del día del pago. Sujeto a disponibilidad.' : 'Precios en ' + REG.currency.code + (REG.taxes.length ? (REG.taxMode === 'exc' ? ', impuestos no incluidos en el precio unitario' : ', impuestos incluidos') : '') + '. Sujeto a disponibilidad.'), R - L), L, y);
   await saveFile('cotizacion-' + q.no + '.pdf', doc.output('blob'));
 }
 function fillQuotes(){
@@ -3600,7 +3799,9 @@ function impBuild(a, o, idx){
     if (effIva > 0 && !o.ivaIncl) needIncl++;
     let fp = rc ? conv(pr, rc, pcur) : pr;
     if (rc && isNaN(fp)) fp = 0;
-    if (o.ivaIncl === 'no' && effIva > 0){ fp *= 1 + effIva / 100; if (f.wPrice) f.wPrice *= 1 + effIva / 100; }
+    // Se guarda el precio en la modalidad del negocio: con impuesto (incluido) o base (si se suma al cobrar). Nunca doble.
+    if (REG.taxMode === 'exc'){ if (o.ivaIncl === 'si' && effIva > 0){ fp /= 1 + effIva / 100; if (f.wPrice) f.wPrice /= 1 + effIva / 100; } }
+    else if (o.ivaIncl === 'no' && effIva > 0){ fp *= 1 + effIva / 100; if (f.wPrice) f.wPrice *= 1 + effIva / 100; }
     fp = impR2(fp); if (f.wPrice != null) f.wPrice = impR2(f.wPrice);
     if (rc && !(rc === 'bs' && !(rate > 0)) && fp < 0.01){ add('skip', line, name + ': el precio queda en menos de 0,01'); return; }
     if (fp > 100000) add('price', line, name + ': precio ' + nf2.format(fp) + ' muy alto');
@@ -3990,7 +4191,7 @@ const csvCell = v => { let s = String(v ?? ''); if (/^[=+@\t\r]/.test(s) || /^-[
 const csv = rows => '﻿' + rows.map(r => r.map(csvCell).join(';')).join('\n');
 const dec = n => String(r2(num(n))).replace('.', ',');
 function csvInv(){ saveFile('inventario.csv', csv([['Producto', 'Categoría', 'Marca/modelo', 'Código', 'Moneda', 'Precio', 'Costo', ...(REG.features.bcv ? ['Precio Bs'] : []), 'Stock', 'Unidad', 'Mínimo', 'Garantía'], ...products().map(p => [p.name, p.cat, p.brand, p.code, curOf(p) === 'eur' ? 'EUR' : REG.currency.code, dec(p.price), dec(p.cost), ...(REG.features.bcv ? [dec(pBs(p))] : []), String(num(p.stock)).replace('.', ','), p.unit, p.min, p.warranty])])); }
-function csvSales(){ const rows = [['Fecha', 'Documento', 'Nº', 'Cliente', (REG.code === 'VE' ? 'C.I./RIF' : REG.taxId), 'Producto', 'Cantidad', 'Precio', 'Subtotal', 'Impuesto %', 'Total venta', ...(REG.features.bcv ? ['IGTF'] : []), 'Forma de pago', 'Vendedor', ...(REG.features.bcv ? ['Tasa'] : []), 'Moneda']]; salesArr().forEach(s => (s.items || []).forEach(i => rows.push([new Date(s.ts).toLocaleString(REG.locale), s.doc === 'fiscal' ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega' : '', s.doc === 'fiscal' ? s.fiscalNo || '' : s.noteNo || '', (s.customer || {}).name || (S.clients[s.clientId] || {}).name || '', (s.customer || {}).rif || '', i.name, String(num(i.qty)).replace('.', ','), dec(i.price), dec(num(i.price) * num(i.qty)), i.iva ?? 16, dec(s.total), ...(REG.features.bcv ? [dec(s.igtf || 0)] : []), METHODS[s.method] || s.method, s.userName || '', ...(REG.features.bcv ? [dec(s.rate)] : []), s.bc || 'USD']))); saveFile('ventas.csv', csv(rows)); }
+function csvSales(){ const rows = [['Fecha', 'Documento', 'Nº', 'Cliente', (REG.code === 'VE' ? 'C.I./RIF' : REG.taxId), 'Producto', 'Cantidad', 'Precio', 'Subtotal', 'Impuesto %', 'Total venta', ...(REG.features.bcv ? ['IGTF'] : []), 'Forma de pago', 'Vendedor', ...(REG.features.bcv ? ['Tasa'] : []), 'Moneda']]; salesArr().forEach(s => (s.items || []).forEach(i => rows.push([new Date(s.ts).toLocaleString(REG.locale), s.doc === 'fiscal' && REG.code === 'VE' ? 'Factura fiscal' : s.doc === 'nota' ? 'Nota de entrega' : s.doc ? docTitle(s) : '', docNo(s), (s.customer || {}).name || (S.clients[s.clientId] || {}).name || '', (s.customer || {}).rif || '', i.name, String(num(i.qty)).replace('.', ','), dec(i.price), dec(num(i.price) * num(i.qty)), i.iva ?? 16, dec(s.total), ...(REG.features.bcv ? [dec(s.igtf || 0)] : []), METHODS[s.method] || s.method, s.userName || '', ...(REG.features.bcv ? [dec(s.rate)] : []), s.bc || 'USD']))); saveFile('ventas.csv', csv(rows)); }
 function csvDebts(){ saveFile('fiados.csv', csv([['Cliente', 'Teléfono', 'Saldo ' + REG.currency.code, ...(REG.features.bcv ? ['Saldo Bs'] : [])], ...clients().map(c => [c.name, c.phone, dec(balance(c.id)), ...(REG.features.bcv ? [dec(balance(c.id) * cfg.bcv)] : [])])])); }
 function backup(){ saveFile('respaldo-' + (cfg.name || 'negocio').replace(/\W+/g, '-').toLowerCase() + '-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify({app:'negocio', v:1, at:Date.now(), cfg, ...S})); }
 async function restore(file){

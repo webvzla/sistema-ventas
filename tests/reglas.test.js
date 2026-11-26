@@ -51,6 +51,10 @@ const ko = async p => { try { await assertFails(p); return true; } catch (e) { r
   T('B10', 'Pasar de Venezuela a España sin tocar la tasa guardada: permitido (no se borra nada)', await ok(as('bizVE').doc('biz/bizVE/config/main').set({ country: 'ES', regionBy: 'bizVE' }, { merge: true })) === true);
   await seed();
 
+  T('S6', 'Vendedor puede avanzar la numeración de documentos simplificados (simpSeq) como la de notas', await ok(as('v_bizVE').doc('biz/bizVE/config/main').set({ simpSeq: 3 }, { merge: true })) === true);
+  T('S7', 'Cada usuario puede marcar SOLO en su ficha que vio el tutorial; no puede cambiarse el rol ni tocar la ficha de otro', (await ok(as('v_bizVE').doc('biz/bizVE/members/v_bizVE').set({ tourDone: 1 }, { merge: true }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/members/v_bizVE').set({ role: 'admin', tourDone: 2 }, { merge: true }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/members/bizVE').set({ tourDone: 1 }, { merge: true }))) === true);
+  await seed();
+
   // ---- Licencias y tienda ----
   T('L1', 'Administrador NO puede escribirse historial de licencia (compras falsas)', await ko(as('bizVE').doc('biz/bizVE/licHistory/x').set({ type: 'compra', months: 12, at: 1 })) === true);
   T('L2', 'Administrador NO puede alargarse la licencia a mano', await ko(as('bizVE').doc('biz/bizVE').update({ expires: 9e12 })) === true);

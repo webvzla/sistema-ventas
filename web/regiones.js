@@ -25,7 +25,8 @@
         ['efectivo_usd', 'Efectivo $', 'usd', true], ['efectivo_bs', 'Efectivo Bs', 'bs'], ['pago_movil', 'Pago móvil', 'bs'],
         ['punto', 'Punto de venta', 'bs'], ['transferencia', 'Transferencia', 'bs'], ['zelle', 'Zelle', 'usd', true],
         ['efectivo_eur', 'Efectivo €', 'eur', true], ['fiado', 'Fiado', 'usd']],
-      docs: { fiscalNote: 'Copia de control interno: la factura legal es la de tu máquina fiscal o la de tus formularios de imprenta autorizada.' },
+      // Venezuela conserva sus dos documentos de siempre (y el botón de consumidor final).
+      docs: { kinds: ['fiscal', 'nota'], def: 'fiscal', labels: { fiscal: 'Factura fiscal', nota: 'Nota de entrega (sin factura)' }, cf: true, fiscalNote: 'Copia de control interno: la factura legal es la de tu máquina fiscal o la de tus formularios de imprenta autorizada.' },
       features: { bcv: true, igtf: true, eurPrices: true },
       fiscal: { validated: false, status: 'Comportamiento actual de StockSoft: IVA 16/8/exento, IGTF 3 % y conversión a bolívares con la tasa BCV. Los documentos son de control interno, no fiscales.' }
     },
@@ -37,7 +38,8 @@
       tax: { name: 'IVA', rates: [21, 10, 4, 0], def: 21, labels: { 21: 'General 21%', 10: 'Reducido 10%', 4: 'Superreducido 4%', 0: 'Exento' }, included: true },
       taxId: 'NIF',
       payments: [['efectivo', 'Efectivo', 'usd'], ['tarjeta', 'Tarjeta', 'usd'], ['bizum', 'Bizum', 'usd'], ['transf', 'Transferencia', 'usd'], ['fiado', 'Fiado', 'usd']],
-      docs: { fiscalNote: 'Documento de control interno. La facturación en España (Verifactu, TicketBAI, factura simplificada) está pendiente de validación: no lo uses como factura legal.' },
+      // simpleMax: importe orientativo a partir del cual normalmente corresponde factura completa (pendiente de validación).
+      docs: { kinds: ['venta', 'simple', 'fiscal'], def: 'simple', labels: { venta: 'Venta sin documento', simple: 'Factura simplificada', fiscal: 'Factura completa' }, simpleMax: 400, fullAddr: true, fiscalNote: 'Documento de control interno. La facturación en España (Verifactu, TicketBAI, factura simplificada) está pendiente de validación: no lo uses como factura legal.' },
       features: { bcv: false, igtf: false, eurPrices: false },
       fiscal: { validated: false, status: 'Pendiente de validación: tipos de IVA orientativos; no cubre Verifactu, TicketBAI ni el recargo de equivalencia.' }
     },
@@ -46,7 +48,7 @@
       currency: { code: 'USD', symbol: '$', pos: 'pre', dec: 2, name: 'dólar' },
       local: null, secondary: [],
       dateFmt: 'mm/dd/aaaa', numFmt: '1,234.56',
-      tax: { name: 'Sales tax', rates: [0], def: 0, labels: { 0: 'Sin impuesto' }, included: true, custom: true },
+      tax: { name: 'Sales tax', rates: [0], def: 0, labels: { 0: 'Sin impuesto' }, included: false, custom: true },
       taxId: 'EIN / Tax ID',
       payments: [['efectivo', 'Efectivo', 'usd'], ['tarjeta', 'Tarjeta', 'usd'], ['zelle', 'Zelle', 'usd'], ['cheque', 'Cheque', 'usd'], ['transf', 'Transferencia', 'usd'], ['fiado', 'Fiado', 'usd']],
       docs: { fiscalNote: 'Recibo de control interno. El impuesto sobre ventas depende del estado y del condado: configúralo con tu contador.' },
@@ -162,6 +164,8 @@
     r.uncertain = !has && !!cfg.cc && String(cfg.cc) !== '58';
     if (cfg.tz && tzOk(cfg.tz)) r.tz = cfg.tz;
     if (code === 'XX' && cfg.currency && /^[A-Z]{3}$/.test(cfg.currency)) r.currency = curInfo(cfg.currency, r.locale);
+    // Tipos de documento al cobrar: venta sin documento, documento simplificado y factura completa (salvo Venezuela).
+    r.docs = Object.assign({ kinds: ['venta', 'simple', 'fiscal'], def: 'venta', labels: { venta: 'Venta sin documento', simple: 'Ticket simplificado', fiscal: 'Factura completa' } }, r.docs);
     applyTaxes(r, cfg);
     r.methods = {}; r.methodCur = {}; r.divisas = []; r.cash = {};
     for (const [k, label, cur, divisa] of r.payments) {
@@ -200,6 +204,14 @@
     if (custom && Array.isArray(cfg.taxes)) def = taxes.find(t => t.id === cfg.taxDef) || null;
     else if (custom) def = taxes.find(t => t.rate === Number(cfg.taxDef)) || taxes[0] || null; // formato anterior: taxDef era un porcentaje
     else def = taxes.find(t => t.rate === r.tax.def) || null;
+    /* Modalidad de precios del negocio (cfg.taxMode): 'inc' = los precios de venta incluyen los impuestos;
+       'exc' = no los incluyen y se suman al cobrar. Sin elegir: lo del país (España/Venezuela incluidos, EE. UU. no),
+       salvo negocios que ya tenían impuestos propios con modos distintos ('mixed': cada impuesto el suyo). */
+    const modeCfg = cfg.taxMode === 'inc' || cfg.taxMode === 'exc' ? cfg.taxMode : null;
+    const mixed = !modeCfg && custom && taxes.some(t => t.inc) && taxes.some(t => !t.inc);
+    const mode = modeCfg || (mixed ? 'mixed' : custom && taxes.length && taxes.every(t => !t.inc) ? 'exc' : (r.tax.included === false ? 'exc' : 'inc'));
+    if (mode !== 'mixed') taxes.forEach(t => { t.inc = mode === 'inc'; });
+    r.taxMode = mode; r.taxModeSet = !!modeCfg;
     r.taxes = taxes; r.taxDef = def; r.taxCustom = custom; r.taxSuggested = preset;
     r.taxUnset = !custom && !preset.length; // país sin impuestos predefinidos y el negocio aún no configuró los suyos
     const rates = [...new Set(taxes.map(t => t.rate))].sort((a, b) => b - a).concat([0]);
@@ -239,5 +251,30 @@
     return out;
   }
 
-  return { REGIONS, CURRENCIES, COUNTRIES, DEFAULT, BCV_KEYS, isCode, isPreset, fromConfig, get, list, money, diff, tzOk, normTax, curInfo };
+  /* Número fiscal del cliente para la factura completa. Comprueba el formato (y el dígito de control cuando se conoce);
+     nunca inventa ni completa números. Devuelve {ok, v (normalizado), msg}. */
+  function validTaxId(code, raw) {
+    const v = String(raw || '').toUpperCase().replace(/[\s.\-]/g, '');
+    if (!v) return { ok: false, v, msg: 'Falta el número fiscal del cliente' };
+    // Números de relleno (solo ceros, como V00000000) no identifican a nadie: fuera de Venezuela no se aceptan.
+    if (code !== 'VE' && /^[A-Z]?0+[A-Z]?$/.test(v)) return { ok: false, v, msg: 'Ese número no identifica a ningún cliente: escribe su número fiscal real' };
+    if (code === 'ES') {
+      const L = 'TRWAGMYFPDXBNJZSQVHLCKE';
+      if (/^\d{8}[A-Z]$/.test(v)) return L[+v.slice(0, 8) % 23] === v[8] ? { ok: true, v } : { ok: false, v, msg: 'La letra del DNI no corresponde' };
+      if (/^[XYZ]\d{7}[A-Z]$/.test(v)) { const n = +('XYZ'.indexOf(v[0]) + v.slice(1, 8)); return L[n % 23] === v[8] ? { ok: true, v } : { ok: false, v, msg: 'La letra del NIE no corresponde' }; }
+      if (/^[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J]$/.test(v)) {
+        const d = v.slice(1, 8).split('').map(Number); let a = 0, b = 0;
+        d.forEach((x, i) => { if (i % 2) a += x; else { const y = x * 2; b += Math.floor(y / 10) + (y % 10); } });
+        const c = (10 - ((a + b) % 10)) % 10, ch = v[8];
+        return ch === String(c) || ch === 'JABCDEFGHI'[c] ? { ok: true, v } : { ok: false, v, msg: 'El dígito de control del NIF no corresponde' };
+      }
+      return { ok: false, v, msg: 'Escribe un NIF, DNI o NIE válido (ej.: 12345678Z, X1234567L o B12345674)' };
+    }
+    if (code === 'MX') return /^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(v) ? { ok: true, v } : { ok: false, v, msg: 'Escribe un RFC válido (12 o 13 caracteres)' };
+    if (code === 'CO') return /^\d{6,10}\d?$/.test(v) ? { ok: true, v } : { ok: false, v, msg: 'Escribe el NIT o la cédula del cliente (solo números)' };
+    if (code === 'VE') return /^[VEJPG]?\d{5,10}$/.test(v) ? { ok: true, v } : { ok: false, v, msg: 'Escribe la cédula o el RIF del cliente' };
+    return v.length >= 3 ? { ok: true, v } : { ok: false, v, msg: 'Escribe el número fiscal del cliente' };
+  }
+
+  return { validTaxId, REGIONS, CURRENCIES, COUNTRIES, DEFAULT, BCV_KEYS, isCode, isPreset, fromConfig, get, list, money, diff, tzOk, normTax, curInfo };
 });
