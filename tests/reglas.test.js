@@ -53,6 +53,7 @@ const ko = async p => { try { await assertFails(p); return true; } catch (e) { r
 
   T('S6', 'Vendedor puede avanzar la numeración de documentos simplificados (simpSeq) como la de notas', await ok(as('v_bizVE').doc('biz/bizVE/config/main').set({ simpSeq: 3 }, { merge: true })) === true);
   T('S7', 'Cada usuario puede marcar SOLO en su ficha que vio el tutorial; no puede cambiarse el rol ni tocar la ficha de otro', (await ok(as('v_bizVE').doc('biz/bizVE/members/v_bizVE').set({ tourDone: 1 }, { merge: true }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/members/v_bizVE').set({ role: 'admin', tourDone: 2 }, { merge: true }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/members/bizVE').set({ tourDone: 1 }, { merge: true }))) === true);
+  T('S8', 'Vendedor puede poner el nº de nota de entrega a una venta, pero no cambiar su total', (await ok(as('v_bizVE').doc('biz/bizVE/sales/v9').set({ total: 5, ts: 1 }))) === true && (await ok(as('v_bizVE').doc('biz/bizVE/sales/v9').set({ total: 5, ts: 1, noteNo: 'NE-000001' }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/sales/v9').set({ total: 1, ts: 1, noteNo: 'NE-000001' }))) === true);
   await seed();
 
   // ---- Licencias y tienda ----

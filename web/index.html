@@ -801,7 +801,7 @@ const DOC_TITLE = {fiscal:'Factura', simple:'Factura simplificada', nota:'Nota d
 const docKinds = () => REG.docs.kinds;
 const docLabel = k => (REG.docs.labels && REG.docs.labels[k]) || DOC_TITLE[k] || k;
 function docDefault(){ const k = docKinds(), d = cfg.docDefault; if (REG.code !== 'VE' && !cfg.docSet) return REG.docs.def; return k.includes(d) ? d : REG.docs.def; }
-const taxedDoc = s => s.doc !== 'nota' && s.doc !== 'devolucion'; // la nota de entrega venezolana no es documento fiscal
+const taxedDoc = s => s.doc !== 'devolucion' && !(s.doc === 'nota' && (s.rg || 'VE') === 'VE'); // la nota de entrega venezolana no es documento fiscal; fuera de Venezuela la venta tributa igual
 const docTitle = s => s.doc === 'simple' ? withSaleRegion(s, () => docLabel('simple')) : s.doc === 'venta' ? 'Venta sin documento' : DOC_TITLE[s.doc] || 'Venta';
 const docNo = s => s.doc === 'fiscal' ? s.fiscalNo || '' : s.doc === 'simple' ? s.simpNo || '' : s.noteNo || '';
 function docHint(t){
@@ -809,8 +809,27 @@ function docHint(t){
   const k = ui.doc, max = REG.docs.simpleMax;
   if (k === 'venta') return '<p class="note" style="margin-top:6px">Se registra la venta (inventario, pago, caja e impuestos) sin entregar documento al comprador. Queda en tus ventas e informes.</p>';
   if (k === 'simple') return `<p class="note" style="margin-top:6px">${REG.code === 'ES' ? 'El cliente no necesita dar sus datos.' : 'Documento de control interno; consulta si en tu país tiene validez fiscal.'}</p>${max && t && t.total > max ? `<div class="warnbox" style="margin-top:6px">El importe supera ${esc(usd(max))}: normalmente corresponde factura completa. Revísalo con tu asesor.</div>` : ''}`;
+  if (k === 'nota') return '<p class="note" style="margin-top:6px">Nota de entrega con su propia numeración (NE-…). No es una factura: la venta se registra igual, con sus impuestos. Si eliges un cliente arriba, sale en la nota.</p>';
   if (k === 'fiscal') return `<p class="note" style="margin-top:6px">Pide los datos fiscales reales del cliente (${esc(REG.taxId)}, nombre${REG.docs.fullAddr ? ' y dirección' : ''}). StockSoft no inventa ni completa números.</p>`;
   return '';
+}
+// Nota de entrega de una venta ya registrada: se le asigna el siguiente número NE- en la MISMA venta
+// (no se crea otra venta, no se toca el stock ni los totales) y queda enlazada para consultarla después.
+async function makeNote(id){
+  const s = S.sales[id]; if (!s || s.noteNo || s.doc === 'devolucion') return;
+  const seq = num(cfg.noteSeq) + 1, noteNo = 'NE-' + String(seq).padStart(6, '0');
+  if (!(await put('sales', id, {...s, noteNo}))) return;
+  await putCfg({noteSeq:seq});
+  logA('venta', 'Nota de entrega', noteNo + ' de ' + docTitle(s) + (docNo(s) ? ' ' + docNo(s) : '') + ' · ' + usd(num(s.total)), 'sale:' + id);
+  toast('Nota de entrega ' + noteNo); viewFactura(id, 'nota');
+}
+// Imprimir el documento que se está viendo (factura, factura simplificada o nota de entrega).
+function printDoc(){
+  const el = document.querySelector('#sheet .fv-wrap'); if (!el) return;
+  const w = window.open('', '_blank'); if (!w){ toast('Permite las ventanas emergentes para imprimir, o descarga el PDF'); return; }
+  const css = [...document.querySelectorAll('style')].map(x => x.textContent).join('\n');
+  w.document.write(`<!doctype html><html lang="es"><meta charset="utf-8"><title>${esc(cfg.name || 'StockSoft')}</title><style>${css}body{background:#fff!important;color:#111;padding:16px}</style><body>${el.outerHTML}</body></html>`);
+  w.document.close(); setTimeout(() => { try { w.focus(); w.print(); } catch(e){} }, 400);
 }
 function regionInit(code, byUid, byName){
   const r = SSRegion.get(SSRegion.isCode(code) ? code : SSRegion.DEFAULT), now = Date.now();
@@ -2320,6 +2339,7 @@ function showSale(id, justDone){
     <div class="row" style="margin-top:8px"><input id="fNo" class="grow" value="${esc(s.fiscalNo || '')}" placeholder="Nº de factura" inputmode="numeric"><button class="btn" onclick="saveFiscalNo('${id}')">Guardar</button></div></div>
     <button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">Ver factura</button>`
   : s.doc === 'nota' || s.doc === 'simple' ? `<button class="btn full" style="margin-top:10px" onclick="viewFactura('${id}')">${s.doc === 'nota' ? 'Ver nota de entrega' : 'Ver ' + esc(docTitle(s).toLowerCase())}</button>` : ''}
+  ${!isRet && s.doc !== 'nota' && (s.rg || 'VE') !== 'VE' ? `<button class="btn sec full" style="margin-top:8px" onclick="${s.noteNo ? `viewFactura('${id}','nota')` : `makeNote('${id}')`}">${s.noteNo ? 'Ver nota de entrega ' + esc(s.noteNo) : 'Generar nota de entrega'}</button>` : ''}
   <a class="btn wa full" style="margin-top:8px" href="${waLink(phone, receiptText(s))}" target="_blank" rel="noopener">Enviar recibo por WhatsApp</a>
   ${isAdmin() ? `<div class="card" style="margin-top:12px;padding:10px 12px"><div class="sub" style="font-weight:600;margin:0 0 8px">¿Hubo un error? (solo administrador)</div><div class="gap">
     ${!isRet ? `<button class="btn sm sec" onclick="correctSale('${id}')">Corregir venta</button>` : ''}
@@ -2360,8 +2380,8 @@ async function saveFiscalNo(id){
   const v = $('#fNo').value.trim(); const s = S.sales[id]; if (!s) return;
   if (await put('sales', id, {...s, fiscalNo:v})){ toast(v ? 'Nº de factura guardado' : 'Nº borrado'); showSale(id); }
 }
-async function notaPDF(id){
-  const s = S.sales[id]; if (!s) return;
+async function notaPDF(id, kind){
+  const s = S.sales[id] && (kind ? {...S.sales[id], doc:kind} : S.sales[id]); if (!s) return;
   if (!window.jspdf){ toast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf;
   const items = s.items || [];
@@ -2470,23 +2490,25 @@ function facturaHTML(s){
     </tbody></table>
     <div class="fv-bot"><div class="fv-pay"><small>Forma de pago</small>${salePayments(s).map(p => `<div>${METHODS[p.m] || p.m}: ${fmtCur(p.raw, p.cur)}</div>`).join('')}${s.userName ? `<div class="mut">Atendido por ${esc(s.userName)}</div>` : ''}</div>
       <div class="fv-tot">${tl.map(([k, v]) => `<div><span>${k}</span><span>${m(v)}</span></div>`).join('')}<div class="big"><span>TOTAL A PAGAR${inBs ? ' Bs' : ''}</span><span>${inBs ? nf2.format(r2(num(s.total) * rate)) : usd(num(s.total))}</span></div>${inBs ? `<div class="mut" style="justify-content:flex-end">Equivale a ${usd(num(s.total))} · tasa ${nf2.format(rate)}</div>` : ''}</div></div>
-    <div class="fv-foot">${REG.code !== 'VE' ? esc(REG.docs.fiscalNote || 'Documento de control interno.') : fiscal ? 'Copia de control interno. La factura legal es la de tu máquina fiscal o forma libre autorizada.' : 'Documento no fiscal.'}</div>
+    <div class="fv-foot">${s.doc === 'nota' && REG.code !== 'VE' ? 'Nota de entrega: documento no fiscal; no sustituye a la factura.' : REG.code !== 'VE' ? esc(REG.docs.fiscalNote || 'Documento de control interno.') : fiscal ? 'Copia de control interno. La factura legal es la de tu máquina fiscal o forma libre autorizada.' : 'Documento no fiscal.'}</div>
   </div>`;
 }
 async function fillLogos(){ const u = await getLogo(); document.querySelectorAll('.fvLogo').forEach(i => { if (u){ i.src = u; i.style.visibility = ''; } else i.remove(); }); }
-function viewFactura(id){
-  const s = S.sales[id]; if (!s) return;
+function viewFactura(id, kind){
+  const s0 = S.sales[id]; if (!s0) return;
+  const s = kind ? {...s0, doc:kind} : s0, ka = kind ? `,'${kind}'` : ''; // kind = 'nota': la nota de entrega de esta misma venta
   const fiscal = s.doc === 'fiscal', cl = s.customer || (s.clientId && S.clients[s.clientId]) || {};
   openSheet(`<h2>${esc(docTitle(s))}</h2>
   ${!cfg.rif || !cfg.addr ? `<div class="warnbox">Faltan datos de tu negocio (${[!cfg.rif && REG.taxId, !cfg.addr && 'dirección'].filter(Boolean).join(' y ')}). ${isAdmin() ? `<a href="#" onclick="closeSheet();go('mas','ajustes');return false">Complétalos en Ajustes</a>` : 'Pídele al administrador que los complete en Ajustes.'}</div>` : ''}
   <div class="fv-wrap">${facturaHTML(s)}</div>${showLogo() ? `<img style="display:none" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onload="fillLogos()">` : ''}
-  <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}')">Descargar PDF</button>${s.doc === 'nota' || s.doc === 'simple' ? `<button class="btn sec" onclick="notaPDF('${id}')">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
+  <div class="grid2" style="margin-top:12px"><button class="btn" onclick="facturaPDF('${id}'${ka})">Descargar PDF</button>${s.doc === 'nota' || s.doc === 'simple' ? `<button class="btn sec" onclick="notaPDF('${id}'${ka})">Ticket 80 mm</button>` : `<button class="btn sec" onclick="showSale('${id}')">Volver a la venta</button>`}</div>
+  <button class="btn sec full" style="margin-top:8px" onclick="printDoc()">Imprimir</button>
   <a class="btn wa full" style="margin-top:8px" href="${waLink(cl.phone || '', receiptText(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
 /* ---- Factura / nota tamaño carta, con el formato de un talonario ---- */
-async function facturaPDF(id){
-  const s = S.sales[id]; if (!s) return;
+async function facturaPDF(id, kind){
+  const s = S.sales[id] && (kind ? {...S.sales[id], doc:kind} : S.sales[id]); if (!s) return;
   if (!window.jspdf){ toast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf, doc = new jsPDF({unit:'mm', format:'letter'});
   const W = 215.9, L = 14, R = W - 14, fiscal = s.doc === 'fiscal' || s.doc === 'simple', rate = num(s.rate);
@@ -2558,7 +2580,7 @@ async function facturaPDF(id){
   py = Math.max(py, ty) + 16;
   doc.setDrawColor(120); doc.line(L, py, L + 60, py); txt('Recibí conforme', L + 30, py + 4.5, {s:8, a:'center', c:90});
   // Pie
-  txt(REG.code !== 'VE' ? 'Documento de control interno.' : fiscal ? 'Copia de control interno. La factura legal es la que emite tu máquina fiscal o la forma libre autorizada por el SENIAT.' : 'Documento no fiscal.', W / 2, 266, {s:7, a:'center', c:120});
+  txt(s.doc === 'nota' && REG.code !== 'VE' ? 'Nota de entrega: documento no fiscal; no sustituye a la factura.' : REG.code !== 'VE' ? 'Documento de control interno.' : fiscal ? 'Copia de control interno. La factura legal es la que emite tu máquina fiscal o la forma libre autorizada por el SENIAT.' : 'Documento no fiscal.', W / 2, 266, {s:7, a:'center', c:120});
   txt('Generado con StockSoft · stocksoft.app', W / 2, 270, {s:7, a:'center', c:150});
   await saveFile((fiscal ? 'factura-' + (s.fiscalNo || id) : 'nota-' + (s.noteNo || id)) + '.pdf', doc.output('blob'));
 }

@@ -43,7 +43,7 @@ const D = 864e5, NOW = Date.UTC(2026, 11, 10, 12);
 
 // --- Documentos, modalidad de precios y número fiscal ---
 { const v = R.fromConfig({}), e = R.fromConfig({ country: 'ES' }), m = R.fromConfig({ country: 'MX' });
-  T('D1', 'Documentos: Venezuela factura fiscal + nota de entrega (con consumidor final); España venta sin documento, factura simplificada (por defecto) y completa', v.docs.kinds.join() === 'fiscal,nota' && v.docs.cf && e.docs.kinds.join() === 'venta,simple,fiscal' && e.docs.def === 'simple' && e.docs.labels.simple === 'Factura simplificada' && !e.docs.cf && m.docs.kinds.join() === 'venta,simple,fiscal' && m.docs.def === 'venta', [v.docs, e.docs]); }
+  T('D1', 'Documentos: Venezuela factura fiscal + nota de entrega (con consumidor final); España venta sin documento, factura simplificada (por defecto), completa y nota de entrega', v.docs.kinds.join() === 'fiscal,nota' && v.docs.cf && e.docs.kinds.join() === 'venta,simple,fiscal,nota' && e.docs.labels.nota === 'Nota de entrega' && e.docs.def === 'simple' && e.docs.labels.simple === 'Factura simplificada' && !e.docs.cf && m.docs.kinds.join() === 'venta,simple,fiscal,nota' && m.docs.def === 'venta', [v.docs, e.docs]); }
 { T('D2', 'Modalidad de precios por defecto: España y Venezuela con impuestos incluidos, EE. UU. sin incluir', R.fromConfig({ country: 'ES' }).taxMode === 'inc' && R.fromConfig({}).taxMode === 'inc' && R.fromConfig({ country: 'US' }).taxMode === 'exc');
   const x = R.fromConfig({ country: 'ES', taxMode: 'exc' });
   T('D3', 'El negocio elige "no incluyen": todos sus impuestos pasan a sumarse al cobrar', x.taxMode === 'exc' && x.taxes.every(t => t.inc === false) && x.taxModeSet, x.taxes);

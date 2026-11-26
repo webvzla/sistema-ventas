@@ -39,7 +39,7 @@
       taxId: 'NIF',
       payments: [['efectivo', 'Efectivo', 'usd'], ['tarjeta', 'Tarjeta', 'usd'], ['bizum', 'Bizum', 'usd'], ['transf', 'Transferencia', 'usd'], ['fiado', 'Fiado', 'usd']],
       // simpleMax: importe orientativo a partir del cual normalmente corresponde factura completa (pendiente de validación).
-      docs: { kinds: ['venta', 'simple', 'fiscal'], def: 'simple', labels: { venta: 'Venta sin documento', simple: 'Factura simplificada', fiscal: 'Factura completa' }, simpleMax: 400, fullAddr: true, fiscalNote: 'Documento de control interno. La facturación en España (Verifactu, TicketBAI, factura simplificada) está pendiente de validación: no lo uses como factura legal.' },
+      docs: { kinds: ['venta', 'simple', 'fiscal', 'nota'], def: 'simple', labels: { venta: 'Venta sin documento', simple: 'Factura simplificada', fiscal: 'Factura completa', nota: 'Nota de entrega' }, simpleMax: 400, fullAddr: true, fiscalNote: 'Documento de control interno. La facturación en España (Verifactu, TicketBAI, factura simplificada) está pendiente de validación: no lo uses como factura legal.' },
       features: { bcv: false, igtf: false, eurPrices: false },
       fiscal: { validated: false, status: 'Pendiente de validación: tipos de IVA orientativos; no cubre Verifactu, TicketBAI ni el recargo de equivalencia.' }
     },
@@ -165,7 +165,7 @@
     if (cfg.tz && tzOk(cfg.tz)) r.tz = cfg.tz;
     if (code === 'XX' && cfg.currency && /^[A-Z]{3}$/.test(cfg.currency)) r.currency = curInfo(cfg.currency, r.locale);
     // Tipos de documento al cobrar: venta sin documento, documento simplificado y factura completa (salvo Venezuela).
-    r.docs = Object.assign({ kinds: ['venta', 'simple', 'fiscal'], def: 'venta', labels: { venta: 'Venta sin documento', simple: 'Ticket simplificado', fiscal: 'Factura completa' } }, r.docs);
+    r.docs = Object.assign({ kinds: ['venta', 'simple', 'fiscal', 'nota'], def: 'venta', labels: { venta: 'Venta sin documento', simple: 'Ticket simplificado', fiscal: 'Factura completa', nota: 'Nota de entrega' } }, r.docs);
     applyTaxes(r, cfg);
     r.methods = {}; r.methodCur = {}; r.divisas = []; r.cash = {};
     for (const [k, label, cur, divisa] of r.payments) {

@@ -141,7 +141,7 @@ service cloud.firestore {
       }
       match /sales/{d} {
         allow read, create: if member(b);
-        allow update: if admin(b) || (member(b) && onlyKeys(['fiscalNo']));
+        allow update: if admin(b) || (member(b) && onlyKeys(['fiscalNo', 'noteNo']));
         allow delete: if admin(b);
       }
       match /clients/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }

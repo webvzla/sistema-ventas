@@ -2,7 +2,7 @@
 id: ventas
 roles: [administrador, vendedor]
 pantallas: [Vender, Escanear código, Servicio o artículo libre, Documento, Forma de pago, Cambiar forma de pago, Devolver productos, Cotizaciones]
-verificado: 2026-11-26 · rama pruebas 5c637a0
+verificado: 2026-11-26 · rama pruebas (nota de entrega en todos los países)
 ---
 # Ventas y cobros
 
@@ -28,11 +28,16 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
   En España, si pasa de 400 € aparece un aviso orientativo para hacer factura completa.
 - **Factura completa:** pide el **número fiscal real** del cliente (se comprueba: en España DNI, NIE o CIF con su letra o dígito de control;
   en México RFC; en Colombia NIT), el **nombre** y, en España, la **dirección**. No se aceptan números de relleno como V00000000.
+- **Nota de entrega** (todos los países): documento de entrega con **su propia numeración (NE-000001…)**, independiente de las facturas.
+  Muestra los datos del negocio, los productos, cantidades, precios, la fecha y el cliente si lo eliges arriba. **No es una factura**:
+  la venta se registra igual (en Venezuela, como siempre, la nota no lleva IVA fiscal; en otros países la venta conserva sus impuestos).
+- **Nota de entrega de una venta ya hecha** (fuera de Venezuela): abre la venta → **Generar nota de entrega**. Se le asigna el siguiente
+  número NE- **en la misma venta**: no se crea otra venta, no se toca el stock ni los totales. Después aparece **Ver nota de entrega NE-…**.
 - El documento por defecto se elige en **Más → Ajustes del negocio → Documento por defecto al cobrar**.
 - Los documentos son de **control interno**: no sustituyen a la facturación legal del país (máquina fiscal, Verifactu, CFDI, DIAN…).
 
 ## Después de cobrar (detalle de la venta)
-- **Ver factura / Ver nota de entrega / Ver factura simplificada**: documento tamaño carta con **Descargar PDF** y, para nota o simplificada, **Ticket 80 mm**.
+- **Ver factura / Ver nota de entrega / Ver factura simplificada**: documento tamaño carta con **Descargar PDF**, **Imprimir** y, para nota o simplificada, **Ticket 80 mm**.
 - **Enviar recibo por WhatsApp**.
 - En facturas de Venezuela se puede escribir el **número de factura** de la máquina fiscal o talonario; las siguientes siguen desde ahí.
 - **¿Hubo un error? (solo administrador):** **Corregir venta**, **Cambiar forma de pago**, **Devolver productos**, **Anular**.

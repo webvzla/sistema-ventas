@@ -2,45 +2,400 @@
   "nombre": "Base de conocimiento de StockSoft",
   "proposito": "Fuente para el futuro StockSoft Assistant. Sin IA: solo conocimiento verificado contra el código.",
   "idioma": "es",
-  "verificado": { "fecha": "2026-11-26", "rama": "pruebas", "commit": "5c637a0" },
-  "fuentes_de_codigo": ["web/index.html", "web/regiones.js", "web/precios.js", "functions/lib/licencias.js", "firestore.rules"],
+  "verificado": {
+    "fecha": "2026-11-26",
+    "rama": "pruebas",
+    "commit": "5c637a0"
+  },
+  "fuentes_de_codigo": [
+    "web/index.html",
+    "web/regiones.js",
+    "web/precios.js",
+    "functions/lib/licencias.js",
+    "firestore.rules"
+  ],
   "ayuda_en_la_app": "window.SSHelp (artículos cortos del Centro de Ayuda: id, cat, q, a, go, admin, k)",
-  "estados": { "disponible": "✅", "pendiente": "⏳ / ❌" },
+  "estados": {
+    "disponible": "✅",
+    "pendiente": "⏳ / ❌"
+  },
   "modulos": [
-    { "id": "primeros-pasos", "archivo": "01-primeros-pasos.md", "titulo": "Primeros pasos", "roles": ["administrador", "vendedor"],
-      "ui": ["Crear cuenta de negocio", "País del negocio", "Código de activación (opcional)", "Crear y entrar"], "claves": ["registro", "prueba gratis", "empezar", "cuenta"] },
-    { "id": "dashboard", "archivo": "02-dashboard-e-inicio.md", "titulo": "Dashboard e Inicio", "roles": ["administrador", "vendedor"],
-      "ui": ["Dashboard", "Ganancia neta", "Por reponer", "Sin ventas en 60 días", "Últimas ventas de hoy"], "claves": ["resumen", "ganancia", "panel"] },
-    { "id": "ventas", "archivo": "03-ventas-y-cobros.md", "titulo": "Ventas y cobros", "roles": ["administrador", "vendedor"],
-      "ui": ["Vender", "Servicio o artículo libre", "Pago mixto", "Cambiar forma de pago", "Devolver productos", "Corregir venta", "Convertir en venta", "Editar cotización", "Ticket 80 mm", "Venta sin documento", "Factura simplificada", "Factura completa", "Consumidor final"],
-      "claves": ["cobrar", "factura", "ticket", "devolución", "cotización", "descuento", "documento"] },
-    { "id": "inventario", "archivo": "04-productos-e-inventario.md", "titulo": "Productos e inventario", "roles": ["administrador", "vendedor"],
-      "ui": ["+ Producto", "Reponer stock", "Ajustar precios en bloque", "Imprimir etiquetas", "Revisar repetidos", "Pedido sugerido", "Vencimientos por lote (opcional)", "Generar código nuevo", "Precio al mayor"],
-      "claves": ["producto", "stock", "precio", "código de barras", "vencimiento", "etiqueta"] },
-    { "id": "excel", "archivo": "05-excel.md", "titulo": "Importar y exportar con Excel", "roles": ["administrador"],
-      "ui": ["Importar desde Excel", "Deshacer última importación", "Exportar inventario a Excel", "Descargar copia de seguridad"], "claves": ["excel", "csv", "importar", "exportar"] },
-    { "id": "clientes", "archivo": "06-clientes-y-fiados.md", "titulo": "Clientes y fiados", "roles": ["administrador", "vendedor"],
-      "ui": ["+ Nuevo cliente", "Tipo de cliente", "Descuento fijo (%)", "Registrar abono", "Nueva deuda", "Recordar por WhatsApp", "TOTAL POR COBRAR", "SALDO A FAVOR"], "claves": ["fiado", "abono", "deuda", "cliente"] },
-    { "id": "proveedores", "archivo": "07-proveedores-y-compras.md", "titulo": "Proveedores y compras", "roles": ["administrador"],
-      "ui": ["+ Nuevo proveedor", "Registrar compra", "Registrar pago", "Pedir por WhatsApp", "Días de crédito", "Persona de contacto", "LE DEBES"], "claves": ["proveedor", "compra", "pago"] },
-    { "id": "caja", "archivo": "08-caja-y-gastos.md", "titulo": "Caja y gastos", "roles": ["administrador", "vendedor"],
-      "ui": ["Abrir caja", "Cerrar caja", "Efectivo contado", "Cierres anteriores", "+ Registrar gasto", "+ Añadir pago fijo"], "claves": ["caja", "cierre", "gasto", "efectivo"] },
-    { "id": "reportes", "archivo": "09-reportes.md", "titulo": "Reportes", "roles": ["administrador"],
-      "ui": ["Reportes", "Por vendedor", "Por forma de pago", "Lo que más ganancia deja", "Impuestos de las ventas"], "claves": ["informe", "estadística", "ventas", "iva"] },
-    { "id": "configuracion", "archivo": "10-pais-moneda-impuestos.md", "titulo": "País, moneda e impuestos", "roles": ["administrador"],
-      "ui": ["Configuración regional", "Cambiar país del negocio", "Confirmar Venezuela", "+ Añadir impuesto", "Incluyen impuestos", "No incluyen impuestos", "Impuesto por defecto de los productos nuevos", "Documento por defecto al cobrar"],
-      "claves": ["país", "moneda", "impuesto", "iva", "precio con impuesto"] },
-    { "id": "tasa-bcv", "archivo": "11-tasa-bcv-venezuela.md", "titulo": "Tasa BCV (Venezuela)", "roles": ["administrador", "vendedor"],
-      "ui": ["Tasas del día", "Calculadora", "Cambiar tasa a mano", "Buscar la tasa del BCV ahora"], "claves": ["tasa", "bcv", "bolívares", "dólar"] },
-    { "id": "usuarios", "archivo": "12-usuarios-y-seguridad.md", "titulo": "Usuarios, permisos y seguridad", "roles": ["administrador", "vendedor"],
-      "ui": ["+ Nuevo usuario", "Cómo entra", "Cambiar mi contraseña", "Registro de actividad", "¿Olvidaste tu contraseña?"], "claves": ["usuario", "empleado", "permiso", "contraseña", "pin"] },
-    { "id": "licencias", "archivo": "13-licencias.md", "titulo": "Licencias y activación", "roles": ["administrador"],
-      "ui": ["Mi licencia", "Activar licencia", "Comprar o renovar la licencia en línea"], "claves": ["licencia", "código", "renovar", "prueba"] },
-    { "id": "datos", "archivo": "14-datos-respaldo-y-app.md", "titulo": "Datos, respaldo y app de PC", "roles": ["administrador"],
-      "ui": ["Descargar copia (.json)", "Restaurar copia", "Inventario inteligente", "Avisos al dueño", "Copias automáticas"], "claves": ["copia", "respaldo", "sin internet", "pc", "avisos"] },
-    { "id": "ayuda", "archivo": "15-ayuda-y-tutorial.md", "titulo": "Centro de Ayuda y tutorial", "roles": ["administrador", "vendedor"],
-      "ui": ["Repetir el tutorial", "Contactar con soporte", "Saltar tutorial"], "claves": ["ayuda", "tutorial", "soporte"] },
-    { "id": "problemas", "archivo": "20-problemas-frecuentes.md", "titulo": "Problemas frecuentes", "roles": ["administrador", "vendedor"], "ui": [], "claves": ["error", "no funciona", "problema"] },
-    { "id": "limitaciones", "archivo": "30-limitaciones-y-pendiente.md", "titulo": "Limitaciones y pendiente", "roles": ["administrador", "vendedor"], "ui": [], "claves": ["no puede", "pendiente", "todavía no"] }
+    {
+      "id": "primeros-pasos",
+      "archivo": "01-primeros-pasos.md",
+      "titulo": "Primeros pasos",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "Crear cuenta de negocio",
+        "País del negocio",
+        "Código de activación (opcional)",
+        "Crear y entrar"
+      ],
+      "claves": [
+        "registro",
+        "prueba gratis",
+        "empezar",
+        "cuenta"
+      ]
+    },
+    {
+      "id": "dashboard",
+      "archivo": "02-dashboard-e-inicio.md",
+      "titulo": "Dashboard e Inicio",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "Dashboard",
+        "Ganancia neta",
+        "Por reponer",
+        "Sin ventas en 60 días",
+        "Últimas ventas de hoy"
+      ],
+      "claves": [
+        "resumen",
+        "ganancia",
+        "panel"
+      ]
+    },
+    {
+      "id": "ventas",
+      "archivo": "03-ventas-y-cobros.md",
+      "titulo": "Ventas y cobros",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "Vender",
+        "Servicio o artículo libre",
+        "Pago mixto",
+        "Cambiar forma de pago",
+        "Devolver productos",
+        "Corregir venta",
+        "Convertir en venta",
+        "Editar cotización",
+        "Ticket 80 mm",
+        "Venta sin documento",
+        "Factura simplificada",
+        "Factura completa",
+        "Consumidor final",
+        "Nota de entrega",
+        "Generar nota de entrega",
+        "Imprimir"
+      ],
+      "claves": [
+        "cobrar",
+        "factura",
+        "ticket",
+        "devolución",
+        "cotización",
+        "descuento",
+        "documento",
+        "nota de entrega"
+      ]
+    },
+    {
+      "id": "inventario",
+      "archivo": "04-productos-e-inventario.md",
+      "titulo": "Productos e inventario",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "+ Producto",
+        "Reponer stock",
+        "Ajustar precios en bloque",
+        "Imprimir etiquetas",
+        "Revisar repetidos",
+        "Pedido sugerido",
+        "Vencimientos por lote (opcional)",
+        "Generar código nuevo",
+        "Precio al mayor"
+      ],
+      "claves": [
+        "producto",
+        "stock",
+        "precio",
+        "código de barras",
+        "vencimiento",
+        "etiqueta"
+      ]
+    },
+    {
+      "id": "excel",
+      "archivo": "05-excel.md",
+      "titulo": "Importar y exportar con Excel",
+      "roles": [
+        "administrador"
+      ],
+      "ui": [
+        "Importar desde Excel",
+        "Deshacer última importación",
+        "Exportar inventario a Excel",
+        "Descargar copia de seguridad"
+      ],
+      "claves": [
+        "excel",
+        "csv",
+        "importar",
+        "exportar"
+      ]
+    },
+    {
+      "id": "clientes",
+      "archivo": "06-clientes-y-fiados.md",
+      "titulo": "Clientes y fiados",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "+ Nuevo cliente",
+        "Tipo de cliente",
+        "Descuento fijo (%)",
+        "Registrar abono",
+        "Nueva deuda",
+        "Recordar por WhatsApp",
+        "TOTAL POR COBRAR",
+        "SALDO A FAVOR"
+      ],
+      "claves": [
+        "fiado",
+        "abono",
+        "deuda",
+        "cliente"
+      ]
+    },
+    {
+      "id": "proveedores",
+      "archivo": "07-proveedores-y-compras.md",
+      "titulo": "Proveedores y compras",
+      "roles": [
+        "administrador"
+      ],
+      "ui": [
+        "+ Nuevo proveedor",
+        "Registrar compra",
+        "Registrar pago",
+        "Pedir por WhatsApp",
+        "Días de crédito",
+        "Persona de contacto",
+        "LE DEBES"
+      ],
+      "claves": [
+        "proveedor",
+        "compra",
+        "pago"
+      ]
+    },
+    {
+      "id": "caja",
+      "archivo": "08-caja-y-gastos.md",
+      "titulo": "Caja y gastos",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "Abrir caja",
+        "Cerrar caja",
+        "Efectivo contado",
+        "Cierres anteriores",
+        "+ Registrar gasto",
+        "+ Añadir pago fijo"
+      ],
+      "claves": [
+        "caja",
+        "cierre",
+        "gasto",
+        "efectivo"
+      ]
+    },
+    {
+      "id": "reportes",
+      "archivo": "09-reportes.md",
+      "titulo": "Reportes",
+      "roles": [
+        "administrador"
+      ],
+      "ui": [
+        "Reportes",
+        "Por vendedor",
+        "Por forma de pago",
+        "Lo que más ganancia deja",
+        "Impuestos de las ventas"
+      ],
+      "claves": [
+        "informe",
+        "estadística",
+        "ventas",
+        "iva"
+      ]
+    },
+    {
+      "id": "configuracion",
+      "archivo": "10-pais-moneda-impuestos.md",
+      "titulo": "País, moneda e impuestos",
+      "roles": [
+        "administrador"
+      ],
+      "ui": [
+        "Configuración regional",
+        "Cambiar país del negocio",
+        "Confirmar Venezuela",
+        "+ Añadir impuesto",
+        "Incluyen impuestos",
+        "No incluyen impuestos",
+        "Impuesto por defecto de los productos nuevos",
+        "Documento por defecto al cobrar"
+      ],
+      "claves": [
+        "país",
+        "moneda",
+        "impuesto",
+        "iva",
+        "precio con impuesto"
+      ]
+    },
+    {
+      "id": "tasa-bcv",
+      "archivo": "11-tasa-bcv-venezuela.md",
+      "titulo": "Tasa BCV (Venezuela)",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "Tasas del día",
+        "Calculadora",
+        "Cambiar tasa a mano",
+        "Buscar la tasa del BCV ahora"
+      ],
+      "claves": [
+        "tasa",
+        "bcv",
+        "bolívares",
+        "dólar"
+      ]
+    },
+    {
+      "id": "usuarios",
+      "archivo": "12-usuarios-y-seguridad.md",
+      "titulo": "Usuarios, permisos y seguridad",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "+ Nuevo usuario",
+        "Cómo entra",
+        "Cambiar mi contraseña",
+        "Registro de actividad",
+        "¿Olvidaste tu contraseña?"
+      ],
+      "claves": [
+        "usuario",
+        "empleado",
+        "permiso",
+        "contraseña",
+        "pin"
+      ]
+    },
+    {
+      "id": "licencias",
+      "archivo": "13-licencias.md",
+      "titulo": "Licencias y activación",
+      "roles": [
+        "administrador"
+      ],
+      "ui": [
+        "Mi licencia",
+        "Activar licencia",
+        "Comprar o renovar la licencia en línea"
+      ],
+      "claves": [
+        "licencia",
+        "código",
+        "renovar",
+        "prueba"
+      ]
+    },
+    {
+      "id": "datos",
+      "archivo": "14-datos-respaldo-y-app.md",
+      "titulo": "Datos, respaldo y app de PC",
+      "roles": [
+        "administrador"
+      ],
+      "ui": [
+        "Descargar copia (.json)",
+        "Restaurar copia",
+        "Inventario inteligente",
+        "Avisos al dueño",
+        "Copias automáticas"
+      ],
+      "claves": [
+        "copia",
+        "respaldo",
+        "sin internet",
+        "pc",
+        "avisos"
+      ]
+    },
+    {
+      "id": "ayuda",
+      "archivo": "15-ayuda-y-tutorial.md",
+      "titulo": "Centro de Ayuda y tutorial",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [
+        "Repetir el tutorial",
+        "Contactar con soporte",
+        "Saltar tutorial"
+      ],
+      "claves": [
+        "ayuda",
+        "tutorial",
+        "soporte"
+      ]
+    },
+    {
+      "id": "problemas",
+      "archivo": "20-problemas-frecuentes.md",
+      "titulo": "Problemas frecuentes",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [],
+      "claves": [
+        "error",
+        "no funciona",
+        "problema"
+      ]
+    },
+    {
+      "id": "limitaciones",
+      "archivo": "30-limitaciones-y-pendiente.md",
+      "titulo": "Limitaciones y pendiente",
+      "roles": [
+        "administrador",
+        "vendedor"
+      ],
+      "ui": [],
+      "claves": [
+        "no puede",
+        "pendiente",
+        "todavía no"
+      ]
+    }
   ]
 }
