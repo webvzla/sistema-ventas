@@ -14,7 +14,7 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
 1. En **Vender**, forma de pago **Fiado** (o una línea «Fiado» en pago mixto).
 2. Elige el **Cliente del fiado** y cobra. La deuda queda en su ficha.
 
-## Cobrar un abono
+## Cobrar un abono (pago de un fiado o pago parcial)
 1. **Clientes** → toca el cliente → **Registrar abono**.
 2. **Monto** (en Venezuela puede ser en $, Bs o €), **Cómo pagó** y una nota. El saldo baja.
 También se puede anotar una deuda a mano con **Nueva deuda**. Arriba se ve el **TOTAL POR COBRAR** de todos los clientes.
@@ -23,6 +23,7 @@ También se puede anotar una deuda a mano con **Nueva deuda**. Arriba se ve el *
 En la ficha del cliente, **Recordar por WhatsApp** envía un mensaje con su **saldo pendiente** (en Venezuela con el equivalente en Bs).
 
 ## Preguntas frecuentes
+- **Un cliente me pagó una parte de lo que me debe:** abre el cliente → **Registrar abono** con ese monto; el resto sigue pendiente en su saldo.
 - **¿El vendedor puede cobrar fiados?** Sí, y registrar clientes. Borrar clientes es solo del administrador.
 - **¿Puede quedar saldo a favor?** Sí, se muestra como «SALDO A FAVOR» (por ejemplo, tras una devolución descontada del fiado).
 - **¿Me recuerda los fiados viejos?** Sí, si activas «Recordar fiados sin pagar después de (días)» en Inventario inteligente.

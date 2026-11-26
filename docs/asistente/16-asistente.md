@@ -31,6 +31,14 @@ Funciona en ordenador y en móvil (en el móvil ocupa toda la pantalla).
 - **Modo guía (sin IA):** muestra las secciones de las guías que responden a tu pregunta. Es el modo actual.
 - **Con IA (Gemini mediante Firebase AI Logic):** redactaría la respuesta usando solo esas secciones. La integración está preparada pero **apagada**. **Pendiente de autorización y financiación:** no se activará hasta que el titular de StockSoft lo autorice y StockSoft tenga ingresos (sus condiciones exigen servicio de pago para usuarios de la UE).
 
+## Preguntas frecuentes
+- **¿Me puedes dar una contraseña o una clave?** No. El asistente nunca da ni pide contraseñas ni claves. Para cambiar la tuya: **Más → Cambiar mi contraseña**; si la olvidaste, **¿Olvidaste tu contraseña?** en la entrada.
+- **¿Puedes hacer la venta (o el cambio) por mí?** No, solo explica cómo hacerlo.
+
+## Privacidad: no muestra tus ventas ni las de otros negocios
+- **¿Puedes ver mis ventas o las de otro negocio?** No. El asistente no tiene acceso a ventas, clientes ni productos de ningún negocio.
+- En StockSoft cada negocio solo ve sus propios datos: nadie puede ver los de otro negocio.
+
 ## Límites
 - Hasta 500 caracteres por pregunta.
 - Con IA (cuando se active): 20 preguntas por hora y 60 al día por usuario, y 300 al día por negocio. Al llegar al límite sigue funcionando en modo guía.

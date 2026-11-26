@@ -6,7 +6,7 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
 ---
 # Importar y exportar con Excel
 
-## Importar productos (paso a paso)
+## Importar productos desde Excel, hoja de cálculo o CSV (paso a paso)
 1. **Inventario → menú de opciones → Importar desde Excel** y elige el archivo (**.xlsx, .xls o .csv**). Hay una plantilla de ejemplo.
 2. StockSoft lo lee solo: encuentra la **fila de títulos** aunque no sea la primera, entiende **nombres de columna distintos**
    (precio, PVP, costo, existencia…), ignora filas de **totales** y avisa de números dudosos.

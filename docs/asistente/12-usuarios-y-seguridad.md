@@ -20,6 +20,8 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
 | Cambiar país o impuestos | ✅ | ❌ |
 Estos permisos también los aplica el servidor: un vendedor no puede saltárselos.
 
+**Cada negocio solo ve sus propios datos:** nadie puede ver las ventas, clientes o productos de otro negocio.
+
 ## Crear un usuario
 **Más → Usuarios → + Nuevo usuario**: nombre, **Rol** y **Cómo entra**: con **correo y contraseña**, o **sin correo** con un usuario automático
 (por ejemplo maria-4821) y un **PIN** de 6 a 12 números. Al crearlo se muestran los datos para copiarlos o enviarlos por WhatsApp.

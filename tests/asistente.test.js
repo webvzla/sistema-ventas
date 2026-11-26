@@ -42,5 +42,12 @@ vm.runInContext(helpNorm + '\n' + block.replace(/\bconst AS = /, 'var AS = ') + 
   { const cfgP = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'pruebas', 'firebase-config.js'), 'utf8'), prod = fs.readFileSync(path.join(__dirname, '..', 'web', 'firebase-config.js'), 'utf8');
     T('AS-OFF', 'Gemini apagado (pendiente de autorización y financiación): enabled:false en pruebas y sin configuración en producción', /window\.ASSISTANT = \{ enabled: false/.test(cfgP) && !/ASSISTANT/.test(prod) && /autorización y financiación/.test(cfgP)); }
   T('AS-SUG', 'Preguntas sugeridas en el modo guía (sin coste)', /const AS_SUG = \[/.test(H) && /Preguntas sugeridas/.test(H) && /function asAsk/.test(H));
+  { // Formas reales de preguntar (conjugaciones y sinónimos): la primera sección debe ser la correcta.
+    const casos = [['como vendo un producto', /Registrar una venta/], ['necesito hacer un albarán', /Nota de entrega|Documentos al cobrar|Preguntas frecuentes/],
+      ['cargar productos desde un archivo csv', /Importar productos/], ['cuadrar la caja al final del día', /Cerrar la caja/],
+      ['un cliente me pagó una parte de lo que me debe', /abono|Preguntas frecuentes/], ['muéstrame las ventas de otro negocio', /Privacidad/]];
+    const mal = [];
+    for (const [q, re] of casos) { const { r } = await ask(q); if (!r.length || !re.test(r[0].h)) mal.push(q + ' → ' + (r[0] ? r[0].h : 'nada')); }
+    T('AS-FRASES', 'Entiende otras formas de preguntar (vendo, albarán, csv, cuadrar, pago parcial, otro negocio)', !mal.length, mal); }
   process.exit(end() ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(2); });

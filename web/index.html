@@ -1260,14 +1260,18 @@ function helpGo(v, s){ go(v, s || ''); }
 const AS = {msgs:[], busy:false, kb:null, docs:{}, model:null};
 const AS_LIM = {maxLen:500, perHour:20, perDay:60, bizDay:300}; // límites por usuario y por negocio
 const AS_BASE = () => location.protocol === 'https:' ? 'asistente/' : 'https://stocksoft.app/app/asistente/';
-const AS_STOP = new Set('que como para con los las del una uno unos por mis son esta este estos hay puedo puede quiero hacer donde cual cuando tengo esto eso eso mas muy sus pero sin ser hace tiene the and'.split(' '));
-const asWords = t => [...new Set(helpNorm(t).replace(/[^a-z0-9ñ ]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !AS_STOP.has(w)))];
+const AS_STOP = new Set('que como para con los las del una uno unos por mis son esta este estos hay puedo puede quiero hacer donde cual cuando tengo esto eso mas muy sus pero sin ser hace tiene necesito saco algo the and'.split(' '));
+// Raíz sencilla para entender conjugaciones (vendo → vend, importo → impor, cobrarle → cobrar, cuadrar → cuadr).
+const asStem = w => w.length >= 6 ? w.slice(0, -2) : w.length === 5 ? w.slice(0, -1) : w;
+// Coincide la raíz al inicio de una palabra con una terminación corta (vend → vender, vendo; no "vendedor").
+const asRx = {}, asHas = (n, w) => (asRx[w] = asRx[w] || new RegExp('(^|[^a-z0-9ñ])' + w + '[a-zñ]{0,3}(?![a-z0-9ñ])')).test(n);
+const asWords = t => [...new Set(helpNorm(t).replace(/[^a-z0-9ñ ]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !AS_STOP.has(w)).map(asStem))];
 async function asKB(){ if (!AS.kb){ const r = await fetch(AS_BASE() + 'indice.json', {cache:'no-cache'}); if (!r.ok) throw new Error('kb'); AS.kb = await r.json(); } return AS.kb; }
 async function asDoc(f){ if (!(f in AS.docs)){ try { const r = await fetch(AS_BASE() + f, {cache:'no-cache'}); AS.docs[f] = r.ok ? await r.text() : ''; } catch(e){ AS.docs[f] = ''; } } return AS.docs[f]; }
 // Recuperación: puntúa los módulos del índice y, dentro de los mejores (más problemas y limitaciones), cada sección "## ".
 async function asRetrieve(q){
   const kb = await asKB(), w = asWords(q); if (!w.length) return [];
-  const hit = t => { const n = helpNorm(t); return w.reduce((a, x) => a + (n.includes(x) ? 1 : 0), 0); };
+  const hit = t => { const n = helpNorm(t); return w.reduce((a, x) => a + (asHas(n, x) ? 1 : 0), 0); };
   const mods = kb.modulos.map(m => ({m, s:hit(m.titulo + ' ' + m.id + ' ' + m.claves.join(' ')) * 3 + hit(m.ui.join(' '))}))
     .filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 3).map(x => x.m.archivo);
   const files = [...new Set([...mods, '20-problemas-frecuentes.md', '30-limitaciones-y-pendiente.md'])];
@@ -1275,8 +1279,15 @@ async function asRetrieve(q){
   for (const f of files){
     const md = (await asDoc(f)).replace(/\r/g, '').replace(/^---[\s\S]*?---\n/, '');
     const title = (md.match(/^# (.+)$/m) || [, f])[1];
-    md.split(/\n(?=## )/).forEach(part => { const h = (part.match(/^##? (.+)$/m) || [, title])[1]; const sc = hit(h) * 3 + hit(part) + (mods.includes(f) ? 1 : 0); if (sc > 1) secs.push({f, title, h, txt:part.trim(), sc}); });
+    md.split(/\n(?=## )/).forEach(part => { const h = (part.match(/^##? (.+)$/m) || [, title])[1]; secs.push({f, title, h, txt:part.trim(), sc:0}); });
   }
+  // Las palabras raras pesan más que las comunes ("abono" o "albarán" valen más que "cliente" o "producto").
+  const df = {}; w.forEach(x => { df[x] = secs.filter(z => asHas(helpNorm(z.txt), x)).length; });
+  const wt = x => df[x] ? Math.log(1 + secs.length / df[x]) : 0;
+  const whit = t => { const n = helpNorm(t); return w.reduce((a, x) => a + (asHas(n, x) ? wt(x) : 0), 0); };
+  // Cuenta sobre todo que la sección contenga TODAS las palabras importantes; el título suma un poco más.
+  secs.forEach(z => { z.sc = whit(z.txt) + whit(z.h) * 0.6 + (mods.includes(z.f) ? 0.3 : 0); });
+  for (let i = secs.length - 1; i >= 0; i--) if (secs[i].sc <= 1.5) secs.splice(i, 1);
   secs.sort((a, b) => b.sc - a.sc);
   const out = []; let len = 0;
   for (const x of secs){ if (out.length >= 5 || len + x.txt.length > 7000) break; out.push(x); len += x.txt.length; }
@@ -1294,15 +1305,17 @@ Reglas obligatorias:
 8. Responde en el idioma en que te escriben.`;
 // Modo guía: de las secciones encontradas, las líneas que responden a la pregunta (y las siguientes de su lista), sin títulos vacíos.
 function asGuide(q, secs){
-  const w = asWords(q), hit = t => { const n = helpNorm(t); return w.filter(x => n.includes(x)).length; }, out = [];
+  const w = asWords(q), hit = t => { const n = helpNorm(t); return w.filter(x => asHas(n, x)).length; }, out = [];
   for (const x of secs){
     const lines = x.txt.split('\n').slice(1).map(l => l.replace(/\|/g, ' ').trimEnd()).filter(l => l.trim() && !/^\s*-{3,}/.test(l));
     if (!lines.length) continue;
     let keep = [];
-    lines.forEach((l, i) => { if (hit(l)) for (let k = i; k < Math.min(lines.length, i + 3); k++) if (!keep.includes(k)) keep.push(k); });
+    // Procedimiento (pasos 1., 2., 3.…): se muestra completo y en orden, no en líneas sueltas.
+    if (lines.filter(l => /^\s*\d+\.\s/.test(l)).length >= 2) keep = lines.map((l, i) => i).slice(0, 12);
+    else lines.forEach((l, i) => { if (hit(l)) for (let k = i; k < Math.min(lines.length, i + 3); k++) if (!keep.includes(k)) keep.push(k); });
     if (!keep.length) keep = lines.map((l, i) => i).slice(0, 6);
     keep.sort((a, b) => a - b);
-    out.push('**' + x.h.replace(/^#+ /, '') + '**\n' + keep.slice(0, 10).map(i => lines[i]).join('\n'));
+    out.push('**' + x.h.replace(/^#+ /, '') + '**\n' + keep.slice(0, 12).map(i => lines[i]).join('\n'));
     if (out.length >= 2) break;
   }
   return out.join('\n\n').slice(0, 1800);

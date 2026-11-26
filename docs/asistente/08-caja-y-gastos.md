@@ -10,7 +10,7 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
 **Más → Caja → Abrir caja** (o el botón **Abrir caja** en Vender). Cuenta el efectivo con el que empiezas (el **fondo** para dar vuelto):
 en Venezuela en $, Bs y €; en otros países en la moneda del negocio. Se rellena con lo contado en el último cierre.
 
-## Cerrar la caja
+## Cerrar la caja (cierre y cuadre del final del día)
 1. **Más → Caja → Cerrar caja**.
 2. StockSoft muestra el **efectivo esperado** (fondo + ventas en efectivo − salidas en efectivo) y **otros cobros** (tarjeta, transferencias…) para revisarlos en el banco.
 3. Escribe el **Efectivo contado**: se calcula si **sobra** o **falta** y puedes dejar una **Nota**.

@@ -6,7 +6,7 @@ verificado: 2026-11-26 · rama pruebas (nota de entrega en todos los países)
 ---
 # Ventas y cobros
 
-## Registrar una venta (paso a paso)
+## Registrar una venta o vender un producto (paso a paso)
 1. Entra en **Vender**. Si la caja está cerrada verás «La caja está cerrada» con el botón **Abrir caja** (puedes vender igual).
 2. Añade productos: **busca por nombre o código**, toca el producto, usa un lector de códigos o **Escanear** con la cámara.
    Para algo que no está en el inventario (un servicio, un envío): **+ Servicio o artículo libre** (descripción, cantidad, precio e impuesto).
@@ -28,7 +28,7 @@ verificado: 2026-11-26 · rama pruebas (nota de entrega en todos los países)
   En España, si pasa de 400 € aparece un aviso orientativo para hacer factura completa.
 - **Factura completa:** pide el **número fiscal real** del cliente (se comprueba: en España DNI, NIE o CIF con su letra o dígito de control;
   en México RFC; en Colombia NIT), el **nombre** y, en España, la **dirección**. No se aceptan números de relleno como V00000000.
-- **Nota de entrega** (todos los países): documento de entrega con **su propia numeración (NE-000001…)**, independiente de las facturas.
+- **Nota de entrega** (todos los países; en España también se llama **albarán** y en otros países **remito**): documento de entrega con **su propia numeración (NE-000001…)**, independiente de las facturas.
   Muestra los datos del negocio, los productos, cantidades, precios, la fecha y el cliente si lo eliges arriba. **No es una factura**:
   la venta se registra igual (en Venezuela, como siempre, la nota no lleva IVA fiscal; en otros países la venta conserva sus impuestos).
 - **Nota de entrega de una venta ya hecha** (fuera de Venezuela): abre la venta → **Generar nota de entrega**. Se le asigna el siguiente
@@ -53,6 +53,9 @@ verificado: 2026-11-26 · rama pruebas (nota de entrega en todos los países)
 3. Se guarda en **Más → Cotizaciones** (Abiertas, Vendidas, Vencidas). Desde ahí: **PDF**, **WhatsApp**, **Editar cotización** o **Convertir en venta** (y luego **Ver la venta**).
 
 ## Preguntas frecuentes
+- **¿Cómo hago un albarán o un remito?** Es la **Nota de entrega**: en **Vender**, en **Documento** elige **Nota de entrega**; o abre una venta ya hecha y pulsa **Generar nota de entrega**.
+- **¿Cómo vendo un producto?** Entra en **Vender**, busca o escanea el producto, revisa el total y pulsa **Cobrar** (pasos completos arriba, en «Registrar una venta»).
+- **¿Cómo le cobro a un cliente lo que compró?** En **Vender** añade los productos, elige el cliente arriba y pulsa **Cobrar** (si no paga ahora, forma de pago **Fiado**).
 - **¿Puedo vender sin abrir la caja?** Sí, pero el cierre de caja solo cuenta lo vendido con la caja abierta.
 - **El cliente no quiere factura, ¿la venta cuenta?** Sí. Usa **Venta sin documento** o **Factura simplificada**; la operación queda registrada con sus impuestos.
 - **¿Cómo cobro parte en efectivo y parte con tarjeta?** **Pago mixto**.

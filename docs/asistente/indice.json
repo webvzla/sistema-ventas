@@ -97,7 +97,10 @@
         "cotización",
         "descuento",
         "documento",
-        "nota de entrega"
+        "nota de entrega",
+        "albarán",
+        "remito",
+        "vender"
       ]
     },
     {
@@ -145,7 +148,10 @@
         "excel",
         "csv",
         "importar",
-        "exportar"
+        "exportar",
+        "hoja de cálculo",
+        "subir productos",
+        "cargar productos"
       ]
     },
     {
@@ -170,7 +176,9 @@
         "fiado",
         "abono",
         "deuda",
-        "cliente"
+        "cliente",
+        "pago parcial",
+        "me debe"
       ]
     },
     {
@@ -215,7 +223,10 @@
         "caja",
         "cierre",
         "gasto",
-        "efectivo"
+        "efectivo",
+        "cuadrar",
+        "cuadre",
+        "cierre del día"
       ]
     },
     {
@@ -305,7 +316,9 @@
         "empleado",
         "permiso",
         "contraseña",
-        "pin"
+        "pin",
+        "otro negocio",
+        "privacidad"
       ]
     },
     {
@@ -387,7 +400,9 @@
         "chat",
         "preguntar",
         "ia",
-        "gemini"
+        "gemini",
+        "contraseña",
+        "datos de otro negocio"
       ]
     },
     {
