@@ -6,7 +6,7 @@
     "fecha": "2026-11-26",
     "rama": "pruebas",
     "commit": "5c637a0",
-    "nota": "Incluye Nota de entrega en todos los países y StockSoft Assistant (modo guía)."
+    "nota": "Incluye Nota de entrega en todos los países y StockSoft Assistant en modo guía. Gemini: preparado y apagado, pendiente de autorización y financiación."
   },
   "fuentes_de_codigo": [
     "web/index.html",
@@ -379,7 +379,8 @@
       "ui": [
         "StockSoft Assistant",
         "Nueva conversación",
-        "Preguntar a StockSoft Assistant"
+        "Preguntar a StockSoft Assistant",
+        "Preguntas sugeridas"
       ],
       "claves": [
         "asistente",

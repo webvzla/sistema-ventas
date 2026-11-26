@@ -15,6 +15,8 @@ window.OWNER_UID = "__OWNER_UID_PRUEBAS__";
 window.APP_CONTACT = "por WhatsApp al +34 663 40 79 74";
 window.APP_WA = "34663407974";
 window.STOCKSOFT_ENV = "pruebas";
-// StockSoft Assistant: con enabled:false responde en "modo guía" (sin IA). Para usar Gemini mediante Firebase AI Logic hace
-// falta activarlo en la consola (y App Check con reCAPTCHA Enterprise): no hay claves privadas aquí, appCheckKey es pública.
+// StockSoft Assistant: con enabled:false responde en "modo guía" (sin IA y sin coste).
+// Gemini (Firebase AI Logic + App Check) está PREPARADO Y APAGADO, pendiente de autorización y financiación del titular de StockSoft:
+// no cambiar a true sin su autorización expresa (sus condiciones exigen servicio de pago para usuarios de la UE).
+// No hay claves privadas aquí; appCheckKey sería pública.
 window.ASSISTANT = { enabled: false, model: "gemini-3.1-flash-lite", appCheckKey: "" };

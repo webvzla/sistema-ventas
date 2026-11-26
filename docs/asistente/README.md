@@ -1,7 +1,7 @@
-# Base de conocimiento de StockSoft (para el futuro StockSoft Assistant)
+# Base de conocimiento de StockSoft (fuente de StockSoft Assistant)
 
 Esta carpeta explica **cómo funciona StockSoft de verdad**, módulo por módulo, en lenguaje sencillo para comerciantes.
-Es la fuente de **StockSoft Assistant**: la app publica esta carpeta en `/app/asistente/` y el asistente lee solo las guías que necesita. Al cambiar una guía y publicar, el asistente usa la versión nueva.
+Es la fuente de **StockSoft Assistant**: la app publica esta carpeta en `/app/asistente/` y el asistente lee solo las guías que necesita. Al cambiar una guía y publicar, el asistente usa la versión nueva. Hoy funciona en **modo guía** (sin IA ni coste); la IA con Gemini está preparada y pendiente de autorización y financiación.
 
 ## Cómo está organizada
 | Archivo | Tema |

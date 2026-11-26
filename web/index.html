@@ -233,6 +233,7 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
 #assist .as-typing i:nth-child(2){animation-delay:.15s}#assist .as-typing i:nth-child(3){animation-delay:.3s}
 @keyframes asdot{0%,80%,100%{opacity:.25}40%{opacity:1}}
 #assist .as-in{display:flex;gap:6px;padding:10px;border-top:1px solid var(--line)}#assist .as-in input{flex:1;min-width:0}
+#assist .as-sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}#assist .as-sug .sub{width:100%}
 #assist .as-foot{font-size:11px;color:var(--mut);text-align:center;padding:0 10px 8px}
 @media (max-width:600px){#assist{inset:0;right:0;bottom:0;width:100vw;height:100vh;height:100dvh;border-radius:0}}
 </style>
@@ -1349,11 +1350,15 @@ function asOpen(){
   $('#asFoot').textContent = (window.ASSISTANT && window.ASSISTANT.enabled ? 'Con IA (Gemini) · ' : 'Modo guía (sin IA) · ') + 'solo informativo, no cambia datos de tu negocio';
   setTimeout(() => { const q = $('#asQ'); if (q) q.focus(); }, 60);
 }
+const AS_SUG = ['¿Cómo registro una venta?', '¿Cómo hago una nota de entrega?', '¿Cómo importo mi inventario desde Excel?', '¿Cómo abro y cierro la caja?', '¿Cómo registro el abono de un cliente?'];
+function asAsk(i){ const q = $('#asQ'); if (!q || !AS_SUG[i]) return; q.value = AS_SUG[i]; asSend(); }
 function asClose(){ const a = $('#assist'); if (a) a.classList.remove('on'); }
 function asNew(){ AS.msgs = [{r:'a', t:asWelcome()}]; asSave(); asRender(); }
 function asRender(){
   const box = $('#asMsgs'); if (!box) return;
-  box.innerHTML = AS.msgs.map(m => `<div class="as-m ${m.r === 'u' ? 'u' : 'a'}">${m.r === 'u' ? esc(m.t) : asMd(m.t)}${m.src ? `<div class="as-src">Fuente: ${esc(m.src)}</div>` : ''}</div>`).join('') + (AS.busy ? '<div class="as-m a as-typing" aria-label="Escribiendo"><i></i><i></i><i></i></div>' : '');
+  // Preguntas sugeridas (solo con la conversación recién empezada): un toque y se responde con las guías, sin coste.
+  const sug = AS.msgs.length === 1 && !AS.busy ? `<div class="as-sug"><div class="sub">Preguntas sugeridas</div>${AS_SUG.map((q, i) => `<button type="button" class="chip" onclick="asAsk(${i})">${esc(q)}</button>`).join('')}</div>` : '';
+  box.innerHTML = AS.msgs.map(m => `<div class="as-m ${m.r === 'u' ? 'u' : 'a'}">${m.r === 'u' ? esc(m.t) : asMd(m.t)}${m.src ? `<div class="as-src">Fuente: ${esc(m.src)}</div>` : ''}</div>`).join('') + (AS.busy ? '<div class="as-m a as-typing" aria-label="Escribiendo"><i></i><i></i><i></i></div>' : '') + sug;
   box.scrollTop = box.scrollHeight;
 }
 async function asSend(ev){

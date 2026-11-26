@@ -31,7 +31,7 @@ El asistente debe responder con honestidad: «StockSoft todavía no lo hace» y,
 - ❌ Reportes con rango de fechas libre o en PDF.
 
 ## Asistencia
-- ⏳ StockSoft Assistant con IA (Gemini): preparado pero pendiente de activar; hoy responde en **modo guía** con estas mismas guías.
+- ⏳ StockSoft Assistant con IA (Gemini): integración preparada y apagada. **Pendiente de autorización y financiación:** no se activará hasta que el titular de StockSoft lo autorice y StockSoft tenga ingresos (sus condiciones exigen servicio de pago para usuarios de la UE). Hoy responde en **modo guía** con estas mismas guías, sin coste.
 - ❌ El asistente no hace cambios ni consulta datos del negocio (es solo informativo).
 
 ## Diferencias entre entorno de pruebas y versión publicada

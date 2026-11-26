@@ -23,4 +23,4 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
 
 ## Disponible / Pendiente
 - ✅ Centro de Ayuda con buscador y enlaces, tutorial guiado, contacto con soporte.
-- ✅ **StockSoft Assistant** en modo guía (ver `16-asistente.md`); ⏳ respuestas con IA pendientes de activar.
+- ✅ **StockSoft Assistant** en modo guía (ver `16-asistente.md`); ⏳ respuestas con IA (Gemini) pendientes de autorización y financiación.

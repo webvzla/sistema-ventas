@@ -39,5 +39,8 @@ vm.runInContext(helpNorm + '\n' + block.replace(/\bconst AS = /, 'var AS = ') + 
   T('AS-KEY', 'Sin claves privadas: la configuración solo lleva enabled, model y appCheckKey (pública)', !/AIza|sk_|secret/i.test(block) && /window\.ASSISTANT/.test(block));
   T('AS-LIMS', 'Límites: 500 caracteres, 20/hora y 60/día por usuario, 300/día por negocio', ctx.AS_LIM.maxLen === 500 && ctx.AS_LIM.perHour === 20 && ctx.AS_LIM.perDay === 60 && ctx.AS_LIM.bizDay === 300);
   T('AS-UI', 'Interfaz: botón StockSoft Assistant, nueva conversación, indicador de escritura, mensaje inicial y vista móvil', /aria-label="StockSoft Assistant"/.test(H) && /Nueva conversación/.test(block) && /as-typing/.test(block) && /function asWelcome/.test(block) && /@media \(max-width:600px\)\{#assist/.test(H));
+  { const cfgP = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'pruebas', 'firebase-config.js'), 'utf8'), prod = fs.readFileSync(path.join(__dirname, '..', 'web', 'firebase-config.js'), 'utf8');
+    T('AS-OFF', 'Gemini apagado (pendiente de autorización y financiación): enabled:false en pruebas y sin configuración en producción', /window\.ASSISTANT = \{ enabled: false/.test(cfgP) && !/ASSISTANT/.test(prod) && /autorización y financiación/.test(cfgP)); }
+  T('AS-SUG', 'Preguntas sugeridas en el modo guía (sin coste)', /const AS_SUG = \[/.test(H) && /Preguntas sugeridas/.test(H) && /function asAsk/.test(H));
   process.exit(end() ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(2); });
