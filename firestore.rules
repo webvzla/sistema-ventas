@@ -134,6 +134,12 @@ service cloud.firestore {
       }
       // Fotos de productos: las ven todos los del negocio; solo el administrador las sube o borra.
       match /photos/{d} { allow read: if member(b); allow write: if admin(b); }
+      // Contador diario de uso de StockSoft Assistant (límite por negocio). Solo se puede sumar de 1 en 1, hasta 300 al día.
+      match /assistUse/{day} {
+        allow read: if member(b);
+        allow create: if member(b) && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
+        allow update: if member(b) && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1 && request.resource.data.n <= 300;
+      }
       match /products/{d} {
         allow read: if member(b);
         allow create, delete: if admin(b);
@@ -152,7 +158,7 @@ service cloud.firestore {
       match /log/{d} { allow create: if member(b) && request.resource.data.uid == request.auth.uid; allow read, delete: if admin(b); }
       // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
       // (Los miembros quedan fuera: su rol solo se cambia con las reglas de members, que lo validan.)
-      match /{col}/{d} { allow read, write: if !(col in ['members', 'config', 'rates', 'licHistory']) && admin(b); }
+      match /{col}/{d} { allow read, write: if !(col in ['members', 'config', 'rates', 'licHistory', 'assistUse']) && admin(b); }
     }
   }
 }

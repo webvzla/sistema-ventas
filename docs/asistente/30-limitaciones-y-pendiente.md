@@ -31,7 +31,8 @@ El asistente debe responder con honestidad: «StockSoft todavía no lo hace» y,
 - ❌ Reportes con rango de fechas libre o en PDF.
 
 ## Asistencia
-- ❌ StockSoft Assistant (asistente con IA): pendiente. Hoy hay **Centro de Ayuda** y **tutorial**.
+- ⏳ StockSoft Assistant con IA (Gemini): preparado pero pendiente de activar; hoy responde en **modo guía** con estas mismas guías.
+- ❌ El asistente no hace cambios ni consulta datos del negocio (es solo informativo).
 
 ## Diferencias entre entorno de pruebas y versión publicada
 Las funciones de internacionalización, tienda de licencias, documentos por país, modalidad de precios, tutorial y Ayuda están en la

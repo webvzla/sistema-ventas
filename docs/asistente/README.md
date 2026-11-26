@@ -1,7 +1,7 @@
 # Base de conocimiento de StockSoft (para el futuro StockSoft Assistant)
 
 Esta carpeta explica **cómo funciona StockSoft de verdad**, módulo por módulo, en lenguaje sencillo para comerciantes.
-Es la fuente que usará el asistente inteligente cuando se desarrolle. **Todavía no hay IA**: esto es solo el conocimiento.
+Es la fuente de **StockSoft Assistant**: la app publica esta carpeta en `/app/asistente/` y el asistente lee solo las guías que necesita. Al cambiar una guía y publicar, el asistente usa la versión nueva.
 
 ## Cómo está organizada
 | Archivo | Tema |
@@ -21,6 +21,7 @@ Es la fuente que usará el asistente inteligente cuando se desarrolle. **Todaví
 | `13-licencias.md` | Prueba gratis, licencia, códigos, tienda de licencias |
 | `14-datos-respaldo-y-app.md` | Copias de seguridad, exportar, uso sin internet, app de PC, actualizaciones, avisos |
 | `15-ayuda-y-tutorial.md` | Centro de Ayuda y tutorial de bienvenida |
+| `16-asistente.md` | StockSoft Assistant: qué hace, de dónde saca las respuestas y sus límites |
 | `20-problemas-frecuentes.md` | Problemas habituales y cómo resolverlos |
 | `30-limitaciones-y-pendiente.md` | Lo que StockSoft todavía NO hace o está pendiente |
 | `indice.json` | Índice para máquinas: módulos, archivos, roles, pantallas y palabras clave |

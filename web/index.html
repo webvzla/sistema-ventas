@@ -219,12 +219,28 @@ body.locked header,body.locked nav,body.locked main{visibility:hidden}
 #tour .tour-btns{display:flex;gap:6px;margin-top:12px;align-items:center;flex-wrap:wrap}
 .help-cats{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.help-cats .chip.on{background:var(--acc);color:#04121f}
 .help-a summary{cursor:pointer;list-style:none}.help-a summary::-webkit-details-marker{display:none}.help-a .help-body{font-size:14px;line-height:1.5;margin-top:8px}.help-a .help-body ol,.help-a .help-body ul{margin:6px 0 0 18px}
+
+/* StockSoft Assistant */
+#assist{position:fixed;right:16px;bottom:16px;width:min(400px,calc(100vw - 32px));height:min(600px,calc(100vh - 32px));z-index:8800;display:none;flex-direction:column;background:var(--solid,#101a33);border:1px solid var(--line);border-radius:16px;box-shadow:0 16px 48px rgba(0,0,0,.5);overflow:hidden}
+#assist.on{display:flex}
+#assist .as-head{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+#assist .as-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+#assist .as-m{max-width:88%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;word-wrap:break-word}
+#assist .as-m.u{align-self:flex-end;background:var(--acc);color:#04121f;border-bottom-right-radius:4px}
+#assist .as-m.a{align-self:flex-start;background:rgba(255,255,255,.06);border:1px solid var(--line);border-bottom-left-radius:4px}
+#assist .as-src{margin-top:6px;font-size:11px;color:var(--mut)}
+#assist .as-typing i{display:inline-block;width:7px;height:7px;margin:0 2px;border-radius:50%;background:var(--mut);animation:asdot 1s infinite}
+#assist .as-typing i:nth-child(2){animation-delay:.15s}#assist .as-typing i:nth-child(3){animation-delay:.3s}
+@keyframes asdot{0%,80%,100%{opacity:.25}40%{opacity:1}}
+#assist .as-in{display:flex;gap:6px;padding:10px;border-top:1px solid var(--line)}#assist .as-in input{flex:1;min-width:0}
+#assist .as-foot{font-size:11px;color:var(--mut);text-align:center;padding:0 10px 8px}
+@media (max-width:600px){#assist{inset:0;right:0;bottom:0;width:100vw;height:100vh;height:100dvh;border-radius:0}}
 </style>
 </head>
 <body>
 <header>
   <div class="brand" id="brand">Mi <span>Negocio</span></div>
-  <div class="row" style="gap:6px"><button class="chip" id="rateChip" onclick="go('tasas')">Tasa: <b>—</b></button><button class="chip" id="helpChip" onclick="go('mas','ayuda')" aria-label="Ayuda" title="Ayuda">?</button><button class="chip" id="userChip" onclick="userMenu()" aria-label="Usuario">👤</button></div>
+  <div class="row" style="gap:6px"><button class="chip" id="rateChip" onclick="go('tasas')">Tasa: <b>—</b></button><button class="chip" id="asChip" onclick="asOpen()" aria-label="StockSoft Assistant" title="StockSoft Assistant">✨</button><button class="chip" id="helpChip" onclick="go('mas','ayuda')" aria-label="Ayuda" title="Ayuda">?</button><button class="chip" id="userChip" onclick="userMenu()" aria-label="Usuario">👤</button></div>
 </header>
 <main id="main"></main>
 <nav id="nav"></nav>
@@ -1221,7 +1237,7 @@ function fillHelp(){
   const el = $('#mx'); if (!el) return;
   el.innerHTML = `<div class="card help-top"><input id="hlQ" placeholder="Busca tu duda: factura, importar Excel, caja…" value="${esc(ui.hlQ || '')}" oninput="ui.hlQ=this.value;helpList()" autocomplete="off">
     <div class="help-cats">${['', ...HELP_CATS].filter(c => !c || HELP.some(a => a.cat === c && (!a.admin || isAdmin()))).map(c => `<button class="chip ${(ui.hlC || '') === c ? 'on' : ''}" onclick="ui.hlC='${c}';fillHelp()">${c ? esc(c) : 'Todo'}</button>`).join('')}</div>
-    <div class="gap" style="margin-top:10px"><button class="btn sm" onclick="startTour()">Repetir el tutorial</button><button class="btn sm sec" onclick="helpSheet()">Contactar con soporte</button></div></div>
+    <div class="gap" style="margin-top:10px"><button class="btn sm" onclick="asOpen()">✨ Preguntar a StockSoft Assistant</button><button class="btn sm sec" onclick="startTour()">Repetir el tutorial</button><button class="btn sm sec" onclick="helpSheet()">Contactar con soporte</button></div></div>
   <div id="hlList" class="list" style="margin-top:12px"></div>`;
   helpList();
 }
@@ -1231,6 +1247,127 @@ function helpList(){
     : '<div class="empty">No encontramos esa duda. Prueba con otras palabras o escríbenos desde «Contactar con soporte».</div>';
 }
 function helpGo(v, s){ go(v, s || ''); }
+
+/* ============ StockSoft Assistant ============
+   Asistente SOLO INFORMATIVO. Fuente de verdad: docs/asistente/ (publicada en app/asistente/).
+   - Recupera, con el índice, solo las guías y secciones necesarias para cada pregunta (no carga toda la documentación).
+   - Con Gemini (Firebase AI Logic) activado responde con esas secciones; si no está activo, si falla o se agota la cuota,
+     responde en "modo guía" mostrando las secciones encontradas.
+   - No recibe datos del negocio (ni ventas, ni clientes, ni productos): solo la pregunta, el país y el rol.
+   - No tiene ninguna función para escribir o cambiar datos. El único dato que se guarda es un contador de uso diario.
+   Configuración: window.ASSISTANT = {enabled, model, appCheckKey} en firebase-config.js (sin claves privadas). */
+const AS = {msgs:[], busy:false, kb:null, docs:{}, model:null};
+const AS_LIM = {maxLen:500, perHour:20, perDay:60, bizDay:300}; // límites por usuario y por negocio
+const AS_BASE = () => location.protocol === 'https:' ? 'asistente/' : 'https://stocksoft.app/app/asistente/';
+const AS_STOP = new Set('que como para con los las del una uno unos por mis son esta este estos hay puedo puede quiero hacer donde cual cuando tengo esto eso eso mas muy sus pero sin ser hace tiene the and'.split(' '));
+const asWords = t => [...new Set(helpNorm(t).replace(/[^a-z0-9ñ ]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !AS_STOP.has(w)))];
+async function asKB(){ if (!AS.kb){ const r = await fetch(AS_BASE() + 'indice.json', {cache:'no-cache'}); if (!r.ok) throw new Error('kb'); AS.kb = await r.json(); } return AS.kb; }
+async function asDoc(f){ if (!(f in AS.docs)){ try { const r = await fetch(AS_BASE() + f, {cache:'no-cache'}); AS.docs[f] = r.ok ? await r.text() : ''; } catch(e){ AS.docs[f] = ''; } } return AS.docs[f]; }
+// Recuperación: puntúa los módulos del índice y, dentro de los mejores (más problemas y limitaciones), cada sección "## ".
+async function asRetrieve(q){
+  const kb = await asKB(), w = asWords(q); if (!w.length) return [];
+  const hit = t => { const n = helpNorm(t); return w.reduce((a, x) => a + (n.includes(x) ? 1 : 0), 0); };
+  const mods = kb.modulos.map(m => ({m, s:hit(m.titulo + ' ' + m.id + ' ' + m.claves.join(' ')) * 3 + hit(m.ui.join(' '))}))
+    .filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 3).map(x => x.m.archivo);
+  const files = [...new Set([...mods, '20-problemas-frecuentes.md', '30-limitaciones-y-pendiente.md'])];
+  const secs = [];
+  for (const f of files){
+    const md = (await asDoc(f)).replace(/\r/g, '').replace(/^---[\s\S]*?---\n/, '');
+    const title = (md.match(/^# (.+)$/m) || [, f])[1];
+    md.split(/\n(?=## )/).forEach(part => { const h = (part.match(/^##? (.+)$/m) || [, title])[1]; const sc = hit(h) * 3 + hit(part) + (mods.includes(f) ? 1 : 0); if (sc > 1) secs.push({f, title, h, txt:part.trim(), sc}); });
+  }
+  secs.sort((a, b) => b.sc - a.sc);
+  const out = []; let len = 0;
+  for (const x of secs){ if (out.length >= 5 || len + x.txt.length > 7000) break; out.push(x); len += x.txt.length; }
+  return out;
+}
+const AS_SYS = `Eres StockSoft Assistant, el asistente de ayuda de StockSoft (programa de ventas, inventario y caja para comercios).
+Reglas obligatorias:
+1. Responde SOLO con la información de la DOCUMENTACIÓN que se te da en cada pregunta. No inventes funciones, botones, opciones ni capacidades.
+2. Si la respuesta no está en la documentación, dilo claramente ("No lo encuentro en la documentación de StockSoft") y recomienda escribir a soporte desde Más → Ayuda → Contactar con soporte.
+3. Eres solo informativo: NO puedes registrar ventas, compras, cobros, abonos o gastos, ni cambiar productos, precios, impuestos, clientes, proveedores ni ningún dato. Explica cómo lo hace el usuario.
+4. Nunca pidas ni aceptes contraseñas, claves, códigos ni datos personales o de otros negocios. No tienes acceso a los datos del negocio.
+5. No afirmes que StockSoft cumple requisitos legales o fiscales: sus documentos son de control interno; recomienda consultar con un asesor o contador.
+6. Distingue lo que está disponible de lo que está pendiente o no existe, según la documentación.
+7. Usa los nombres reales de botones y pantallas en **negrita**, pasos numerados cortos y frases sencillas. Máximo unas 150 palabras salvo que pidan detalle.
+8. Responde en el idioma en que te escriben.`;
+async function asModel(){
+  if (AS.model) return AS.model;
+  const C = window.ASSISTANT || {}; if (!C.enabled || !window.FIREBASE_CONFIG) throw new Error('off');
+  const base = 'https://www.gstatic.com/firebasejs/12.19.0/';
+  const [A, I, K] = await Promise.all([import(base + 'firebase-app.js'), import(base + 'firebase-ai.js'), import(base + 'firebase-app-check.js')]);
+  const app = A.getApps().find(a => a.name === 'assistant') || A.initializeApp(window.FIREBASE_CONFIG, 'assistant');
+  if (C.appCheckKey) K.initializeAppCheck(app, {provider:new K.ReCaptchaEnterpriseProvider(C.appCheckKey), isTokenAutoRefreshEnabled:true});
+  const ai = I.getAI(app, {backend:new I.GoogleAIBackend()});
+  AS.model = I.getGenerativeModel(ai, {model:C.model || 'gemini-3.1-flash-lite', systemInstruction:AS_SYS, generationConfig:{temperature:0.2, maxOutputTokens:700}});
+  return AS.model;
+}
+// Límites: por usuario (en este dispositivo) y por negocio (contador diario en la nube, lo único que se guarda).
+function asUserLimit(){
+  let L = []; const k = 'ss_as_use_' + (me ? me.u : ''); try { L = JSON.parse(localStorage.getItem(k) || '[]'); } catch(e){}
+  const now = Date.now(); L = L.filter(t => now - t < 864e5);
+  if (L.filter(t => now - t < 3600e3).length >= AS_LIM.perHour) return 'Has hecho muchas preguntas en la última hora. Espera un poco o consulta Más → Ayuda.';
+  if (L.length >= AS_LIM.perDay) return 'Has llegado al límite de preguntas de hoy. Mañana podrás seguir; mientras tanto tienes las guías en Más → Ayuda.';
+  L.push(now); try { localStorage.setItem(k, JSON.stringify(L)); } catch(e){}
+  return '';
+}
+async function asBizLimit(){
+  if (backend !== 'cloud' || !bizId) return '';
+  const ref = DB.collection('assistUse').doc(todayISO());
+  try {
+    const d = await ref.get(), n = d.exists ? num(d.data().n) : 0;
+    if (n >= AS_LIM.bizDay) return 'Tu negocio llegó al límite diario de preguntas al asistente. Mañana se renueva.';
+    await ref.set({n:n + 1}, {merge:true});
+  } catch(e){ console.warn('asistente: contador', e); }
+  return '';
+}
+const asMd = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^#{1,3} (.+)$/gm, '<b>$1</b>').replace(/^\s*[-*] (.+)$/gm, '• $1').replace(/\n/g, '<br>');
+function asWelcome(){ return 'Hola, soy **StockSoft Assistant**. Te explico cómo usar StockSoft: vender y cobrar, inventario, clientes y fiados, proveedores, caja, reportes, impuestos y países, y cómo resolver problemas frecuentes.\nSoy solo informativo: no hago cambios en tu negocio. ¿En qué te ayudo?'; }
+function asSave(){ try { sessionStorage.setItem('ss_as_' + (me ? me.u : ''), JSON.stringify(AS.msgs.slice(-30))); } catch(e){} }
+function asLoad(){ try { AS.msgs = JSON.parse(sessionStorage.getItem('ss_as_' + (me ? me.u : '')) || '[]'); } catch(e){ AS.msgs = []; } if (!AS.msgs.length) AS.msgs = [{r:'a', t:asWelcome()}]; }
+function asOpen(){
+  if (!$('#assist')) document.body.insertAdjacentHTML('beforeend', `<div id="assist" role="dialog" aria-label="StockSoft Assistant"><div class="as-head"><b>✨ StockSoft Assistant</b><span class="grow"></span><button class="btn sm sec" onclick="asNew()">Nueva conversación</button><button class="btn sm sec" onclick="asClose()" aria-label="Cerrar">✕</button></div>
+    <div class="as-msgs" id="asMsgs" aria-live="polite"></div>
+    <form class="as-in" onsubmit="asSend(event)"><input id="asQ" maxlength="${AS_LIM.maxLen}" placeholder="Escribe tu pregunta…" autocomplete="off"><button class="btn" id="asBtn">Enviar</button></form>
+    <div class="as-foot" id="asFoot"></div></div>`);
+  asLoad(); asRender(); $('#assist').classList.add('on');
+  $('#asFoot').textContent = (window.ASSISTANT && window.ASSISTANT.enabled ? 'Con IA (Gemini) · ' : 'Modo guía (sin IA) · ') + 'solo informativo, no cambia datos de tu negocio';
+  setTimeout(() => { const q = $('#asQ'); if (q) q.focus(); }, 60);
+}
+function asClose(){ const a = $('#assist'); if (a) a.classList.remove('on'); }
+function asNew(){ AS.msgs = [{r:'a', t:asWelcome()}]; asSave(); asRender(); }
+function asRender(){
+  const box = $('#asMsgs'); if (!box) return;
+  box.innerHTML = AS.msgs.map(m => `<div class="as-m ${m.r === 'u' ? 'u' : 'a'}">${m.r === 'u' ? esc(m.t) : asMd(m.t)}${m.src ? `<div class="as-src">Fuente: ${esc(m.src)}</div>` : ''}</div>`).join('') + (AS.busy ? '<div class="as-m a as-typing" aria-label="Escribiendo"><i></i><i></i><i></i></div>' : '');
+  box.scrollTop = box.scrollHeight;
+}
+async function asSend(ev){
+  if (ev) ev.preventDefault();
+  const q = ($('#asQ').value || '').trim().slice(0, AS_LIM.maxLen); if (!q || AS.busy) return;
+  $('#asQ').value = ''; AS.msgs.push({r:'u', t:q}); AS.busy = true; asRender();
+  let ans = '', src = '';
+  try {
+    const secs = await asRetrieve(q);
+    src = [...new Set(secs.map(x => x.title))].join(' · ');
+    const C = window.ASSISTANT || {};
+    let lim = '';
+    if (C.enabled){ lim = asUserLimit() || await asBizLimit(); }
+    if (C.enabled && !lim){
+      try {
+        const model = await asModel();
+        const hist = AS.msgs.slice(-7, -1).map(m => (m.r === 'u' ? 'Usuario: ' : 'Asistente: ') + m.t.slice(0, 600)).join('\n');
+        const prompt = `País del negocio: ${REG.name}. Rol del usuario: ${isAdmin() ? 'administrador' : 'vendedor'}.\n\nDOCUMENTACIÓN DE STOCKSOFT (única fuente válida):\n<<<\n${secs.map(x => '[' + x.title + ' — ' + x.h + ']\n' + x.txt).join('\n\n') || '(no se encontró documentación para esta pregunta)'}\n>>>\n\n${hist ? 'CONVERSACIÓN ANTERIOR:\n' + hist + '\n\n' : ''}PREGUNTA: ${q}`;
+        const r = await model.generateContent(prompt);
+        ans = (r && r.response && r.response.text && r.response.text()) || '';
+      } catch(e){ console.warn('asistente', e); ans = ''; lim = /quota|429|RESOURCE_EXHAUSTED/i.test(String(e && e.message)) ? 'El asistente con IA está muy solicitado ahora mismo (cuota agotada).' : 'No pude conectar con el asistente con IA.'; }
+    }
+    if (!ans){
+      // Modo guía: se muestran las secciones encontradas en la documentación.
+      ans = (lim ? lim + '\n\n' : '') + (secs.length ? 'Esto es lo que dicen las guías de StockSoft:\n\n' + secs.slice(0, 2).map(x => '**' + x.h.replace(/^#+ /, '') + '**\n' + x.txt.replace(/^##? .+\n?/, '').replace(/\|/g, ' ').slice(0, 900)).join('\n\n') : 'No lo encuentro en la documentación de StockSoft. Prueba con otras palabras o escribe a soporte desde **Más → Ayuda → Contactar con soporte**.');
+    }
+  } catch(e){ ans = 'No pude consultar las guías ahora mismo. Revisa tu conexión o abre **Más → Ayuda**.'; }
+  AS.busy = false; AS.msgs.push({r:'a', t:ans, src}); asSave(); asRender();
+}
 
 /* ============ Usuarios y contraseña ============ */
 let me = null;

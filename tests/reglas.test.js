@@ -56,6 +56,9 @@ const ko = async p => { try { await assertFails(p); return true; } catch (e) { r
   T('S8', 'Vendedor puede poner el nº de nota de entrega a una venta, pero no cambiar su total', (await ok(as('v_bizVE').doc('biz/bizVE/sales/v9').set({ total: 5, ts: 1 }))) === true && (await ok(as('v_bizVE').doc('biz/bizVE/sales/v9').set({ total: 5, ts: 1, noteNo: 'NE-000001' }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/sales/v9').set({ total: 1, ts: 1, noteNo: 'NE-000001' }))) === true);
   await seed();
 
+  T('S9', 'Contador del asistente: solo se suma de 1 en 1 hasta 300; no se puede poner otro valor ni otros campos', (await ok(as('v_bizVE').doc('biz/bizVE/assistUse/2026-11-26').set({ n: 1 }))) === true && (await ok(as('v_bizVE').doc('biz/bizVE/assistUse/2026-11-26').set({ n: 2 }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/assistUse/2026-11-26').set({ n: 0 }))) === true && (await ko(as('v_bizVE').doc('biz/bizVE/assistUse/2026-11-26').set({ n: 3, x: 1 }))) === true && (await ko(as('bizES').doc('biz/bizVE/assistUse/2026-11-26').get())) === true);
+  await seed();
+
   // ---- Licencias y tienda ----
   T('L1', 'Administrador NO puede escribirse historial de licencia (compras falsas)', await ko(as('bizVE').doc('biz/bizVE/licHistory/x').set({ type: 'compra', months: 12, at: 1 })) === true);
   T('L2', 'Administrador NO puede alargarse la licencia a mano', await ko(as('bizVE').doc('biz/bizVE').update({ expires: 9e12 })) === true);
