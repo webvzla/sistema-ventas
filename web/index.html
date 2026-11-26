@@ -788,7 +788,7 @@ function regionStats(){ const ps = products(); return {products:ps.length, eurPr
 function regionLogHtml(){
   const L = (cfg.regionLog || []).slice().reverse().slice(0, 8);
   if (!L.length) return '';
-  const nm = c => { const r = SSRegion.REGIONS[String(c).slice(0, 2)]; return r ? r.flag + ' ' + r.name + (String(c).length > 2 ? ' (asignado)' : '') : (c || 'sin país'); };
+  const nm = c => { const k = String(c || '').slice(0, 2), r = SSRegion.isCode(k) ? SSRegion.get(k) : null; return r ? r.flag + ' ' + r.name + (String(c).length > 2 ? ' (asignado)' : '') : (c || 'sin país'); };
   return `<div class="sub" style="margin-top:12px;font-weight:600">Historial de cambios</div>${L.map(x => `<div class="mv"><span>${fmtDate(x.at)} · ${esc(x.name || '')}</span><b>${x.from ? esc(nm(x.from)) + ' → ' : ''}${esc(nm(x.to))}</b></div>`).join('')}`;
 }
 function regionCard(){
@@ -904,7 +904,7 @@ async function changeRegion(code, extra){
   const log = [...(cfg.regionLog || []), {from, to:code, at:now, by:me.u, name:me.name}].slice(-20);
   const data = {country:code, regionAt:now, regionBy:me.u, regionByName:me.name, tz:r.tz, cc:r.cc || cfg.cc || '', regionLog:log, ...(extra || {})};
   if (!(await putCfg(data))) return false;
-  logA('admin', 'Configuración regional cambiada', SSRegion.REGIONS[from.slice(0, 2)].name + (from.length > 2 ? ' (asignado)' : '') + ' → ' + r.name);
+  logA('admin', 'Configuración regional cambiada', SSRegion.get(from.slice(0, 2)).name + (from.length > 2 ? ' (asignado)' : '') + ' → ' + r.name);
   closeSheet(); shellFor = ''; const mx = $('#mx'); if (mx) delete mx.dataset.done; render();
   toast('Configuración regional: ' + r.name);
   if (r.features.bcv) setTimeout(() => autoRates(), 500);

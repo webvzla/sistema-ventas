@@ -36,4 +36,5 @@ const items = [{ price: 8.5, qty: 1, iva: 10 }, { price: 4.2, qty: 1, iva: 21 },
 { const e = env('PE', {}); e.REG = SSRegion.fromConfig({ country: 'PE', taxes: [{ id: 'igv', name: 'IGV', rate: 18 }], taxDef: 'igv' });
   const t = e.taxCalc([{ price: 11.8, qty: 1, iva: 18, ivaN: 'IGV' }], 0);
   T('A13', 'Impuesto propio incluido (IGV 18 %): base 10, IGV 1,80, total 11,80 sin sumar nada', t.total === 11.8 && t.add === 0 && t.rows[0].b === 10 && t.rows[0].i === 1.8 && t.rows[0].n === 'IGV', t); }
+T('A14', 'Regresión: la app no busca países solo entre los configurados (fallaba al cambiar desde Perú)', !/SSRegion\.REGIONS\[/.test(H));
 process.exit(end() ? 0 : 1);
