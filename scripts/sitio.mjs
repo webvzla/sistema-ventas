@@ -14,7 +14,7 @@ export const NAV = `<header class="top"><div class="wrap">
   <a class="brand" href="/"><img src="/icon.png?v=2" alt=""><b>STOCK<span>SOFT</span></b></a>
   <nav class="nav"><a class="hide-m" href="/guias/">Guías</a><a class="hide-m" href="/herramientas/">Utilidades gratis</a><a class="hide-m" href="/">Programa de ventas</a><a class="btn sm" href="/app/">Probar gratis</a></nav>
 </div></header>`;
-export const FOOTER = `<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/guias/">Guías</a> · <a href="/herramientas/">Utilidades gratis</a> · <a href="/quienes-somos/">Quiénes somos</a> · <a href="/contacto/">Contacto</a> · <a href="/app/legal/terminos.html">Términos</a> · <a href="/app/legal/privacidad.html">Privacidad</a></span></div></footer>`;
+export const FOOTER = `<footer><div class="wrap"><span>© <span id="year">2026</span> StockSoft. Todos los derechos reservados.</span><span><a href="/guias/">Guías</a> · <a href="/herramientas/">Utilidades gratis</a> · <a href="/quienes-somos/">Quiénes somos</a> · <a href="/contacto/">Contacto</a> · <a href="/app/legal/terminos">Términos</a> · <a href="/app/legal/privacidad">Privacidad</a></span></div></footer>`;
 
 function parse(file){
   const raw = fs.readFileSync(file, 'utf8');
@@ -94,7 +94,7 @@ for (const p of pages){
 }
 // Sitemap: páginas principales + utilidades + guías.
 const urls = [['', 'weekly', '1.0'], ['herramientas/', 'weekly', '0.9'], ['herramientas/dolar-bcv/', 'daily', '0.9'], ['herramientas/precio-en-bolivares/', 'daily', '0.8'], ['herramientas/iva-igtf/', 'monthly', '0.8'], ['herramientas/margen-ganancia/', 'monthly', '0.7'], ['herramientas/codigo-de-barras/', 'monthly', '0.7'],
-  ['guias/', 'weekly', '0.9'], ...guides.map(g => [g.path, 'monthly', '0.8']), ['quienes-somos/', 'yearly', '0.5'], ['contacto/', 'yearly', '0.5'], ['app/legal/privacidad.html', 'yearly', '0.3'], ['app/legal/terminos.html', 'yearly', '0.3']];
+  ['guias/', 'weekly', '0.9'], ...guides.map(g => [g.path, 'monthly', '0.8']), ['quienes-somos/', 'yearly', '0.5'], ['contacto/', 'yearly', '0.5'], ['app/legal/privacidad', 'yearly', '0.3'], ['app/legal/terminos', 'yearly', '0.3']];
 const today = new Date().toISOString().slice(0, 10);
 fs.writeFileSync('web/raiz/sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(([u, f, pr]) => `  <url><loc>${SITE}/${u}</loc><lastmod>${today}</lastmod><changefreq>${f}</changefreq><priority>${pr}</priority></url>`).join('\n')}\n</urlset>\n`);
 console.log(`${pages.length} páginas generadas en ${OUT} (${guides.length} guías) y sitemap con ${urls.length} URL.`);

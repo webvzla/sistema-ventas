@@ -2,7 +2,7 @@
 //   npx firebase emulators:exec --config firebase.json --project demo-stocksoft --only firestore,auth "node run-all.js"
 const { spawnSync } = require('child_process');
 let ok = true;
-for (const f of ['regiones.test.js', 'app.test.js', 'docs.test.js', 'asistente.test.js', 'reglas.test.js', 'tienda.test.js']) {
+for (const f of ['regiones.test.js', 'app.test.js', 'docs.test.js', 'asistente.test.js', 'reglas.test.js', 'tienda.test.js', 'seo.test.js']) {
   const r = spawnSync(process.execPath, [f], { stdio: 'inherit', cwd: __dirname, env: process.env });
   if (r.status !== 0) ok = false;
 }
