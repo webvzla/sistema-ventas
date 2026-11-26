@@ -436,7 +436,8 @@ const totalDebt = () => r2(clients().reduce((s, c) => s + Math.max(0, balance(c.
 const minStock = p => (p.min === '' || p.min == null) ? num(cfg.lowDefault) : num(p.min);
 function stockState(p){ const s = num(p.stock); if (s <= 0) return 'out'; if (s <= minStock(p)) return 'low'; return 'ok'; }
 const categories = () => [...new Set(products().map(p => (p.cat || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-const ratesStale = () => REG.features.bcv && !cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3;
+// Solo Venezuela tiene tasa: en otros países nunca hay aviso de tasa desactualizada.
+const ratesStale = () => REG.features.bcv && (!cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3);
 /* Precio al mayor: desde cierta cantidad, otro precio por unidad (en la moneda del producto). */
 const hasW = p => !!p && num(p.wQty) > 0 && num(p.wPrice) > 0;
 const isW = (p, qty) => hasW(p) && num(qty) >= num(p.wQty);
