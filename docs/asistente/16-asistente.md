@@ -38,6 +38,7 @@ Funciona en ordenador y en móvil (en el móvil ocupa toda la pantalla).
 ## Privacidad: no muestra tus ventas ni las de otros negocios
 - **¿Puedes ver mis ventas o las de otro negocio?** No. El asistente no tiene acceso a ventas, clientes ni productos de ningún negocio.
 - En StockSoft cada negocio solo ve sus propios datos: nadie puede ver los de otro negocio.
+- Tus propias ventas las ves tú en **Más → Reportes** (administrador); el asistente solo explica cómo usar StockSoft.
 
 ## Límites
 - Hasta 500 caracteres por pregunta.

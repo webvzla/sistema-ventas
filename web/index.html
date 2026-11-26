@@ -1269,12 +1269,14 @@ const asWords = t => [...new Set(helpNorm(t).replace(/[^a-z0-9ñ ]/g, ' ').split
 async function asKB(){ if (!AS.kb){ const r = await fetch(AS_BASE() + 'indice.json', {cache:'no-cache'}); if (!r.ok) throw new Error('kb'); AS.kb = await r.json(); } return AS.kb; }
 async function asDoc(f){ if (!(f in AS.docs)){ try { const r = await fetch(AS_BASE() + f, {cache:'no-cache'}); AS.docs[f] = r.ok ? await r.text() : ''; } catch(e){ AS.docs[f] = ''; } } return AS.docs[f]; }
 // Recuperación: puntúa los módulos del índice y, dentro de los mejores (más problemas y limitaciones), cada sección "## ".
+// Preguntas al propio asistente sobre si ve o accede a los datos ("¿puedes ver mis ventas?"): van a la guía de privacidad.
+const asPriv = q => { const n = helpNorm(q); return /\b(puedes|podrias|tienes|accedes|ves|lees|miras|revisas)\b/.test(n) && /\b(ver|veas|acceso|acceder|accedes|consultar|consultas|leer|lees|mirar|revisar|ves)\b/.test(n) && /\b(mis|mi|mio|mios|lo que|nuestr[a-z]*|otro negocio|otros negocios)\b/.test(n); };
 async function asRetrieve(q){
   const kb = await asKB(), w = asWords(q); if (!w.length) return [];
   const hit = t => { const n = helpNorm(t); return w.reduce((a, x) => a + (asHas(n, x) ? 1 : 0), 0); };
   const mods = kb.modulos.map(m => ({m, s:hit(m.titulo + ' ' + m.id + ' ' + m.claves.join(' ')) * 3 + hit(m.ui.join(' '))}))
     .filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 3).map(x => x.m.archivo);
-  const files = [...new Set([...mods, '20-problemas-frecuentes.md', '30-limitaciones-y-pendiente.md'])];
+  const priv = asPriv(q), files = [...new Set([...(priv ? ['16-asistente.md'] : []), ...mods, '20-problemas-frecuentes.md', '30-limitaciones-y-pendiente.md'])];
   const secs = [];
   for (const f of files){
     const md = (await asDoc(f)).replace(/\r/g, '').replace(/^---[\s\S]*?---\n/, '');
@@ -1286,7 +1288,7 @@ async function asRetrieve(q){
   const wt = x => df[x] ? Math.log(1 + secs.length / df[x]) : 0;
   const whit = t => { const n = helpNorm(t); return w.reduce((a, x) => a + (asHas(n, x) ? wt(x) : 0), 0); };
   // Cuenta sobre todo que la sección contenga TODAS las palabras importantes; el título suma un poco más.
-  secs.forEach(z => { z.sc = whit(z.txt) + whit(z.h) * 0.6 + (mods.includes(z.f) ? 0.3 : 0); });
+  secs.forEach(z => { z.sc = whit(z.txt) + whit(z.h) * 0.6 + (mods.includes(z.f) ? 0.3 : 0) + (priv && /^Privacidad/.test(z.h) ? 100 : 0); });
   for (let i = secs.length - 1; i >= 0; i--) if (secs[i].sc <= 1.5) secs.splice(i, 1);
   secs.sort((a, b) => b.sc - a.sc);
   const out = []; let len = 0;

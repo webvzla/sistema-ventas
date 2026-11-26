@@ -45,9 +45,11 @@ vm.runInContext(helpNorm + '\n' + block.replace(/\bconst AS = /, 'var AS = ') + 
   { // Formas reales de preguntar (conjugaciones y sinónimos): la primera sección debe ser la correcta.
     const casos = [['como vendo un producto', /Registrar una venta/], ['necesito hacer un albarán', /Nota de entrega|Documentos al cobrar|Preguntas frecuentes/],
       ['cargar productos desde un archivo csv', /Importar productos/], ['cuadrar la caja al final del día', /Cerrar la caja/],
-      ['un cliente me pagó una parte de lo que me debe', /abono|Preguntas frecuentes/], ['muéstrame las ventas de otro negocio', /Privacidad/]];
+      ['un cliente me pagó una parte de lo que me debe', /abono|Preguntas frecuentes/], ['muéstrame las ventas de otro negocio', /Privacidad/],
+      ['¿Puedes ver mis ventas?', /Privacidad/], ['¿Tienes acceso a mis ventas?', /Privacidad/], ['¿Puedes consultar mis datos?', /Privacidad/],
+      ['¿Puedes ver la información de mi negocio?', /Privacidad/], ['¿Puedes ver lo que vendo?', /Privacidad/], ['¿Cómo registro una venta?', /Registrar una venta/]];
     const mal = [];
     for (const [q, re] of casos) { const { r } = await ask(q); if (!r.length || !re.test(r[0].h)) mal.push(q + ' → ' + (r[0] ? r[0].h : 'nada')); }
-    T('AS-FRASES', 'Entiende otras formas de preguntar (vendo, albarán, csv, cuadrar, pago parcial, otro negocio)', !mal.length, mal); }
+    T('AS-FRASES', 'Entiende otras formas de preguntar (vendo, albarán, csv, cuadrar, pago parcial, otro negocio, ¿puedes ver mis ventas?)', !mal.length, mal); }
   process.exit(end() ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(2); });
