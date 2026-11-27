@@ -67,6 +67,9 @@ T('A22', 'Nota de entrega de una venta ya hecha: se numera en la MISMA venta (si
   T('A28', 'La corrección no guarda nada nuevo en las ventas: el impuesto de la devolución se calcula al mostrar el informe', /const ivaT = r2\(sumF\(taxedS, x => taxIva\(x\.tax\)\) \+ sumF\(ss, retTax\)\)/.test(H) && !/doc:'devolucion'[^\n]*\btax:/.test(H)); }
 T('A29', 'Vender: las categorías se eligen en una ventana (botón «Categoría» junto al buscador, con número de productos, buscador y «Sin categoría»), sin la barra que había que deslizar',
   /function posCatSheet\(\)\{/.test(H) && /class="catbtn" onclick="posCatSheet\(\)"/.test(H) && !/<div class="seg" id="posCats">/.test(H) && /ui\.posCat === POS_SIN \? !\(p\.cat \|\| ''\)\.trim\(\)/.test(H) && /Buscar categoría…/.test(H));
+T('A30', 'Inventario, Clientes y Proveedores: los filtros se eligen en una ventana (botón «Mostrar» junto al buscador), sin barras que haya que deslizar',
+  /function pickSheet\(title, groups, cur, setter\)\{/.test(H) && /function invPickSheet\(\)\{/.test(H) && /function fiPickSheet\(\)\{/.test(H) && /function prPickSheet\(\)\{/.test(H)
+  && !/<div class="seg" id="invSeg">/.test(H) && !/<div class="seg" id="fiSeg">/.test(H) && /pickBtn\('invPickSheet'/.test(H) && /pickBtn\('fiPickSheet'/.test(H) && /pickBtn\('prPickSheet'/.test(H));
 { const errs = [...H.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m, i) => { try { new vm.Script(m[1]); return ''; } catch (e) { return 'bloque ' + i + ': ' + e.message; } }).filter(Boolean);
   T('A23', 'Todo el código de la app (web/index.html) es JavaScript válido: si no, la publicación falla al comprimirlo', !errs.length, errs); }
 { const a = H.indexOf('if (o.local && !STORE_ON()){'), sinTienda = a < 0 ? '' : H.slice(a, H.indexOf('return `${o.test', a));
