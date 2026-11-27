@@ -25,6 +25,12 @@ function create(env, deps) {
       f.set('line_items[0][price_data][unit_amount]', String(order.amount));
       f.set('line_items[0][price_data][product_data][name]', 'StockSoft · licencia ' + order.label);
       if (order.email) f.set('customer_email', order.email);
+      // Casilla obligatoria en la página de pago: deja constancia de la aceptación de los términos, la política de
+      // reembolsos y la activación inmediata (renuncia al desistimiento de 14 días). Requiere tener la URL de los
+      // términos en Stripe → Configuración → Detalles públicos.
+      const L = (env.LEGAL_URL || 'https://stocksoft.app/app/legal').replace(/\/$/, '');
+      f.set('consent_collection[terms_of_service]', 'required');
+      f.set('custom_text[terms_of_service_acceptance][message]', `Acepto los [Términos de uso](${L}/terminos) y la [Política de reembolsos](${L}/reembolsos). Quiero que la licencia se active al momento y acepto que por eso pierdo el derecho de desistimiento de 14 días; se aplica la política de reembolso de 7 días (planes de 3, 6 y 12 meses).`);
       const r = await doFetch('https://api.stripe.com/v1/checkout/sessions', {
         method: 'POST', body: f.toString(),
         headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': 'order-' + order.id }
