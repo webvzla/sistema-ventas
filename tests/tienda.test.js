@@ -166,7 +166,7 @@ const day = ms => { const d = new Date(ms); return isNaN(d) ? String(ms) : d.toI
     T('S2', 'Stripe: sesión completada pero sin cobrar (pago asíncrono pendiente) no activa', u.result === 'ignorado' && (await order(r.orderId)).status === 'pending', u);
     const b0 = await biz('bizViejo'); const paid = evPaid('evt_2', 'paid'); const p = await call(STR.url, '/webhook/stripe', paid, null, { 'stripe-signature': signStripe(paid) });
     T('S3', 'Stripe: checkout.session.completed pagado y bien firmado activa +6 meses', p.result === 'activada' && (await biz('bizViejo')).expires === P.addMonths(b0.expires, 6), p);
-    const bad = await call(STR.url, '/webhook/stripe', paid, null, { 'stripe-signature': signStripe(paid).replace(/.$/, '0') });
+    const bad = await call(STR.url, '/webhook/stripe', paid, null, { 'stripe-signature': signStripe(paid).replace(/.$/, c => c === '0' ? '1' : '0') });
     T('S4', 'Stripe: firma alterada → 400', bad.status === 400, bad);
     const viaSim = await simEvent(SIM.url, { id: 'cruce-prov', type: 'paid', orderId: r.orderId, amount: 2999, currency: 'USD' });
     T('S5', 'Un evento del simulador no puede pagar un pedido de Stripe', viaSim.result === 'proveedor_distinto', viaSim);
@@ -204,7 +204,7 @@ const day = ms => { const d = new Date(ms); return isNaN(d) ? String(ms) : d.toI
   { const pd = require('../functions/lib/proveedores/paddle').create(SECRETS);
     const raw = JSON.stringify({ event_id: 'evt_p1', event_type: 'transaction.completed', data: { id: 'txn_1', currency_code: 'USD', custom_data: { orderId: 'o9' }, details: { totals: { grand_total: '599' } } } });
     const ev = pd.verify(raw, { 'paddle-signature': signPaddle(raw) }, clock); let bad = '';
-    try { pd.verify(raw, { 'paddle-signature': signPaddle(raw).replace(/.$/, '0') }, clock); } catch (e) { bad = e.message; }
+    try { pd.verify(raw, { 'paddle-signature': signPaddle(raw).replace(/.$/, c => c === '0' ? '1' : '0') }, clock); } catch (e) { bad = e.message; }
     T('P1', 'Paddle: firma válida → pago normalizado (599 USD, pedido o9); firma alterada → rechazo', ev.type === 'paid' && ev.amount === 599 && ev.currency === 'USD' && ev.orderId === 'o9' && /no válida/.test(bad), { ev, bad });
     let cs = 0; try { await pd.createSession({}); } catch (e) { cs = e.status; }
     T('P2', 'Paddle: el checkout queda deshabilitado (503) hasta tener cuenta aprobada', cs === 503);
