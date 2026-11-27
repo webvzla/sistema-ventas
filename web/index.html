@@ -1040,12 +1040,7 @@ function storeHtml(o){
   const promo = o.offers.find(x => x.promo);
   const wa = window.APP_WA ? 'https://wa.me/' + window.APP_WA + '?text=' + encodeURIComponent('Hola, quiero renovar la licencia de StockSoft de ' + (b.name || 'mi negocio') + '.') : '';
   if (o.local && !STORE_ON()){
-    const lic = encodeURIComponent('Solicitud de licencia StockSoft'), body = encodeURIComponent('Hola, quiero adquirir una licencia de StockSoft.
-
-Negocio: ' + (b.name || '') + '
-País: ' + REG.name + '
-Duración (1, 3, 6 o 12 meses): 
-');
+    const lic = encodeURIComponent('Solicitud de licencia StockSoft'), body = encodeURIComponent('Hola, quiero adquirir una licencia de StockSoft.\n\nNegocio: ' + (b.name || '') + '\nPaís: ' + REG.name + '\nDuración (1, 3, 6 o 12 meses): \n');
     const durs = o.offers.length ? o.offers.map(x => `<div class="card" style="text-align:center"><div class="name">${esc(x.label)}</div><div style="font-size:20px;font-weight:800">${money(x.final, x.currency)}</div>${x.promo ? `<span class="pill ok">−${x.pct} %</span>` : ''}</div>`).join('')
       : ['1 mes', '3 meses', '6 meses', '12 meses'].map(l => `<div class="card" style="text-align:center"><div class="name">${l}</div></div>`).join('');
     return `<div class="card"><div class="mv"><span>Negocio</span><b>${esc(b.name || '')}</b></div>
