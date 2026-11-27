@@ -68,6 +68,7 @@ service cloud.firestore {
         && getAfter(bizPath(request.auth.uid)).data.license == code);
     }
 
+
     match /biz/{b} {
       allow read: if (signed() && exists(memberDoc(b))) || owner();
       // Un negocio se crea gastando un código de activación válido y sin usar (en la misma operación),
@@ -100,17 +101,41 @@ service cloud.firestore {
         allow create: if validMember() && (
           (signed() && b == request.auth.uid && uid == request.auth.uid && request.resource.data.role == 'admin' && licensedAfter(b)) ||
           admin(b));
-        allow update: if validMember() && admin(b);
+        // Cada usuario puede marcar en su propia ficha que ya vio el tutorial (y nada más).
+        allow update: if validMember() && (admin(b) || (member(b) && uid == request.auth.uid && onlyKeys(['tourDone'])));
         allow delete: if admin(b);
       }
+      // Configuración regional: el país (config/main.country) solo lo cambia el administrador y queda firmado.
+      // Sin país = negocio anterior a la configuración regional = Venezuela.
+      // Aislamiento BCV: las claves de tasa (bcv, eur, ratesAt…) solo se pueden escribir si el negocio es de Venezuela.
       match /config/{d} {
+        function bcvTouched() { return request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']); }
+        function veAfter() { return request.resource.data.get('country', 'VE') == 'VE'; }
+        function countryOk() {
+          return !request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys().hasAny(['country'])
+            || (request.resource.data.country in ['VE', 'ES', 'US', 'CO', 'MX', 'XX', 'AR', 'BO', 'BR', 'CA', 'CL', 'CR', 'DO', 'EC', 'SV', 'GT', 'HN', 'NI', 'PA', 'PY', 'PE', 'PR', 'UY', 'AW', 'TT', 'PT', 'AD', 'FR', 'IT', 'DE', 'NL', 'BE', 'IE', 'AT', 'CH', 'GB', 'AU'] && request.resource.data.get('regionBy', '') == request.auth.uid);
+        }
         allow read: if member(b);
-        allow create: if admin(b);
-        allow update: if admin(b) || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']));
+        allow create: if admin(b) && countryOk() && (!bcvTouched() || veAfter());
+        allow update: if (admin(b) && countryOk() && (!bcvTouched() || veAfter()))
+          || (member(b) && onlyKeys(['noteSeq', 'quoteSeq', 'simpSeq', 'bcv', 'eur', 'ratesAt', 'checkedAt', 'ratesSrc', 'ratesDate']) && (!bcvTouched() || veAfter()));
       }
-      match /rates/{d} { allow read, write: if member(b); }
+      function isVE() { let c = /databases/$(database)/documents/biz/$(b)/config/main; return !exists(c) || get(c).data.get('country', 'VE') == 'VE'; }
+      match /rates/{d} { allow read: if member(b); allow write: if member(b) && isVE(); }
+      // Historial de licencia (compras, reembolsos, cortesías): lo escribe el servidor (sin reglas) y el dueño
+      // del sistema solo para cortesías. El administrador del negocio lo puede leer.
+      match /licHistory/{d} {
+        allow read: if admin(b) || owner();
+        allow create: if owner() && request.resource.data.type == 'cortesia' && request.resource.data.by == request.auth.uid;
+      }
       // Fotos de productos: las ven todos los del negocio; solo el administrador las sube o borra.
       match /photos/{d} { allow read: if member(b); allow write: if admin(b); }
+      // Contador diario de uso de StockSoft Assistant (límite por negocio). Solo se puede sumar de 1 en 1, hasta 300 al día.
+      match /assistUse/{day} {
+        allow read: if member(b);
+        allow create: if member(b) && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == 1;
+        allow update: if member(b) && request.resource.data.keys().hasOnly(['n']) && request.resource.data.n == resource.data.n + 1 && request.resource.data.n <= 300;
+      }
       match /products/{d} {
         allow read: if member(b);
         allow create, delete: if admin(b);
@@ -118,7 +143,7 @@ service cloud.firestore {
       }
       match /sales/{d} {
         allow read, create: if member(b);
-        allow update: if admin(b) || (member(b) && onlyKeys(['fiscalNo']));
+        allow update: if admin(b) || (member(b) && onlyKeys(['fiscalNo', 'noteNo']));
         allow delete: if admin(b);
       }
       match /clients/{d} { allow read, create, update: if member(b); allow delete: if admin(b); }
@@ -129,7 +154,7 @@ service cloud.firestore {
       match /log/{d} { allow create: if member(b) && request.resource.data.uid == request.auth.uid; allow read, delete: if admin(b); }
       // Proveedores, compras, pagos a proveedores y gastos: solo administradores.
       // (Los miembros quedan fuera: su rol solo se cambia con las reglas de members, que lo validan.)
-      match /{col}/{d} { allow read, write: if col != 'members' && admin(b); }
+      match /{col}/{d} { allow read, write: if !(col in ['members', 'config', 'rates', 'licHistory', 'assistUse']) && admin(b); }
     }
   }
 }

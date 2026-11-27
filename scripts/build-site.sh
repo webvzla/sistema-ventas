@@ -9,6 +9,8 @@ mv public/app/herramientas public/herramientas
 cp web/raiz/* public/ && rm -rf public/app/raiz
 # Páginas de contenido (guías, quiénes somos, contacto) en la raíz: las genera `node scripts/sitio.mjs` en web/sitio/.
 cp -r web/sitio/. public/ && rm -rf public/app/sitio
+# Base de conocimiento de StockSoft Assistant (docs/asistente): la app la lee de /app/asistente/ (solo las guías que necesita).
+mkdir -p public/app/asistente && cp docs/asistente/*.md docs/asistente/indice.json public/app/asistente/
 cp web/descargar/index.html public/index.html
 cp web/descargar/app-vender.png web/icon.png public/
 sed -i 's#\.\./icon\.png#icon.png#g; s#https://stocksoft\.web\.app/app/"#/app/"#g' public/index.html

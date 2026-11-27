@@ -1,6 +1,6 @@
 // Permite abrir la app sin internet (los datos se sincronizan con Firebase al volver la conexión).
-const CACHE = 'ventas-v1';
-const CORE = ['./', 'index.html', 'firebase-config.js', 'manifest.webmanifest', 'icon.png',
+const CACHE = 'ventas-v2';
+const CORE = ['./', 'index.html', 'firebase-config.js', 'regiones.js', 'precios.js', 'manifest.webmanifest', 'icon.png',
   'vendor/jspdf.umd.min.js', 'vendor/JsBarcode.all.min.js', 'vendor/chart.umd.js', 'vendor/zxing.min.js',
   'vendor/firebase-app-compat.js', 'vendor/firebase-auth-compat.js', 'vendor/firebase-firestore-compat.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting())); });
