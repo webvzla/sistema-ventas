@@ -2,6 +2,7 @@
    Desplegar exige el plan Blaze del proyecto de Firebase (decisión y coste pendientes de Francisco) y la
    autorización expresa de lanzamiento. Mientras tanto se prueba con los emuladores (ver tests/).
    Variables (secretos de Functions): PAYMENT_PROVIDER, STRIPE_SECRET_KEY (sk_test_…), STRIPE_WEBHOOK_SECRET,
+   POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, POLAR_PRODUCT_ID, POLAR_SERVER (sandbox), POLAR_TAX,
    PADDLE_WEBHOOK_SECRET, ALLOWED_ORIGINS, APP_URL, API_BASE. Nunca SIMULADOR=1 junto a LIVE_PAYMENTS. */
 const { onRequest } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');

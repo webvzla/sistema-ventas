@@ -14,7 +14,7 @@ const db = admin.firestore(), auth = admin.auth();
 const D = 864e5;
 let clock = Date.UTC(2026, 11, 1, 12);
 const now = () => clock;
-const SECRETS = { SIM_SECRET: 'sim-secret-de-pruebas-123456', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: 'whsec_test_123', PADDLE_WEBHOOK_SECRET: 'pdl_ntfset_test_123' };
+const SECRETS = { SIM_SECRET: 'sim-secret-de-pruebas-123456', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_WEBHOOK_SECRET: 'whsec_test_123', PADDLE_WEBHOOK_SECRET: 'pdl_ntfset_test_123', POLAR_ACCESS_TOKEN: 'polar_oat_test', POLAR_WEBHOOK_SECRET: 'polar_whs_test_123', POLAR_PRODUCT_ID: '11111111-2222-4333-8444-555555555555' };
 const stripeCalls = [];
 const fakeFetch = async (url, opt) => { stripeCalls.push({ url, opt }); return { ok: true, json: async () => ({ id: 'cs_test_' + stripeCalls.length, url: 'https://checkout.stripe.com/c/pay/cs_test_' + stripeCalls.length }) }; };
 const mails = [];
@@ -43,6 +43,7 @@ const biz = async id => (await db.doc('biz/' + id).get()).data();
 const order = async id => (await db.doc('orders/' + id).get()).data();
 const hist = async id => (await db.collection('biz/' + id + '/licHistory').get()).docs.map(d => d.data());
 const signSim = (body, t) => { t = t || Math.floor(clock / 1000); return 't=' + t + ',v1=' + crypto.createHmac('sha256', SECRETS.SIM_SECRET).update(t + '.' + body).digest('hex'); };
+const signPolar = (body, id, t) => { t = t || Math.floor(clock / 1000); return { 'webhook-id': id, 'webhook-timestamp': String(t), 'webhook-signature': 'v1,' + crypto.createHmac('sha256', Buffer.from(SECRETS.POLAR_WEBHOOK_SECRET, 'utf8')).update(id + '.' + t + '.' + body).digest('base64') }; };
 const signStripe = (body, t) => { t = t || Math.floor(clock / 1000); return 't=' + t + ',v1=' + crypto.createHmac('sha256', SECRETS.STRIPE_WEBHOOK_SECRET).update(t + '.' + body).digest('hex'); };
 const signPaddle = (body, t) => { t = t || Math.floor(clock / 1000); return 'ts=' + t + ';h1=' + crypto.createHmac('sha256', SECRETS.PADDLE_WEBHOOK_SECRET).update(t + ':' + body).digest('hex'); };
 const simEvent = (base, ev) => { const raw = JSON.stringify(ev); return call(base, '/webhook/simulador', raw, null, { 'x-sim-signature': signSim(raw) }); };
@@ -50,7 +51,7 @@ const day = ms => { const d = new Date(ms); return isNaN(d) ? String(ms) : d.toI
 
 (async () => {
   await clearAll();
-  const SIM = await server('simulador'), STR = await server('stripe');
+  const SIM = await server('simulador'), STR = await server('stripe'), POL = await server('polar');
   const trialStart = admin.firestore.Timestamp.fromMillis(clock - 2 * D); // prueba gratis empezada hace 2 días → termina en 5
   await db.doc('biz/bizNuevo').set({ name: 'Bodega Nueva', owner: 'bizNuevo', trial: true, trialStart });
   await db.doc('biz/bizNuevo/config/main').set({ name: 'Bodega Nueva', country: 'VE' });
@@ -180,6 +181,25 @@ const day = ms => { const d = new Date(ms); return isNaN(d) ? String(ms) : d.toI
     let t2 = ''; try { createApi({ db, auth, providers: {}, env: { SIMULADOR: '1', LIVE_PAYMENTS: 'autorizado' } }); } catch (e) { t2 = e.message; }
     T('S9', 'El simulador no puede activarse junto con cobros reales', /simulador/i.test(t2), t2); }
 
+  // ---- Polar (merchant of record, sandbox; adaptador real con eventos firmados localmente) ----
+  { const r = await call(POL.url, '/tienda/checkout', { dur: 'm3' }, tk.viejo); const od = await order(r.orderId); const c = stripeCalls[stripeCalls.length - 1];
+    const body = JSON.parse(c.opt.body), pid = SECRETS.POLAR_PRODUCT_ID, pr0 = ((body.prices || {})[pid] || [])[0] || {};
+    T('PL1', 'Polar: checkout en el sandbox con el precio del servidor (1699 usd, sin impuestos incluidos), metadatos del pedido y sin códigos de descuento', r.status === 200 && od.provider === 'polar' && c.url === 'https://sandbox-api.polar.sh/v1/checkouts/' && body.products[0] === pid && pr0.amount_type === 'fixed' && pr0.price_amount === 1699 && pr0.price_currency === 'usd' && pr0.tax_behavior === 'exclusive' && body.metadata.orderId === r.orderId && body.allow_discount_codes === false && c.opt.headers.Authorization === 'Bearer polar_oat_test', { body, url: c.url });
+    const ordEv = (type, extra) => JSON.stringify({ type, timestamp: '2026-11-27T00:00:00Z', api_version: '2026-10', data: { id: 'ord_1', checkout_id: od.providerRef, status: 'paid', billing_reason: 'purchase', subtotal_amount: 1699, net_amount: 1699, tax_amount: 357, total_amount: 2056, refunded_amount: 0, currency: 'usd', metadata: { orderId: r.orderId, biz: 'bizViejo' }, ...(extra || {}) } });
+    const b0 = await biz('bizViejo'); const paid = ordEv('order.paid'); const p = await call(POL.url, '/webhook/polar', paid, null, signPolar(paid, 'msg_1'));
+    T('PL2', 'Polar: order.paid bien firmado activa +3 meses (compara el precio sin el IVA que añade Polar)', p.result === 'activada' && (await biz('bizViejo')).expires === P.addMonths(b0.expires, 3), p);
+    const dup = await call(POL.url, '/webhook/polar', paid, null, signPolar(paid, 'msg_1'));
+    T('PL3', 'Polar: el mismo aviso reenviado (mismo webhook-id) no amplía la licencia dos veces', dup.result === 'duplicado' && (await biz('bizViejo')).expires === P.addMonths(b0.expires, 3), dup);
+    const h = signPolar(paid, 'msg_2'); h['webhook-signature'] = h['webhook-signature'].slice(0, -2) + 'AA';
+    const bad = await call(POL.url, '/webhook/polar', paid, null, h), old = await call(POL.url, '/webhook/polar', paid, null, signPolar(paid, 'msg_3', Math.floor(clock / 1000) - 3600));
+    T('PL4', 'Polar: firma alterada o aviso antiguo (repetición) → 400', bad.status === 400 && old.status === 400, { bad: bad.status, old: old.status });
+    const part = ordEv('order.refunded', { status: 'partially_refunded', refunded_amount: 500 }); const pp = await call(POL.url, '/webhook/polar', part, null, signPolar(part, 'msg_4'));
+    T('PL5', 'Polar: reembolso parcial no quita la licencia; queda para revisión', pp.result === 'reembolso_parcial' && (await order(r.orderId)).status === 'paid', pp);
+    const full = ordEv('order.refunded', { status: 'refunded', refunded_amount: 1699 }); const pf = await call(POL.url, '/webhook/polar', full, null, signPolar(full, 'msg_5'));
+    T('PL6', 'Polar: reembolso total retira los 3 meses comprados', pf.result === 'reembolsada' && (await biz('bizViejo')).expires === Math.max(clock, P.addMonths(P.addMonths(b0.expires, 3), -3)) && (await order(r.orderId)).status === 'refunded', pf);
+    let threw = ''; try { require('../functions/lib/proveedores/polar').create({ POLAR_SERVER: 'production' }); } catch (e) { threw = e.message; }
+    T('PL7', 'Polar: producción bloqueada sin autorización de lanzamiento', /bloqueada/.test(threw), threw); }
+
   // ---- Paddle (adaptador preparado: verificación de firma y lectura de eventos) ----
   { const pd = require('../functions/lib/proveedores/paddle').create(SECRETS);
     const raw = JSON.stringify({ event_id: 'evt_p1', event_type: 'transaction.completed', data: { id: 'txn_1', currency_code: 'USD', custom_data: { orderId: 'o9' }, details: { totals: { grand_total: '599' } } } });
@@ -195,6 +215,6 @@ const day = ms => { const d = new Date(ms); return isNaN(d) ? String(ms) : d.toI
   { const r = await call(SIM.url, '/tienda/checkout', { dur: 'm3' }, tk.viejo); const html = await (await fetch(SIM.url + '/sim/checkout?order=' + r.orderId)).text();
     T('U1', 'Página del simulador: muestra importe del servidor y avisa de que no se cobra', /\$16,99/.test(html) && /no se cobra/.test(html), html.slice(0, 200)); }
 
-  SIM.s.close(); STR.s.close();
+  SIM.s.close(); STR.s.close(); POL.s.close();
   process.exit(end() ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(2); });

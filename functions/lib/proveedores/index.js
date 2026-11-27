@@ -1,7 +1,7 @@
 // Registro de pasarelas. El sistema de licencias solo conoce esta interfaz:
 //   createSession(order, urls) -> {ref, url}      verify(rawBody, headers, now) -> evento normalizado
 // Cambiar de proveedor = añadir un archivo aquí y poner PAYMENT_PROVIDER; el núcleo de licencias no cambia.
-const FACT = { simulador: require('./simulador'), stripe: require('./stripe'), paddle: require('./paddle'), paypal: require('./paypal') };
+const FACT = { simulador: require('./simulador'), stripe: require('./stripe'), polar: require('./polar'), paddle: require('./paddle'), paypal: require('./paypal') };
 function load(env, deps) {
   const out = {};
   for (const [id, m] of Object.entries(FACT)) {
