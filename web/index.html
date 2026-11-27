@@ -3623,7 +3623,7 @@ VIEWS.panel = {
     $('#dKpi').innerHTML = `<div class="card" style="margin-bottom:10px"><div class="k" style="font-size:12px;color:var(--mut);font-weight:600">GANANCIA NETA DEL PERIODO</div>
       <div style="font-size:32px;font-weight:800;margin-top:4px;color:${D.N < 0 ? 'var(--bad)' : 'var(--tx)'}">${D.N < 0 ? '−' : ''}${usd(Math.abs(D.N))}</div>
       <div class="sub">${cfg.bcv ? bs(D.N) + ' · ' : ''}${D.I ? 'margen ' + Math.round(D.N / D.I * 100) + '%' : 'sin ventas'}</div></div>
-      <div class="grid2">${tile('Ingresos', usd(D.I), D.nSales + ' ventas (sin IVA ni IGTF)')}${tile('Costo de mercancía', usd(D.C), 'de lo vendido')}
+      <div class="grid2">${tile('Ingresos', usd(D.I), D.nSales + (REG.code === 'VE' ? ' ventas (sin IVA ni IGTF)' : ' ventas (sin impuestos)'))}${tile('Costo de mercancía', usd(D.C), 'de lo vendido')}
       ${tile('Ganancia bruta', usd(D.G), D.I ? Math.round(D.G / D.I * 100) + '% de margen' : '—')}${tile('Gastos', usd(D.E), 'alquiler, sueldos…', '', "go('mas','gastos')")}
       ${tile('Por cobrar', usd(debt), 'clientes', debt > 0 ? 'neg' : '', "go('fiados')")}${tile('Por pagar', usd(pay), 'proveedores', pay > 0 ? 'neg' : '', "go('proveedores')")}
       ${tile('Compras de mercancía', usd(D.purch), 'en el periodo', '', "go('proveedores')")}${tile('Stock bajo o agotado', low, 'productos', low ? 'neg' : '', "ui.invF='bajo';go('inventario')")}</div>`;
