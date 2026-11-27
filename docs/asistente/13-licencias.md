@@ -2,7 +2,7 @@
 id: licencias
 roles: [administrador]
 pantallas: [Mi licencia, Activar licencia, Código de activación, Licencia de StockSoft]
-verificado: 2026-11-27 · rama pruebas (reembolsos y aceptación al comprar)
+verificado: 2026-11-27 · lanzamiento internacional (licencias por correo, sin tienda en línea)
 ---
 # Licencias y activación
 
@@ -19,9 +19,11 @@ verificado: 2026-11-27 · rama pruebas (reembolsos y aceptación al comprar)
 - Los códigos se piden a StockSoft por correo: ventas@stocksoft.app.
 - Los empleados no pueden activar: esperan a que lo haga el administrador.
 
-## Comprar la licencia en línea
-- **Todavía no está disponible.** Para activar o renovar, pide tu código a **ventas@stocksoft.app** y escríbelo en **Activar licencia** (o en **Más → Mi licencia → Activar licencia con un código**).
-- En **Más → Mi licencia** ves el estado, el vencimiento y el historial.
+## Adquirir o renovar una licencia
+- Hay licencias de **1, 3, 6 y 12 meses** (un solo plan con todas las funciones). Las ves en **Más → Mi licencia** (o en **Ver licencias y cómo adquirirlas** cuando la licencia venció).
+- Para adquirirla, escribe a **ventas@stocksoft.app** (botón **Escribir a ventas@stocksoft.app**, con el asunto «Solicitud de licencia StockSoft») indicando la duración.
+- Te indicamos cómo pagar y, **cuando verificamos el pago**, te enviamos una **clave de activación**. Escríbela en **Activar licencia con una clave**: se suma al tiempo que te quede y tus datos se mantienen.
+- **El pago en línea todavía no está disponible**: no hay botón de compra ni se cobra nada desde la aplicación.
 
 ## Disponible / Pendiente
 - ✅ Prueba de 7 días, códigos de activación, estado e historial, cortesías (las concede StockSoft).

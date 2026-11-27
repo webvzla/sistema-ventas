@@ -331,13 +331,21 @@
       "ui": [
         "Mi licencia",
         "Activar licencia",
-        "Comprar o renovar la licencia en línea"
+        "Comprar o renovar la licencia en línea",
+        "Ver licencias y cómo adquirirlas",
+        "Activar licencia con una clave",
+        "Escribir a "
       ],
       "claves": [
         "licencia",
         "código",
         "renovar",
-        "prueba"
+        "prueba",
+        "comprar",
+        "adquirir",
+        "solicitud de licencia",
+        "clave",
+        "pago"
       ]
     },
     {

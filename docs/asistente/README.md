@@ -18,7 +18,7 @@ Es la fuente de **StockSoft Assistant**: la app publica esta carpeta en `/app/as
 | `10-pais-moneda-impuestos.md` | Configuración regional, monedas, impuestos y modalidad de precios |
 | `11-tasa-bcv-venezuela.md` | Tasa BCV (solo negocios de Venezuela) |
 | `12-usuarios-y-seguridad.md` | Usuarios, roles, permisos, contraseñas, registro de actividad |
-| `13-licencias.md` | Prueba gratis, licencia, códigos, tienda de licencias |
+| `13-licencias.md` | Prueba gratis, licencia, códigos, cómo adquirir una licencia por correo |
 | `14-datos-respaldo-y-app.md` | Copias de seguridad, exportar, uso sin internet, app de PC, actualizaciones, avisos |
 | `15-ayuda-y-tutorial.md` | Centro de Ayuda y tutorial de bienvenida |
 | `16-asistente.md` | StockSoft Assistant: qué hace, de dónde saca las respuestas y sus límites |

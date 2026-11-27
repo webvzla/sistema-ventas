@@ -35,5 +35,6 @@ El asistente debe responder con honestidad: «StockSoft todavía no lo hace» y,
 - ❌ El asistente no hace cambios ni consulta datos del negocio (es solo informativo).
 
 ## Diferencias entre entorno de pruebas y versión publicada
-Las funciones de internacionalización, tienda de licencias, documentos por país, modalidad de precios, tutorial y Ayuda están en la
-**versión de pruebas** y llegarán a la versión publicada cuando se autorice el lanzamiento.
+Desde el lanzamiento internacional (noviembre de 2026), la versión publicada incluye la configuración por país, los documentos por país,
+la modalidad de precios con o sin impuestos, el tutorial, la Ayuda y StockSoft Assistant en modo guía.
+La **tienda de licencias con pago en línea** sigue solo en la versión de pruebas: en la publicada, las licencias se piden a ventas@stocksoft.app.
