@@ -21,7 +21,7 @@ verificado: 2026-11-27 · lanzamiento internacional (licencias por correo, sin t
 
 ## Adquirir o renovar una licencia
 - Hay licencias de **1, 3, 6 y 12 meses** (un solo plan con todas las funciones). Las ves en **Más → Mi licencia** (o en **Ver licencias y cómo adquirirlas** cuando la licencia venció).
-- Para adquirirla, escribe a **ventas@stocksoft.app** (botón **Escribir a ventas@stocksoft.app**, con el asunto «Solicitud de licencia StockSoft») indicando la duración.
+- Para adquirirla, escribe a **ventas@stocksoft.app** (botón **Escribir a ventas@stocksoft.app**, con el asunto «Solicitud de licencia StockSoft») indicando la duración. Si no se abre tu programa de correo, usa **Abrir en Gmail** o **Copiar el correo**.
 - Te indicamos cómo pagar y, **cuando verificamos el pago**, te enviamos una **clave de activación**. Escríbela en **Activar licencia con una clave**: se suma al tiempo que te quede y tus datos se mantienen.
 - **El pago en línea todavía no está disponible**: no hay botón de compra ni se cobra nada desde la aplicación.
 

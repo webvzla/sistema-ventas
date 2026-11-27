@@ -68,6 +68,9 @@ service cloud.firestore {
         && getAfter(bizPath(request.auth.uid)).data.license == code);
     }
 
+    // Promoción de lanzamiento (store/config): la leen los usuarios para mostrar los precios; solo la cambia el dueño.
+    // (Pedidos y pagos de la tienda en línea siguen fuera de producción.)
+    match /store/config { allow read: if signed(); allow write: if owner(); }
 
     match /biz/{b} {
       allow read: if (signed() && exists(memberDoc(b))) || owner();
