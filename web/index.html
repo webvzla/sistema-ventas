@@ -157,6 +157,13 @@ label.row{display:flex;font-size:14px;color:var(--tx)}
 .seg button{background:var(--card);border:1px solid var(--line);color:var(--mut);border-radius:11px;padding:8px 14px;font:600 13px var(--font);cursor:pointer;white-space:nowrap;transition:all .2s}
 .seg button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff;border-color:transparent;box-shadow:0 8px 20px -10px rgba(47,140,240,.9)}
 .search{position:relative;margin-bottom:12px}
+.poshead{display:flex;gap:8px;align-items:stretch;margin-bottom:12px}.poshead .search{flex:1;margin-bottom:0;min-width:0}
+.catbtn{display:flex;align-items:center;gap:6px;max-width:46%;background:var(--hi);border:1px solid var(--acc);color:var(--hi-tx);border-radius:12px;padding:0 12px;font:600 13.5px var(--font);cursor:pointer;white-space:nowrap}
+.catbtn b{color:var(--tx);overflow:hidden;text-overflow:ellipsis}
+.catgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;max-height:55vh;overflow:auto}
+.catgrid button{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:11px 12px;color:var(--tx);font:600 13.5px var(--font);cursor:pointer}
+.catgrid button small{color:var(--mut);font-weight:600}.catgrid button.on{background:var(--hi);border-color:var(--acc);color:var(--hi-tx)}.catgrid button.on small{color:var(--hi-tx)}
+@media (max-width:420px){.catgrid{grid-template-columns:1fr}.catbtn{max-width:52%}}
 .empty{color:var(--mut);text-align:center;padding:34px 10px;font-size:14px;line-height:1.5}
 .qty{display:flex;align-items:center;gap:6px}
 .qty button{width:34px;height:34px;border-radius:10px;border:1px solid var(--line2);background:var(--card2);color:var(--tx);font:700 17px var(--font);cursor:pointer}
@@ -452,6 +459,20 @@ function balance(cid){ let b = 0; for (const m of Object.values(S.movs)) if (m.c
 const totalDebt = () => r2(clients().reduce((s, c) => s + Math.max(0, balance(c.id)), 0));
 const minStock = p => (p.min === '' || p.min == null) ? num(cfg.lowDefault) : num(p.min);
 function stockState(p){ const s = num(p.stock); if (s <= 0) return 'out'; if (s <= minStock(p)) return 'low'; return 'ok'; }
+/* ---- Vender: elegir categoría en una ventana (en lugar de una barra que hay que deslizar) ---- */
+const POS_SIN = '\u0000sin';
+const posCatLabel = c => c === 'Todas' ? 'Todas' : c === POS_SIN ? 'Sin categoría' : c;
+function posCatSheet(){
+  const ps = products(), cnt = {}; let sin = 0;
+  ps.forEach(p => { const c = (p.cat || '').trim(); if (c) cnt[c] = (cnt[c] || 0) + 1; else sin++; });
+  const opts = [['Todas', ps.length], ...categories().map(c => [c, cnt[c] || 0])].concat(sin ? [[POS_SIN, sin]] : []);
+  ui.posCatOpts = opts.map(x => x[0]);
+  openSheet(`<h2>Elegir categoría</h2>
+  ${opts.length > 8 ? `<input id="pcQ" placeholder="Buscar categoría…" oninput="const q=helpNorm(this.value);document.querySelectorAll('#pcG button').forEach(b=>b.style.display=!q||helpNorm(b.dataset.n).includes(q)?'':'none')" autocomplete="off">` : ''}
+  <div class="catgrid" id="pcG">${opts.map(([c, n], i) => `<button class="${ui.posCat === c ? 'on' : ''}" data-n="${esc(posCatLabel(c))}" onclick="ui.posCat=ui.posCatOpts[${i}];closeSheet();VIEWS.vender.fill()"><span>${esc(posCatLabel(c))}</span><small>${n}</small></button>`).join('')}</div>
+  <p class="note">Toca una categoría para ver solo sus productos. El número es cuántos productos tiene.</p>
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
 const categories = () => [...new Set(products().map(p => (p.cat || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 // Solo Venezuela tiene tasa: en otros países nunca hay aviso de tasa desactualizada.
 const ratesStale = () => REG.features.bcv && (!cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3);
@@ -2180,17 +2201,17 @@ const cartTotal = () => r2(cart.reduce((a, c) => a + c.price * c.qty, 0));
 VIEWS.vender = {
   shell: () => `<div class="row between"><h2>Vender</h2><button class="btn sm" onclick="openScanner()">${ICON_CAM} Escanear</button></div>
     <div id="cashBar"></div><div id="lastScan"></div>
-    <div class="search"><input id="posQ" placeholder="Buscar por nombre o código…" value="${esc(ui.posQ)}" oninput="ui.posQ=this.value;VIEWS.vender.fill()" onkeydown="if(event.key==='Enter'){const p=findByCode(this.value);if(p){this.value='';ui.posQ='';handleScan(p.code)}}"></div>
-    <div class="seg" id="posCats"></div>
+    <div class="poshead"><div class="search"><input id="posQ" placeholder="Buscar por nombre o código…" value="${esc(ui.posQ)}" oninput="ui.posQ=this.value;VIEWS.vender.fill()" onkeydown="if(event.key==='Enter'){const p=findByCode(this.value);if(p){this.value='';ui.posQ='';handleScan(p.code)}}"></div><div id="posCats" style="display:contents"></div></div>
     <div class="list" id="posList"></div>
     <div class="gap" style="margin-top:8px"><button class="btn sm sec" onclick="freeItem()">+ Servicio o artículo libre</button></div>
     <h3>Carrito</h3><div id="cart"></div>`,
   fill(){
     renderLastScan();
-    const cats = ['Todas', ...categories()];
-    $('#posCats').innerHTML = cats.length > 1 ? cats.map(c => `<button class="${ui.posCat === c ? 'on' : ''}" onclick="ui.posCat=this.dataset.c;VIEWS.vender.fill()" data-c="${esc(c)}">${esc(c)}</button>`).join('') : '';
+    const cats = categories();
+    if (ui.posCat !== 'Todas' && ui.posCat !== POS_SIN && !cats.includes(ui.posCat)) ui.posCat = 'Todas'; // la categoría elegida ya no existe
+    $('#posCats').innerHTML = cats.length ? `<button class="catbtn" onclick="posCatSheet()" title="Elegir categoría">☰ Categoría: <b>${esc(posCatLabel(ui.posCat))}</b> ▾</button>` : '';
     const q = ui.posQ.trim().toLowerCase();
-    const ps = products().filter(p => (!q || (p.name || '').toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q) || String(p.code || '').includes(q)) && (ui.posCat === 'Todas' || (p.cat || '') === ui.posCat));
+    const ps = products().filter(p => (!q || (p.name || '').toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q) || String(p.code || '').includes(q)) && (ui.posCat === 'Todas' || (ui.posCat === POS_SIN ? !(p.cat || '').trim() : (p.cat || '').trim() === ui.posCat)));
     const shown = ps.slice(0, q ? 30 : 12);
     $('#posList').innerHTML = !products().length ? `<div class="empty">No hay productos todavía.<br>Escanea un código o <a href="#" onclick="editProduct();return false">añade uno</a>.</div>`
       : !ps.length ? `<div class="empty">Nada coincide con “${esc(ui.posQ)}”.</div>`
