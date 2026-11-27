@@ -473,6 +473,33 @@ function posCatSheet(){
   <p class="note">Toca una categoría para ver solo sus productos. El número es cuántos productos tiene.</p>
   <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
 }
+const invFLabel = f => f === 'bajo' ? 'Bajo stock' : f === 'vence' ? 'Por vencer' : f === 'sincod' ? 'Sin código' : f === 'sincat' ? 'Sin categoría' : f && f.startsWith('cat:') ? f.slice(4) : 'Todos';
+function invPickSheet(){
+  const all = products(), cnt = {}; let sincat = 0;
+  all.forEach(p => { const c = (p.cat || '').trim(); if (c) cnt[c] = (cnt[c] || 0) + 1; else sincat++; });
+  const bajo = all.filter(p => p.track !== false && stockState(p) !== 'ok').length, vence = expiring().length, sincod = all.filter(p => !p.code).length;
+  pickSheet('Mostrar en inventario', [
+    ['Filtros', [['todos', 'Todos', all.length], ['bajo', 'Bajo stock', bajo], ...(vence ? [['vence', 'Por vencer', vence]] : []), ...(sincod ? [['sincod', 'Sin código', sincod]] : [])]],
+    ['Categorías', [...categories().map(c => ['cat:' + c, c, cnt[c] || 0]), ...(sincat && categories().length ? [['sincat', 'Sin categoría', sincat]] : [])]]
+  ], ui.invF || 'todos', 'invPick');
+}
+const invPick = v => { ui.invF = v; VIEWS.inventario.fill(); };
+function fiPickSheet(){ const cs = clients(); pickSheet('Mostrar clientes', [['', [['todos', 'Todos', cs.length], ['deuda', 'Con deuda', cs.filter(c => balance(c.id) > 0).length]]]], ui.fiF || 'todos', 'fiPick'); }
+const fiPick = v => { ui.fiF = v; VIEWS.fiados.fill(); };
+const PR_F = {todos:'Todos', debe:'Les debes', reponer:'Con productos por reponer'};
+const prMatch = (x, f) => f === 'debe' ? sBalance(x.id) > 0 : f === 'reponer' ? products().some(p => p.supplierId === x.id && p.track !== false && stockState(p) !== 'ok') : true;
+function prPickSheet(){ const xs = suppliers(); pickSheet('Mostrar proveedores', [['', Object.keys(PR_F).map(k => [k, PR_F[k], xs.filter(x => prMatch(x, k)).length])]], ui.prF || 'todos', 'prPick'); }
+const prPick = v => { ui.prF = v; VIEWS.proveedores.fill(); };
+// Ventana de selección genérica: grupos [[título, [[valor, etiqueta, número]]]]; setter = nombre de función global.
+function pickSheet(title, groups, cur, setter){
+  ui.pickVals = []; const total = groups.reduce((a, g) => a + g[1].length, 0);
+  const btn = (v, l, n) => { const i = ui.pickVals.push(v) - 1; return `<button class="${cur === v ? 'on' : ''}" data-n="${esc(l)}" onclick="closeSheet();${setter}(ui.pickVals[${i}])"><span>${esc(l)}</span><small>${n}</small></button>`; };
+  openSheet(`<h2>${esc(title)}</h2>
+  ${total > 8 ? `<input id="pkQ" placeholder="Buscar…" oninput="const q=helpNorm(this.value);document.querySelectorAll('#sheet .catgrid button').forEach(b=>b.style.display=!q||helpNorm(b.dataset.n).includes(q)?'':'none')" autocomplete="off">` : ''}
+  ${groups.filter(g => g[1].length).map(([h, xs]) => `${h ? `<h3 style="margin:14px 0 0">${esc(h)}</h3>` : ''}<div class="catgrid">${xs.map(x => btn(...x)).join('')}</div>`).join('')}
+  <div class="sheet-actions"><button class="btn sec" onclick="closeSheet()">Cerrar</button></div>`);
+}
+const pickBtn = (fn, label, val) => `<button class="catbtn" onclick="${fn}()">☰ ${esc(label)}: <b>${esc(val)}</b> ▾</button>`;
 const categories = () => [...new Set(products().map(p => (p.cat || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 // Solo Venezuela tiene tasa: en otros países nunca hay aviso de tasa desactualizada.
 const ratesStale = () => REG.features.bcv && (!cfg.bcv || Date.now() - Math.max(cfg.ratesAt || 0, cfg.checkedAt || 0) > 30 * 3600e3);
@@ -2894,18 +2921,17 @@ function fillLog(){
 /* ---- Inventario ---- */
 VIEWS.inventario = {
   shell: () => `<div class="row between"><h2>Inventario</h2><div class="gap"><button class="btn sm sec" onclick="openScanner()">${ICON_CAM}</button>${isAdmin() ? `<button class="btn sm sec" onclick="ui.labelMode=!ui.labelMode;ui.selLabels.clear();VIEWS.inventario.fill()">Etiquetas</button><button class="btn sm sec" onclick="moreInv()">Más ▾</button><button class="btn sm" onclick="editProduct()">+ Producto</button>` : ''}</div></div>
-    <div class="search"><input placeholder="Buscar por nombre, marca o código…" value="${esc(ui.invQ)}" oninput="ui.invQ=this.value;VIEWS.inventario.fill()"></div>
-    <div class="seg" id="invSeg"></div><div id="labelBar"></div><div class="list" id="invList"></div>
+    <div class="poshead"><div class="search"><input placeholder="Buscar por nombre, marca o código…" value="${esc(ui.invQ)}" oninput="ui.invQ=this.value;VIEWS.inventario.fill()"></div><div id="invSeg" style="display:contents"></div></div><div id="labelBar"></div><div class="list" id="invList"></div>
     ${isAdmin() ? `<button class="btn fab" onclick="editProduct()" aria-label="Añadir producto">+</button>` : ''}`,
   fill(){
     const all = products();
     const counts = {todos: all.length, bajo: all.filter(p => p.track !== false && stockState(p) !== 'ok').length, sincod: all.filter(p => !p.code).length, vence: expiring().length};
     if (ui.invF === 'vence' && !counts.vence) ui.invF = 'todos';
-    $('#invSeg').innerHTML = [['todos', 'Todos (' + counts.todos + ')'], ['bajo', 'Bajo stock (' + counts.bajo + ')'], ...(counts.vence ? [['vence', 'Por vencer (' + counts.vence + ')']] : []), ...(counts.sincod ? [['sincod', 'Sin código (' + counts.sincod + ')']] : []), ...categories().map(c => ['cat:' + c, c])]
-      .map(([k, l]) => `<button class="${ui.invF === k ? 'on' : ''}" data-k="${esc(k)}" onclick="ui.invF=this.dataset.k;VIEWS.inventario.fill()">${esc(l)}</button>`).join('');
+    if (ui.invF && ui.invF.startsWith('cat:') && !categories().includes(ui.invF.slice(4))) ui.invF = 'todos';
+    $('#invSeg').innerHTML = pickBtn('invPickSheet', 'Mostrar', invFLabel(ui.invF));
     const q = ui.invQ.trim().toLowerCase();
     const ps = all.filter(p => (!q || (p.name || '').toLowerCase().includes(q) || (p.brand || '').toLowerCase().includes(q) || String(p.code || '').includes(q))
-      && (ui.invF === 'todos' || (ui.invF === 'bajo' ? p.track !== false && stockState(p) !== 'ok' : ui.invF === 'vence' ? (() => { const e = expInfo(p); return e && e.state !== 'ok'; })() : ui.invF === 'sincod' ? !p.code : (p.cat || '') === ui.invF.slice(4))));
+      && (ui.invF === 'todos' || (ui.invF === 'bajo' ? p.track !== false && stockState(p) !== 'ok' : ui.invF === 'vence' ? (() => { const e = expInfo(p); return e && e.state !== 'ok'; })() : ui.invF === 'sincod' ? !p.code : ui.invF === 'sincat' ? !(p.cat || '').trim() : (p.cat || '').trim() === ui.invF.slice(4))));
     if (ui.invF === 'vence') ps.sort((a, b) => expInfo(a).exp.localeCompare(expInfo(b).exp));
     const nNoCode = [...ui.selLabels].filter(id => S.products[id] && !S.products[id].code).length;
     $('#labelBar').innerHTML = ui.labelMode ? `<div class="card" style="margin-bottom:10px">
@@ -3145,15 +3171,15 @@ function labelHelp(){
 
 /* ---- Fiados ---- */
 VIEWS.fiados = {
-  shell: () => `<div class="row between"><h2>Clientes</h2><button class="btn sm" onclick="editClient()">+ Nuevo cliente</button></div><div id="fiTop"></div><div class="seg" id="fiSeg"></div>
-    <div class="search"><input placeholder="Buscar cliente…" value="${esc(ui.fiQ)}" oninput="ui.fiQ=this.value;VIEWS.fiados.fill()"></div>
+  shell: () => `<div class="row between"><h2>Clientes</h2><button class="btn sm" onclick="editClient()">+ Nuevo cliente</button></div><div id="fiTop"></div>
+    <div class="poshead"><div class="search"><input placeholder="Buscar cliente…" value="${esc(ui.fiQ)}" oninput="ui.fiQ=this.value;VIEWS.fiados.fill()"></div><div id="fiSeg" style="display:contents"></div></div>
     <div class="list" id="fiList"></div>
     <button class="btn fab" onclick="editClient()" aria-label="Añadir cliente">+</button>`,
   fill(){
     const t = totalDebt();
     $('#fiTop').innerHTML = `<div class="total" style="margin-bottom:12px"><div class="sub" style="color:var(--tot-mut);font-size:12px;font-weight:600">TOTAL POR COBRAR</div><div class="v">${usd(t)}</div><div class="s">${conv(t)}</div></div>`;
     const q = ui.fiQ.trim().toLowerCase();
-    $('#fiSeg').innerHTML = [['todos', 'Todos (' + clients().length + ')'], ['deuda', 'Con deuda (' + clients().filter(c => balance(c.id) > 0).length + ')']].map(([k, l]) => `<button class="${(ui.fiF || 'todos') === k ? 'on' : ''}" onclick="ui.fiF='${k}';VIEWS.fiados.fill()">${l}</button>`).join('');
+    $('#fiSeg').innerHTML = clients().length ? pickBtn('fiPickSheet', 'Mostrar', (ui.fiF || 'todos') === 'deuda' ? 'Con deuda' : 'Todos') : '';;
     const cs = clients().filter(c => (!q || (c.name + ' ' + (c.rif || '') + ' ' + (c.phone || '')).toLowerCase().includes(q)) && (ui.fiF !== 'deuda' || balance(c.id) > 0)).map(c => ({...c, b: balance(c.id)})).sort((a, b) => b.b - a.b || a.name.localeCompare(b.name, 'es'));
     $('#fiList').innerHTML = !clients().length ? `<div class="empty">Sin clientes todavía.<br>Toca <b>+</b> para añadir uno, o elige “Fiado” al cobrar.</div>`
       : cs.map(c => `<div class="item tap row" onclick="showClient('${c.id}')"><div class="grow"><div class="name">${esc(c.name)}</div><div class="sub">${esc([c.rif, c.phone].filter(Boolean).join(' · ')) || 'Sin datos'}</div></div>
@@ -3403,14 +3429,16 @@ const dateToTs = v => { const [y, m, d] = String(v || '').split('-').map(Number)
 
 VIEWS.proveedores = {
   shell: () => `<div class="row between"><h2>Proveedores</h2><button class="btn sm" onclick="editSupplier()">+ Nuevo proveedor</button></div><div id="prTop"></div>
-    <div class="search"><input placeholder="Buscar proveedor…" value="${esc(ui.prQ || '')}" oninput="ui.prQ=this.value;VIEWS.proveedores.fill()"></div>
+    <div class="poshead"><div class="search"><input placeholder="Buscar proveedor…" value="${esc(ui.prQ || '')}" oninput="ui.prQ=this.value;VIEWS.proveedores.fill()"></div><div id="prSeg" style="display:contents"></div></div>
     <div class="list" id="prList"></div>
     <button class="btn fab" onclick="editSupplier()" aria-label="Añadir proveedor">+</button>`,
   fill(){
     const t = totalPayable();
     $('#prTop').innerHTML = `<div class="total" style="margin-bottom:12px;background:var(--pay-bg);border-color:var(--pay-line)"><div class="sub" style="color:var(--pay-mut);font-size:12px;font-weight:600">TOTAL POR PAGAR</div><div class="v">${usd(t)}</div><div class="s" style="color:var(--pay-mut)">${conv(t)}</div></div>`;
     const q = (ui.prQ || '').trim().toLowerCase();
-    const xs = suppliers().filter(x => !q || (x.name + ' ' + (x.supplies || '') + ' ' + (x.rif || '')).toLowerCase().includes(q));
+    const prF = ui.prF || 'todos';
+    $('#prSeg').innerHTML = suppliers().length ? pickBtn('prPickSheet', 'Mostrar', PR_F[prF]) : '';
+    const xs = suppliers().filter(x => (!q || (x.name + ' ' + (x.supplies || '') + ' ' + (x.rif || '')).toLowerCase().includes(q)) && prMatch(x, prF));
     $('#prList').innerHTML = !suppliers().length ? `<div class="empty">Aún no tienes proveedores.<br>Toca <b>+</b> para añadir el primero.</div>`
       : xs.map(x => { const b = sBalance(x.id), np = products().filter(p => p.supplierId === x.id).length, low = products().filter(p => p.supplierId === x.id && p.track !== false && stockState(p) !== 'ok').length;
         return `<div class="item tap row" onclick="showSupplier('${x.id}')"><div class="grow"><div class="name">${esc(x.name)}</div>
