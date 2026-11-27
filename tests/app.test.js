@@ -49,6 +49,22 @@ T('A19', 'Tutorial y Ayuda presentes: pasos sobre la interfaz real (navegación 
 { const src = H.match(/const taxedDoc = s => [^;]+;/)[0]; const ctx = {}; vm.createContext(ctx); vm.runInContext(src + ';this.f=taxedDoc;', ctx); const f = ctx.f;
   T('A21', 'Nota de entrega: en Venezuela no tributa (como siempre); en otros países la venta tributa igual aunque el documento sea una nota', f({ doc: 'nota' }) === false && f({ doc: 'nota', rg: 'VE' }) === false && f({ doc: 'nota', rg: 'ES' }) === true && f({ doc: 'fiscal', rg: 'VE' }) === true && f({ doc: 'devolucion', rg: 'ES' }) === false); }
 T('A22', 'Nota de entrega de una venta ya hecha: se numera en la MISMA venta (sin crear otra ni tocar el stock) y se ve, descarga e imprime', /async function makeNote\(id\)\{[\s\S]{0,200}put\('sales', id, \{\.\.\.s, noteNo\}\)/.test(H) && !/async function makeNote[\s\S]{0,900}put\('products'/.test(H.split('function printDoc')[0].slice(H.indexOf('async function makeNote'))) && /function printDoc\(\)/.test(H) && /viewFactura\('\$\{id\}','nota'\)/.test(H));
+// Devoluciones en los informes: el impuesto devuelto se descuenta (calculado con los artículos devueltos, sin migrar datos).
+{ const tdSrc = H.match(/const taxedDoc = s => [^;]+;/)[0];
+  const mk = (country, sales) => { const e = env(country); e.S = { sales }; vm.runInContext(tdSrc + ';this.taxedDoc=taxedDoc;this.retTax=retTax;', e); return e; };
+  // Colombia, IVA 19 % incluido: 2 × 10.710 (ya con el 10 % de descuento) = 21.420 → IVA 3.420; se devuelve 1 unidad.
+  const it = { price: 10710, qty: 2, iva: 19, ivaN: 'IVA' };
+  const co = mk('CO', {}); const tSale = co.taxCalc([it], 0); co.S.sales = { v1: { doc: 'nota', rg: 'CO', total: 21420, tax: tSale }, d1: { doc: 'devolucion', refOf: 'v1', total: -10710, items: [{ ...it, qty: -1 }] } };
+  const ivaT = co.taxIva(co.S.sales.v1.tax) + co.retTax(co.S.sales.d1);
+  T('A25', 'Colombia (IVA incluido): devolver 1 de 2 unidades deja el impuesto del informe en 1.710 (antes seguía en 3.420)', co.taxIva(tSale) === 3420 && co.retTax(co.S.sales.d1) === -1710 && ivaT === 1710, { ivaT, ret: co.retTax(co.S.sales.d1) });
+  // Precios SIN impuestos incluidos: la devolución reembolsa precio + impuesto sumado.
+  const ex = mk('CO', {}); const itx = { price: 10000, qty: -1, iva: 19, ivaInc: false, ivaN: 'IVA' }; const tr = ex.taxCalc([itx], 0);
+  T('A26', 'Precios sin impuestos incluidos: devolver 1 unidad de 10.000 + 19 % reembolsa 11.900 y descuenta 1.900 de impuesto', ex.r2(tr.sub + tr.add) === -11900 && (ex.S.sales = { v: { doc: 'simple', rg: 'CO' }, d: { doc: 'devolucion', refOf: 'v', items: [itx] } }, ex.retTax(ex.S.sales.d)) === -1900, tr);
+  // Venezuela: solo descuenta si la venta original era factura fiscal (la nota venezolana no tributa), como el informe actual.
+  const ve = mk('VE', {}); const iv = { price: 11.6, qty: -1, iva: 16 };
+  ve.S.sales = { f: { doc: 'fiscal' }, n: { doc: 'nota' }, df: { doc: 'devolucion', refOf: 'f', items: [iv] }, dn: { doc: 'devolucion', refOf: 'n', items: [iv] }, dx: { doc: 'devolucion', refOf: 'no-existe', items: [iv] } };
+  T('A27', 'Venezuela: la devolución de una factura descuenta su IVA (1,60); la de una nota de entrega o de una venta que no está cargada no cambia nada; una venta normal no se ve afectada', ve.retTax(ve.S.sales.df) === -1.6 && ve.retTax(ve.S.sales.dn) === 0 && ve.retTax(ve.S.sales.dx) === 0 && ve.retTax(ve.S.sales.f) === 0, [ve.retTax(ve.S.sales.df), ve.retTax(ve.S.sales.dn)]);
+  T('A28', 'La corrección no guarda nada nuevo en las ventas: el impuesto de la devolución se calcula al mostrar el informe', /const ivaT = r2\(sumF\(taxedS, x => taxIva\(x\.tax\)\) \+ sumF\(ss, retTax\)\)/.test(H) && !/doc:'devolucion'[^\n]*\btax:/.test(H)); }
 { const errs = [...H.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m, i) => { try { new vm.Script(m[1]); return ''; } catch (e) { return 'bloque ' + i + ': ' + e.message; } }).filter(Boolean);
   T('A23', 'Todo el código de la app (web/index.html) es JavaScript válido: si no, la publicación falla al comprimirlo', !errs.length, errs); }
 { const a = H.indexOf('if (o.local && !STORE_ON()){'), sinTienda = a < 0 ? '' : H.slice(a, H.indexOf('return `${o.test', a));

@@ -2310,6 +2310,10 @@ function taxCalc(items, divisasUsd){
 // Desglose de impuestos de una venta (nueva: rows; anterior a la configuración regional: b16/b8).
 const taxRows = t => !t ? [] : Array.isArray(t.rows) ? t.rows.map(x => Array.isArray(x) ? x : [num(x.r), num(x.b), num(x.i), x.n || '', !!x.x]) : [[16, num(t.b16), num(t.i16)], [8, num(t.b8), num(t.i8)]].filter(x => x[1]);
 const taxIva = t => taxRows(t).reduce((a, x) => a + num(x[2]), 0);
+// Impuesto (negativo) de una devolución cuya venta original tributaba. Se calcula con los artículos devueltos, que
+// conservan el impuesto de la venta; las ventas y devoluciones guardadas no se modifican.
+const retTax = s => { if (!s || s.doc !== 'devolucion') return 0; const o = S.sales[s.refOf];
+  if (!o || !(REG.code === 'VE' ? o.doc === 'fiscal' : taxedDoc(o))) return 0; return r2(taxIva(taxCalc(s.items || [], 0))); };
 function taxHtml(t, rate, fiscal){
   const row = (l, v) => `<div class="mv"><span>${l}</span><span style="text-align:right"><b>${usd(v)}</b>${rate ? `<br><span class="sub">${bs(v, rate)}</span>` : ''}</span></div>`;
   let h = '';
@@ -2552,12 +2556,12 @@ function returnForm(id){
   <label class="row" style="gap:8px;color:var(--tx);font-size:14px;margin-top:12px"><input type="checkbox" id="retStock" class="chk" checked> Devolver los productos al inventario</label>
   <div class="sheet-actions"><button class="btn sec" onclick="showSale('${id}')">Volver</button><button class="btn" onclick="saveReturn('${id}')">Registrar devolución</button></div>`);
 }
-function retTotal(id){ const s = S.sales[id]; let t = 0; document.querySelectorAll('.retq').forEach(e => { const it = s.items[+e.dataset.i]; t += Math.min(num(e.value), num(e.max)) * num(it.price); }); $('#retTot').innerHTML = `Total a devolver: <b>${usd(r2(t))}</b>${cfg.bcv ? ' · ' + bs(r2(t)) : ''}`; }
+function retTotal(id){ const s = S.sales[id], its = []; document.querySelectorAll('.retq').forEach(e => { const q = Math.min(num(e.value), num(e.max)); if (q > 0) its.push({...s.items[+e.dataset.i], qty:q}); }); const tcT = taxCalc(its, 0); let t = tcT.sub + tcT.add; $('#retTot').innerHTML = `Total a devolver: <b>${usd(r2(t))}</b>${cfg.bcv ? ' · ' + bs(r2(t)) : ''}`; }
 async function saveReturn(id){
   const s = S.sales[id]; if (!s) return;
   const items = []; document.querySelectorAll('.retq').forEach(e => { const q = Math.min(num(e.value), num(e.max)); if (q > 0){ const it = s.items[+e.dataset.i]; items.push({...it, qty:-r3(q), ix:+e.dataset.i}); } });
   if (!items.length){ toast('Pon la cantidad a devolver'); return; }
-  const total = r2(items.reduce((a, i) => a + num(i.price) * num(i.qty), 0)), m = $('#retM').value, now = Date.now(), rid = uid();
+  const tcR = taxCalc(items, 0), total = r2(tcR.sub + tcR.add), m = $('#retM').value, now = Date.now(), rid = uid();
   const cur = METHOD_CUR[m] || 'usd';
   const ret = {ts:now, items, total, sub:total, igtf:0, rate:cfg.bcv || 0, rateEur:cfg.eur || 0, rg:REG.code, bc:REG.currency.code, method:m, payments:[{m, usd:total, raw:r2(toCur(total, cur))}], clientId:s.clientId || '', doc:'devolucion', refOf:id, user:me ? me.u : '', userName:me ? me.name : ''};
   const restock = $('#retStock').checked;
@@ -3337,7 +3341,7 @@ function fillReports(){
   const fis = ss.filter(x => x.doc === 'fiscal'), notas = ss.filter(x => x.doc === 'nota');
   const sumF = (arr, f) => r2(arr.reduce((a, x) => a + f(x), 0));
   const taxedS = REG.code === 'VE' ? fis : ss.filter(taxedDoc);
-  const ivaT = sumF(taxedS, x => taxIva(x.tax)), igtfT = sumF(ss, x => num(x.igtf));
+  const ivaT = r2(sumF(taxedS, x => taxIva(x.tax)) + sumF(ss, retTax)), igtfT = sumF(ss, x => num(x.igtf));
   const pend = fis.filter(x => !x.fiscalNo).length;
   const bySeller = {}; ss.forEach(x => { const k = x.userName || '—'; const b = bySeller[k] = bySeller[k] || {n:0, t:0}; if (x.doc !== 'devolucion') b.n++; b.t += num(x.total); });
   const abonos = r2(Object.values(S.movs).filter(m => m.type === 'abono' && m.ts >= from).reduce((a, m) => a + num(m.amount), 0));
@@ -3592,7 +3596,7 @@ function dashData(){
   const byCat = {}, byProd = {}, byMethod = {};
   let nSales = 0;
   for (const s of salesArr()){ if (s.ts < R.from) continue; const i = idx[kOf(s.ts)]; if (i == null) continue; nSales++;
-    const tax = taxIva(s.tax), net = num(s.total) - num(s.igtf) - ((REG.code === 'VE' ? s.doc === 'fiscal' : taxedDoc(s)) ? tax : 0);
+    const tax = taxIva(s.tax), net = num(s.total) - num(s.igtf) - ((REG.code === 'VE' ? s.doc === 'fiscal' : taxedDoc(s)) ? tax : 0) - retTax(s);
     inc[i] += net; salePayments(s).forEach(p => byMethod[p.m] = (byMethod[p.m] || 0) + p.usd);
     for (const it of (s.items || [])){ const c = num(it.cost) * num(it.qty); cogs[i] += c; const pr = byProd[it.name] = byProd[it.name] || {v:0, g:0}; pr.v += num(it.price) * num(it.qty); pr.g += num(it.price) * num(it.qty) - c; } }
   for (const e of Object.values(S.expenses)){ if (e.ts < R.from) continue; const i = idx[kOf(e.ts)]; if (i == null) continue; exp[i] += num(e.amount); byCat[e.cat] = (byCat[e.cat] || 0) + num(e.amount); }
