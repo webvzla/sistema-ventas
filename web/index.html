@@ -1050,6 +1050,8 @@ function storeHtml(o){
   <div class="grid2">${durs}</div>
   <div class="warnbox" style="margin-top:12px">Para adquirir una licencia, escríbenos a <b>${CONTACT.ventas}</b> indicando la duración que quieres. Te indicaremos cómo pagar y, <b>cuando verifiquemos el pago</b>, te enviaremos una <b>clave de activación</b>.</div>
   <a class="btn full" style="margin-top:10px" href="mailto:${CONTACT.ventas}?subject=${lic}&body=${body}">Escribir a ${CONTACT.ventas}</a>
+  <div class="gap" style="margin-top:8px"><a class="btn sec" style="flex:1" target="_blank" rel="noopener" href="https://mail.google.com/mail/?view=cm&fs=1&to=${CONTACT.ventas}&su=${lic}&body=${body}">Abrir en Gmail</a><button class="btn sec" style="flex:1" onclick="navigator.clipboard.writeText('${CONTACT.ventas}').then(()=>toast('Correo copiado: ${CONTACT.ventas}'),()=>toast('Cópialo a mano: ${CONTACT.ventas}'))">Copiar el correo</button></div>
+  <p class="note" style="margin-top:4px">Si al pulsar el botón no se abre tu programa de correo, usa <b>Abrir en Gmail</b> o copia la dirección y escríbenos desde tu correo.</p>
   <p class="note">Cuando recibas la clave, escríbela en <b>Activar licencia</b>. Se suma al tiempo que te quede y tus datos se mantienen.</p>
   <button class="btn sec full" style="margin-top:4px" onclick="renewSheet()">Activar licencia con una clave</button>
   ${(o.history || []).length ? `<h3>Historial</h3><div class="card">${o.history.map(h => `<div class="mv"><span>${fmtDay(h.at)} · ${HIST_TXT[h.type] || esc(h.type)}${h.label ? ' ' + esc(h.label) : h.days ? ' ' + h.days + ' días' : ''}</span><b>${h.to ? 'hasta ' + fmtDay(h.to) : ''}</b></div>`).join('')}</div>` : ''}`;
