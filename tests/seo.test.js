@@ -12,4 +12,8 @@ T('SEO-2', 'Los enlaces internos del sitio público no apuntan a URL que redirig
 const sinCan = [...pub, 'web/legal/privacidad.html', 'web/legal/terminos.html', 'web/legal/reembolsos.html'].filter(f => !/<link rel="canonical" href="https:\/\/stocksoft\.app\/[^"]*"/.test(rd(f)));
 T('SEO-3', 'Todas las páginas públicas, incluidas privacidad y términos, tienen canonical a stocksoft.app', !sinCan.length, sinCan);
 T('SEO-4', 'El sitemap del generador (sitio.mjs) usa las URL limpias de las páginas legales', /'app\/legal\/privacidad'/.test(rd('scripts/sitio.mjs')) && !/legal\/[a-z]+\.html/.test(rd('scripts/sitio.mjs')));
+// WhatsApp de StockSoft desactivado hasta tener número de empresa: ni enlaces ni número en web, app, legales ni guías.
+const todo = [...pub, 'web/index.html', 'web/legal/privacidad.html', 'web/legal/terminos.html', 'web/firebase-config.js', 'scripts/pruebas/firebase-config.js', ...fs.readdirSync(path.join(R, 'docs/asistente')).map(f => 'docs/asistente/' + f), ...fs.readdirSync(path.join(R, 'scripts/sitio')).map(f => 'scripts/sitio/' + f)].filter(f => fs.existsSync(path.join(R, f)));
+const conWa = todo.filter(f => /wa\.me\/34663407974|663 40 79 74|APP_WA = "\d/.test(rd(f)));
+T('SEO-5', 'WhatsApp de StockSoft retirado como canal de contacto (queda el correo soporte@stocksoft.app)', !conWa.length && /APP_WA = ""/.test(rd('web/firebase-config.js')), conWa);
 process.exit(end() ? 0 : 1);

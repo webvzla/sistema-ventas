@@ -9,7 +9,7 @@ verificado: 2026-11-26 · rama pruebas 5c637a0
 ## Centro de Ayuda
 - Se abre con el botón **?** de arriba o en **Más → Ayuda**.
 - **Buscador** (sin importar acentos), **categorías por módulo**, respuestas paso a paso y **Ir a la sección →** para abrir la pantalla correcta.
-- **Repetir el tutorial** y **Contactar con soporte** (correo de soporte, ventas, WhatsApp y web).
+- **Repetir el tutorial** y **Contactar con soporte** (correo de soporte, correo de ventas y web).
 - El vendedor solo ve las guías de lo que puede usar.
 - Para desarrolladores: las guías están en el código como `HELP` y se exponen en `window.SSHelp` (artículos, categorías y búsqueda). Este archivo
   y el resto de `docs/asistente/` son la versión ampliada para el asistente.

@@ -12,8 +12,9 @@ window.FIREBASE_CONFIG = {
 };
 // Dueño del sistema en pruebas: una cuenta de prueba (variable OWNER_UID_PRUEBAS del repositorio), nunca la real.
 window.OWNER_UID = "__OWNER_UID_PRUEBAS__";
-window.APP_CONTACT = "por WhatsApp al +34 663 40 79 74";
-window.APP_WA = "34663407974";
+// WhatsApp de StockSoft desactivado hasta tener un número de empresa (APP_WA vacío oculta sus botones).
+window.APP_CONTACT = "por correo a soporte@stocksoft.app";
+window.APP_WA = "";
 window.STOCKSOFT_ENV = "pruebas";
 // StockSoft Assistant: con enabled:false responde en "modo guía" (sin IA y sin coste).
 // Gemini (Firebase AI Logic + App Check) está PREPARADO Y APAGADO, pendiente de autorización y financiación del titular de StockSoft:
