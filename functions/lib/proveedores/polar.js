@@ -2,7 +2,9 @@
    SOLO SANDBOX: usa https://sandbox-api.polar.sh salvo POLAR_SERVER=production, que además exige
    LIVE_PAYMENTS === 'autorizado' (no se configura sin la autorización expresa de Francisco).
    Variables: POLAR_ACCESS_TOKEN (token de la organización), POLAR_WEBHOOK_SECRET, POLAR_PRODUCT_ID (producto
-   «Licencia StockSoft» creado en Polar), POLAR_SERVER (sandbox | production), POLAR_TAX (exclusive | inclusive).
+   «Licencia StockSoft» creado en Polar), POLAR_SERVER (sandbox | production), POLAR_TAX (inclusive por defecto | exclusive).
+   - IVA INCLUIDO en el precio (decisión de Francisco, 27 nov 2026): el cliente paga exactamente el precio de la tienda
+     (p. ej. 5,99) y Polar descuenta de ahí el impuesto de su país. Con POLAR_TAX=exclusive se sumaría encima.
    - El precio lo pone el servidor en cada checkout (precio ad hoc sobre el producto); el catálogo de Polar no manda.
    - Webhooks firmados con Standard Webhooks: HMAC-SHA256(id.timestamp.cuerpo) en base64, clave = el secreto tal cual
      (igual que validateEvent del SDK oficial @polar-sh/sdk).
@@ -18,7 +20,7 @@ function create(env, deps) {
   const live = env.POLAR_SERVER === 'production';
   if (live && env.LIVE_PAYMENTS !== 'autorizado') throw new Error('Polar: producción bloqueada (solo sandbox sin autorización de lanzamiento)');
   const base = live ? 'https://api.polar.sh' : 'https://sandbox-api.polar.sh';
-  const inclusive = env.POLAR_TAX === 'inclusive';
+  const inclusive = env.POLAR_TAX !== 'exclusive';
   const doFetch = deps.fetch || (typeof fetch === 'function' ? fetch : null);
   return {
     id: 'polar', live,
@@ -54,7 +56,8 @@ function create(env, deps) {
       const baseEv = { id, orderId: md.orderId || '', ref: d.checkout_id || d.id || '' };
       switch (ev.type) {
         case 'order.paid':
-          // Solo compras sueltas (las licencias son pago único); el importe que se compara es el precio sin impuestos.
+          // Solo compras sueltas (las licencias son pago único). Con IVA incluido se compara el total pagado con el precio
+          // del pedido; con IVA encima, el importe antes de impuestos.
           if (d.billing_reason && d.billing_reason !== 'purchase') return { ...baseEv, type: 'ignore' };
           return { ...baseEv, type: 'paid', amount: Number(inclusive ? d.total_amount : d.net_amount), currency: String(d.currency || '').toUpperCase() };
         case 'order.refunded':
